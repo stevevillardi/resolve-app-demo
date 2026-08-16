@@ -14,8 +14,16 @@ export type ConversationSelection =
 /** Which branch the Branches panel has open, if any. */
 export type BranchSelection = { repoPath: string; branch: string } | null
 
-/** What the usage dashboard is scoped to. */
-export type UsageScope = { kind: 'all' } | { kind: 'persona'; id: string }
+/**
+ * What the usage dashboard is scoped to.
+ *
+ * Persona and repo are the two axes blueprint §10 asks for, and they are the
+ * two a Contact sits at the intersection of — so they belong in the master
+ * list, leaving the detail pane for the range, source and metric controls
+ * rather than stacking six filters into one header.
+ */
+export type UsageScope =
+  { kind: 'all' } | { kind: 'persona'; id: string } | { kind: 'repo'; repoPath: string }
 
 /**
  * The surfaces that stay genuinely modal — everything else is a view.

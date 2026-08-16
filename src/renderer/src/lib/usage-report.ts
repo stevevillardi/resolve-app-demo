@@ -1,5 +1,6 @@
 import { repoName } from '@/lib/format'
 import { aggregateUsage } from '@/lib/usage'
+import type { UsageScope } from '@/store/useUiStore'
 import type { Contact, PersonaTemplate, UsageEvent, UsageSource, UsageSummary } from '@/types'
 
 /**
@@ -26,6 +27,21 @@ export interface UsageFilter {
   sources?: UsageSource[]
   /** Keep only these contacts. Omit for all. */
   contactIds?: string[]
+}
+
+/**
+ * The contacts a scope covers, or `null` for "every contact" — which is not the
+ * same as the empty array, and the difference is load-bearing: `filterUsage`
+ * reads `[]` as "no contacts" so an empty scope shows nothing rather than
+ * everything.
+ */
+export function contactIdsForScope(contacts: Contact[], scope: UsageScope): string[] | null {
+  if (scope.kind === 'all') return null
+  const match =
+    scope.kind === 'persona'
+      ? (contact: Contact): boolean => contact.personaTemplateId === scope.id
+      : (contact: Contact): boolean => contact.repoPath === scope.repoPath
+  return contacts.filter(match).map((contact) => contact.id)
 }
 
 export function filterUsage(events: UsageEvent[], filter: UsageFilter = {}): UsageEvent[] {
@@ -167,6 +183,38 @@ export const SOURCE_LABEL: Record<UsageSource, string> = {
  */
 export function bySource(): UsageSelector {
   return (event) => ({ key: event.source, label: SOURCE_LABEL[event.source] })
+}
+
+// --- Series identity --------------------------------------------------------
+
+/**
+ * The design system's categorical slots, already validated for CVD and for
+ * both surfaces (see the note above `--chart-1` in assets/main.css). Consumed
+ * rather than re-picked: a second palette beside a validated one is how a chart
+ * ends up with two hues nobody checked against each other.
+ *
+ * Used for the dimensions with no colour of their own. A persona keeps its
+ * avatar colour, so the chart and the sidebar agree about who is who.
+ */
+export const CHART_PALETTE = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)'
+] as const
+
+/**
+ * Stable, CSS-safe ids for a set of series keys.
+ *
+ * The chart wrapper emits a `--color-<key>` custom property per series, and a
+ * repo path is not a legal custom-property name. Ids are assigned over the
+ * *complete* sorted key set rather than whatever survived the current filter,
+ * so a series keeps its id — and therefore its colour — when the range or the
+ * source filter changes. Colour follows identity, never rank.
+ */
+export function seriesIds(keys: string[]): Map<string, string> {
+  return new Map([...new Set(keys)].sort().map((key, index) => [key, `s${index}`]))
 }
 
 // --- Time series ------------------------------------------------------------
