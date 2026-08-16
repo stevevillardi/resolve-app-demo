@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
+import { contacts, groupMessages, groups, usageEvents } from '../db/schema'
 import {
-  contacts,
-  groupMessages,
-  groups,
-  personaTemplates,
-  skills,
-  usageEvents
-} from '../db/schema'
+  createTurnHarness,
+  DEFAULT_USAGE as USAGE,
+  REPO,
+  seedContact,
+  seedPersona,
+  seedSkill,
+  settle
+} from './test-support/turn-harness'
 import type { AppDatabase } from '../db/create'
-import type { AgentEvent, AgentUsage } from '../../shared/agent'
-import type { SandboxLevel } from '../../shared/domain'
+import type { AgentEvent } from '../../shared/agent'
 
 /**
  * The turn loop, with the SDKs replaced by a scripted event stream.
@@ -18,26 +19,15 @@ import type { SandboxLevel } from '../../shared/domain'
  * What is deliberately *not* faked is the database: these run against a real
  * in-memory SQLite with the checked-in migrations applied, because the point of
  * most of these assertions is what ends up on disk.
+ *
+ * The scripted backend lives in `test-support/turn-harness.ts` because
+ * `scheduler.test.ts` needs the same one — a routine has to be provable against
+ * the *real* startTurn, and a second copy of the harness would let the two
+ * files agree about different things while both stayed green.
  */
 
 let db: AppDatabase
-
-/** Events the fake adapter will yield, per run. */
-let script: AgentEvent[] = []
-/** Set to make the adapter throw instead of yielding — the escaped-error path. */
-let throwOnRun: Error | null = null
-/** Blocks the stream so a turn can be observed mid-flight. */
-let gate: { promise: Promise<void>; open: () => void } | null = null
-
-let created: {
-  resumedFrom: string | null
-  model?: string
-  skillNames: string[]
-  groupContext: { content: string }[]
-  usageBaseline: AgentUsage | null
-}[] = []
-let sessionIdToReport: string | null = 'session-abc'
-let lastSignal: AbortSignal | null = null
+const harness = createTurnHarness()
 
 const emitted: { runId: string; event: AgentEvent }[] = []
 let runsChangedCount = 0
@@ -52,7 +42,7 @@ vi.mock('./agent-events', () => ({
 }))
 
 vi.mock('./adapter-host', () => ({
-  adapterForBackend: () => fakeAdapter
+  adapterForBackend: () => harness.adapter
 }))
 
 /**
@@ -60,138 +50,42 @@ vi.mock('./adapter-host', () => ({
  * file can assert the *wiring* — that a finished turn hands over the prompt and
  * the reply — without a second scripted backend in the way.
  */
-const summarized: { contactId: string; prompt: string; reply: string }[] = []
+const summarized: { contactId: string; prompt: string; reply: string; kind: string }[] = []
 vi.mock('./compaction', () => ({
-  summarizeTurn: async (contactId: string, prompt: string, reply: string) => {
-    summarized.push({ contactId, prompt, reply })
+  summarizeTurn: async (
+    contactId: string,
+    prompt: string,
+    reply: string,
+    origin: { kind: string }
+  ) => {
+    summarized.push({ contactId, prompt, reply, kind: origin.kind })
     return null
   }
 }))
 
-interface SpecLike {
-  model?: string
-  skills: { name: string }[]
-  groupContext?: { content: string }[]
-  usageBaseline?: AgentUsage | null
-}
-
-const fakeAdapter = {
-  backend: 'claude' as const,
-  capabilities: {
-    streamsTextDeltas: true,
-    streamsToolProgress: true,
-    costSource: 'sdk' as const,
-    sandboxEnforcement: 'os' as const
-  },
-  createSession(spec: SpecLike) {
-    created.push({
-      resumedFrom: null,
-      ...(spec.model !== undefined && { model: spec.model }),
-      skillNames: spec.skills.map((skill) => skill.name),
-      groupContext: spec.groupContext ?? [],
-      usageBaseline: spec.usageBaseline ?? null
-    })
-    return { backend: 'claude' as const, spec, sessionId: null as string | null }
-  },
-  resume(spec: SpecLike, sessionId: string) {
-    created.push({
-      resumedFrom: sessionId,
-      ...(spec.model !== undefined && { model: spec.model }),
-      skillNames: spec.skills.map((skill) => skill.name),
-      groupContext: spec.groupContext ?? [],
-      usageBaseline: spec.usageBaseline ?? null
-    })
-    return { backend: 'claude' as const, spec, sessionId: sessionId as string | null }
-  },
-  async *run(
-    session: { sessionId: string | null },
-    _prompt: string,
-    signal?: AbortSignal
-  ): AsyncIterable<AgentEvent> {
-    lastSignal = signal ?? null
-    if (throwOnRun) throw throwOnRun
-
-    for (const event of script) {
-      if (gate) await gate.promise
-      // Mirrors the real adapters: the resume key is filled in mid-stream, not
-      // known up front.
-      if (event.type === 'session_started') session.sessionId = sessionIdToReport
-      yield event
-    }
-  }
-}
-
-const { cancelRun, listActiveRuns, listMessages, mentionInGroup, messagePreviews, sendMessage } =
-  await import('./messaging')
+const {
+  cancelRun,
+  listActiveRuns,
+  listMessages,
+  mentionInGroup,
+  messagePreviews,
+  runRoutineTurn,
+  sendMessage
+} = await import('./messaging')
 const { resetRunLocks } = await import('./run-lock')
 const { listGroupMessages } = await import('./group-messages')
-
-const USAGE: AgentUsage = {
-  inputTokens: 120,
-  outputTokens: 45,
-  cachedInputTokens: 8960,
-  costUsd: 0.0031,
-  costSource: 'sdk',
-  model: 'claude-haiku-4-5-20251001'
-}
-
-const REPO = '/Users/dev/my-app'
-
-function seedPersona(id: string, sandbox: SandboxLevel, model: string | null = null): void {
-  db.insert(personaTemplates)
-    .values({
-      id,
-      name: `Persona ${id}`,
-      avatarColor: '#2a78d6',
-      backend: 'claude',
-      systemPrompt: 'Review carefully.',
-      skillIds: ['skill-1'],
-      sandbox,
-      githubScope: 'read_only',
-      model
-    })
-    .run()
-}
-
-function seedContact(id: string, personaId: string, repoPath = REPO): void {
-  db.insert(contacts)
-    .values({
-      id,
-      personaTemplateId: personaId,
-      repoPath,
-      displayName: `Contact ${id}`,
-      backendSessionId: null
-    })
-    .run()
-}
-
-/** Lets the microtask queue drain so the un-awaited runTurn() can finish. */
-async function settle(): Promise<void> {
-  for (let i = 0; i < 10; i += 1) await Promise.resolve()
-}
 
 beforeEach(() => {
   db = createTestDb()
   resetRunLocks()
-  script = [
-    { type: 'session_started', sessionId: 'session-abc' },
-    { type: 'text_message', text: 'Looks good.' },
-    { type: 'done', finalText: 'Looks good.', usage: USAGE }
-  ]
-  throwOnRun = null
-  gate = null
-  created = []
-  sessionIdToReport = 'session-abc'
-  lastSignal = null
+  harness.reset()
   emitted.length = 0
   runsChangedCount = 0
   summarized.length = 0
 
-  db.insert(skills)
-    .values({ id: 'skill-1', name: 'Review checklist', description: '', content: 'Be thorough.' })
-    .run()
-  seedPersona('persona-read', 'read_only')
-  seedContact('contact-a', 'persona-read')
+  seedSkill(db)
+  seedPersona(db, 'persona-read', 'read_only')
+  seedContact(db, 'contact-a', 'persona-read')
 })
 
 describe('sendMessage', () => {
@@ -226,7 +120,7 @@ describe('sendMessage', () => {
   // Null means "no published price for this model". Rendering it as 0 would
   // under-report spend, so it has to survive the round trip as null.
   it('keeps an unknown cost null rather than zero', async () => {
-    script = [{ type: 'done', finalText: 'ok', usage: { ...USAGE, costUsd: null } }]
+    harness.script = [{ type: 'done', finalText: 'ok', usage: { ...USAGE, costUsd: null } }]
     sendMessage('contact-a', 'go')
     await settle()
 
@@ -235,19 +129,19 @@ describe('sendMessage', () => {
 
   it('resolves the persona skills into the session', () => {
     sendMessage('contact-a', 'go')
-    expect(created[0].skillNames).toEqual(['Review checklist'])
+    expect(harness.created[0].skillNames).toEqual(['Review checklist'])
   })
 
   it('passes the persona model through, and omits it when null', () => {
     sendMessage('contact-a', 'go')
-    expect(created[0].model).toBeUndefined()
+    expect(harness.created[0].model).toBeUndefined()
 
     resetRunLocks()
-    seedPersona('persona-model', 'read_only', 'claude-opus-5')
-    seedContact('contact-model', 'persona-model', '/other/repo')
+    seedPersona(db, 'persona-model', 'read_only', 'claude-opus-5')
+    seedContact(db, 'contact-model', 'persona-model', '/other/repo')
     sendMessage('contact-model', 'go')
 
-    expect(created[1].model).toBe('claude-opus-5')
+    expect(harness.created[1].model).toBe('claude-opus-5')
   })
 
   it('rejects an unknown contact', () => {
@@ -260,7 +154,7 @@ describe('session resumption', () => {
     sendMessage('contact-a', 'go')
     await settle()
 
-    expect(created[0].resumedFrom).toBeNull()
+    expect(harness.created[0].resumedFrom).toBeNull()
     expect(db.select().from(contacts).all()[0].backendSessionId).toBe('session-abc')
   })
 
@@ -270,7 +164,7 @@ describe('session resumption', () => {
     sendMessage('contact-a', 'second')
     await settle()
 
-    expect(created[1].resumedFrom).toBe('session-abc')
+    expect(harness.created[1].resumedFrom).toBe('session-abc')
   })
 
   // Codex reports usage cumulatively across a thread (see baselineFor), so a
@@ -291,8 +185,8 @@ describe('session resumption', () => {
     await settle()
 
     // Nothing to subtract on the first turn of a session.
-    expect(created[0].usageBaseline).toBeNull()
-    expect(created[1].usageBaseline).toMatchObject({ inputTokens: 120, outputTokens: 45 })
+    expect(harness.created[0].usageBaseline).toBeNull()
+    expect(harness.created[1].usageBaseline).toMatchObject({ inputTokens: 120, outputTokens: 45 })
   })
 
   it('accumulates the baseline across every turn of the session', async () => {
@@ -301,12 +195,12 @@ describe('session resumption', () => {
       await settle()
     }
 
-    expect(created[2].usageBaseline).toMatchObject({ inputTokens: 240, outputTokens: 90 })
+    expect(harness.created[2].usageBaseline).toMatchObject({ inputTokens: 240, outputTokens: 90 })
   })
 
   it('leaves the contact alone when the backend reports no session', async () => {
-    sessionIdToReport = null
-    script = [{ type: 'done', finalText: 'ok', usage: null }]
+    harness.sessionIdToReport = null
+    harness.script = [{ type: 'done', finalText: 'ok', usage: null }]
 
     sendMessage('contact-a', 'go')
     await settle()
@@ -361,7 +255,7 @@ describe('streaming', () => {
   })
 
   it('announces the run set even when the turn fails', async () => {
-    throwOnRun = new Error('boom')
+    harness.throwOnRun = new Error('boom')
     runsChangedCount = 0
 
     sendMessage('contact-a', 'go')
@@ -375,7 +269,7 @@ describe('failure', () => {
   // Both adapters guarantee a `done`, so this is the path for a failure that
   // escapes that guarantee. The thread still has to reach a terminal state.
   it('turns an escaped exception into an error event and a done', async () => {
-    throwOnRun = new Error('spawn ENOENT')
+    harness.throwOnRun = new Error('spawn ENOENT')
     sendMessage('contact-a', 'go')
     await settle()
 
@@ -384,7 +278,7 @@ describe('failure', () => {
   })
 
   it('releases the lock after a failure', async () => {
-    throwOnRun = new Error('boom')
+    harness.throwOnRun = new Error('boom')
     sendMessage('contact-a', 'go')
     await settle()
 
@@ -393,7 +287,7 @@ describe('failure', () => {
   })
 
   it('writes no assistant row when the turn produced no text', async () => {
-    throwOnRun = new Error('boom')
+    harness.throwOnRun = new Error('boom')
     sendMessage('contact-a', 'go')
     await settle()
 
@@ -401,7 +295,7 @@ describe('failure', () => {
   })
 
   it('still records usage from a turn that errored but reported it', async () => {
-    script = [
+    harness.script = [
       { type: 'error', kind: 'rate_limit', message: 'slow down' },
       { type: 'done', finalText: '', usage: USAGE }
     ]
@@ -414,10 +308,10 @@ describe('failure', () => {
 
 describe('the concurrency lock', () => {
   it('lets two readers on one repo run together', () => {
-    seedPersona('persona-read-2', 'read_only')
-    seedContact('contact-b', 'persona-read-2')
+    seedPersona(db, 'persona-read-2', 'read_only')
+    seedContact(db, 'contact-b', 'persona-read-2')
 
-    gate = holdOpen()
+    harness.gate = holdOpen()
     expect(() => sendMessage('contact-a', 'go')).not.toThrow()
     expect(() => sendMessage('contact-b', 'go')).not.toThrow()
   })
@@ -426,10 +320,10 @@ describe('the concurrency lock', () => {
   // 07-group-coordination.md. Under blueprint §15D's literal repo-wide lock
   // this fails.
   it('lets a reader run while a writer holds the repo', () => {
-    seedPersona('persona-write', 'workspace_write')
-    seedContact('contact-w', 'persona-write')
+    seedPersona(db, 'persona-write', 'workspace_write')
+    seedContact(db, 'contact-w', 'persona-write')
 
-    gate = holdOpen()
+    harness.gate = holdOpen()
     sendMessage('contact-w', 'go')
     expect(() => sendMessage('contact-a', 'go')).not.toThrow()
   })
@@ -440,20 +334,20 @@ describe('the concurrency lock', () => {
   // suffers is a mid-write snapshot, which it can already get by starting under
   // a writer. Refusing here would let one long review block every writer.
   it('lets a writer run while a reader holds the repo', () => {
-    seedPersona('persona-write', 'workspace_write')
-    seedContact('contact-w', 'persona-write')
+    seedPersona(db, 'persona-write', 'workspace_write')
+    seedContact(db, 'contact-w', 'persona-write')
 
-    gate = holdOpen()
+    harness.gate = holdOpen()
     sendMessage('contact-a', 'go')
     expect(() => sendMessage('contact-w', 'go')).not.toThrow()
   })
 
   it('refuses a second writer, naming who holds it', () => {
-    seedPersona('persona-write', 'workspace_write')
-    seedContact('contact-w1', 'persona-write')
-    seedContact('contact-w2', 'persona-write')
+    seedPersona(db, 'persona-write', 'workspace_write')
+    seedContact(db, 'contact-w1', 'persona-write')
+    seedContact(db, 'contact-w2', 'persona-write')
 
-    gate = holdOpen()
+    harness.gate = holdOpen()
     sendMessage('contact-w1', 'go')
 
     expect(() => sendMessage('contact-w2', 'go')).toThrow(/Contact contact-w1 is already working/)
@@ -462,11 +356,11 @@ describe('the concurrency lock', () => {
   // A refused send must leave nothing behind — a persisted question nothing
   // will answer reads as a lost message rather than as a refusal.
   it('writes no message when a send is refused', () => {
-    seedPersona('persona-write', 'workspace_write')
-    seedContact('contact-w1', 'persona-write')
-    seedContact('contact-w2', 'persona-write')
+    seedPersona(db, 'persona-write', 'workspace_write')
+    seedContact(db, 'contact-w1', 'persona-write')
+    seedContact(db, 'contact-w2', 'persona-write')
 
-    gate = holdOpen()
+    harness.gate = holdOpen()
     sendMessage('contact-w1', 'go')
     expect(() => sendMessage('contact-w2', 'blocked')).toThrow()
 
@@ -474,11 +368,11 @@ describe('the concurrency lock', () => {
   })
 
   it('does not let one repo block another', () => {
-    seedPersona('persona-write', 'workspace_write')
-    seedContact('contact-w1', 'persona-write', '/repo/one')
-    seedContact('contact-w2', 'persona-write', '/repo/two')
+    seedPersona(db, 'persona-write', 'workspace_write')
+    seedContact(db, 'contact-w1', 'persona-write', '/repo/one')
+    seedContact(db, 'contact-w2', 'persona-write', '/repo/two')
 
-    gate = holdOpen()
+    harness.gate = holdOpen()
     expect(() => sendMessage('contact-w1', 'go')).not.toThrow()
     expect(() => sendMessage('contact-w2', 'go')).not.toThrow()
   })
@@ -493,15 +387,15 @@ describe('the concurrency lock', () => {
 describe('cancelRun', () => {
   it('passes an abort signal to the adapter', () => {
     sendMessage('contact-a', 'go')
-    expect(lastSignal).not.toBeNull()
+    expect(harness.lastSignal).not.toBeNull()
   })
 
   it('aborts the signal', () => {
-    gate = holdOpen()
+    harness.gate = holdOpen()
     const { runId } = sendMessage('contact-a', 'go')
 
     expect(cancelRun(runId)).toBe(true)
-    expect(lastSignal?.aborted).toBe(true)
+    expect(harness.lastSignal?.aborted).toBe(true)
   })
 
   it('reports an unknown run rather than throwing', () => {
@@ -511,7 +405,7 @@ describe('cancelRun', () => {
   // A stopped review is still worth keeping — the alternative is a blank bubble
   // where the user watched text appear.
   it('keeps text streamed before the stop', async () => {
-    script = [
+    harness.script = [
       { type: 'session_started', sessionId: 'session-abc' },
       { type: 'text_message', text: 'Half a rev' }
     ]
@@ -525,8 +419,8 @@ describe('cancelRun', () => {
 
 describe('messagePreviews', () => {
   it('returns the latest message per contact', async () => {
-    seedPersona('persona-read-2', 'read_only')
-    seedContact('contact-b', 'persona-read-2', '/repo/two')
+    seedPersona(db, 'persona-read-2', 'read_only')
+    seedContact(db, 'contact-b', 'persona-read-2', '/repo/two')
 
     sendMessage('contact-a', 'first')
     await settle()
@@ -549,7 +443,7 @@ describe('messagePreviews', () => {
 
 describe('listActiveRuns', () => {
   it('reports an in-flight run', () => {
-    gate = holdOpen()
+    harness.gate = holdOpen()
     const { runId } = sendMessage('contact-a', 'go')
 
     const runs = listActiveRuns()
@@ -572,7 +466,12 @@ describe('end-of-turn compaction', () => {
     await settle()
 
     expect(summarized).toEqual([
-      { contactId: 'contact-a', prompt: 'review the auth module', reply: 'Looks good.' }
+      {
+        contactId: 'contact-a',
+        prompt: 'review the auth module',
+        reply: 'Looks good.',
+        kind: 'message'
+      }
     ])
   })
 
@@ -589,7 +488,7 @@ describe('end-of-turn compaction', () => {
   it('does not summarise a turn that produced nothing', async () => {
     // Guarded in compaction itself too, but asserted here because this is the
     // path a stopped turn takes.
-    script = [{ type: 'done', finalText: '', usage: null }]
+    harness.script = [{ type: 'done', finalText: '', usage: null }]
     sendMessage('contact-a', 'go')
     await settle()
 
@@ -599,7 +498,7 @@ describe('end-of-turn compaction', () => {
   it('still summarises when the turn ended in an error', async () => {
     // A turn that errored partway can still have said something worth
     // recording, and the reply text is preserved for exactly that reason.
-    script = [
+    harness.script = [
       { type: 'text_message', text: 'I got as far as' },
       { type: 'error', kind: 'network', message: 'connection reset' },
       { type: 'done', finalText: 'I got as far as', usage: null }
@@ -634,13 +533,15 @@ describe('group context injection', () => {
     sendMessage('contact-a', 'go')
     await settle()
 
-    expect(created[0].groupContext.map((m) => m.content)).toEqual(['Cached the token read.'])
+    expect(harness.created[0].groupContext.map((m) => m.content)).toEqual([
+      'Cached the token read.'
+    ])
   })
 
   it('passes an empty history for a repo with no group', async () => {
     sendMessage('contact-a', 'go')
     await settle()
-    expect(created[0].groupContext).toEqual([])
+    expect(harness.created[0].groupContext).toEqual([])
   })
 })
 
@@ -702,18 +603,18 @@ describe('mentionInGroup', () => {
     await settle()
 
     mentionInGroup(GROUP, 'contact-a', 'second')
-    expect(created[1].resumedFrom).toBe('session-abc')
+    expect(harness.created[1].resumedFrom).toBe('session-abc')
   })
 
   // Same rule sendMessage follows: the lock is taken before anything is
   // written, so a refusal leaves no trace in either table.
   it('writes nothing at all when the contact is refused', () => {
     seedGroup()
-    seedPersona('persona-write', 'workspace_write')
-    seedContact('contact-w1', 'persona-write')
-    seedContact('contact-w2', 'persona-write')
+    seedPersona(db, 'persona-write', 'workspace_write')
+    seedContact(db, 'contact-w1', 'persona-write')
+    seedContact(db, 'contact-w2', 'persona-write')
 
-    gate = holdOpen()
+    harness.gate = holdOpen()
     sendMessage('contact-w1', 'go')
 
     expect(() => mentionInGroup(GROUP, 'contact-w2', 'you too')).toThrow(/already working/)
@@ -726,10 +627,10 @@ describe('mentionInGroup', () => {
   // to satisfy.
   it('lets an @mentioned reader run while a writer holds the repo', () => {
     seedGroup()
-    seedPersona('persona-write', 'workspace_write')
-    seedContact('contact-w', 'persona-write')
+    seedPersona(db, 'persona-write', 'workspace_write')
+    seedContact(db, 'contact-w', 'persona-write')
 
-    gate = holdOpen()
+    harness.gate = holdOpen()
     sendMessage('contact-w', 'refactor it')
 
     expect(() => mentionInGroup(GROUP, 'contact-a', 'review it')).not.toThrow()
@@ -739,5 +640,102 @@ describe('mentionInGroup', () => {
     seedGroup()
     expect(() => mentionInGroup(GROUP, 'nobody', 'hi')).toThrow(/No such contact/)
     expect(listGroupMessages(GROUP)).toEqual([])
+  })
+})
+
+describe('runRoutineTurn', () => {
+  beforeEach(() => {
+    db.insert(groups).values({ id: 'group-1', repoPath: REPO }).run()
+  })
+
+  // A routine fire IS a message to that Contact — same lock, same session, same
+  // rows. Blueprint §7 wants opening the Contact to show what it did while
+  // asleep, and an assistant bubble with no question above it reads as a glitch.
+  it('writes the prompt and the reply to the contact thread', async () => {
+    runRoutineTurn('routine-1', 'contact-a', 'sweep the lint errors')
+    await settle()
+
+    const thread = listMessages('contact-a')
+    expect(thread.map((message) => message.role)).toEqual(['user', 'assistant'])
+    expect(thread[0].content).toBe('sweep the lint errors')
+    expect(thread[1].content).toBe('Looks good.')
+  })
+
+  // Nobody mentioned anything. An inbound row here would invent a user
+  // utterance in a thread the user was not in.
+  it('writes no inbound group row, unlike a mention', async () => {
+    runRoutineTurn('routine-1', 'contact-a', 'sweep the lint errors')
+    await settle()
+
+    expect(listGroupMessages('group-1').filter((m) => m.type === 'user_mention')).toHaveLength(0)
+  })
+
+  // The routine's Group record is the single `routine_run` compaction posts in
+  // place of the usual system_summary — one unattended event, one row. An
+  // agent_reply here would make it two.
+  it('writes no agent_reply, so the fire leaves exactly one group row', async () => {
+    runRoutineTurn('routine-1', 'contact-a', 'sweep the lint errors')
+    await settle()
+
+    expect(listGroupMessages('group-1')).toHaveLength(0)
+    expect(summarized[0].kind).toBe('routine')
+  })
+
+  it('attributes the spend to the routine, not to a message', async () => {
+    runRoutineTurn('routine-1', 'contact-a', 'sweep the lint errors')
+    await settle()
+
+    expect(db.select().from(usageEvents).all()[0].source).toBe('routine')
+  })
+})
+
+describe('the completion promise', () => {
+  // The invariant everything unattended rests on: finish() is on every path out
+  // of runTurn, so a routine can always write its own bookkeeping. A promise
+  // that never settles would leave lastRunAt null forever with no symptom.
+  it('settles on a clean turn', async () => {
+    const outcome = await runRoutineTurn('r', 'contact-a', 'go').completed
+
+    expect(outcome.finalText).toBe('Looks good.')
+    expect(outcome.error).toBeNull()
+    expect(outcome.aborted).toBe(false)
+  })
+
+  it('settles when the adapter throws outside its own stream wrapper', async () => {
+    harness.throwOnRun = new Error('spawn ENOENT')
+
+    const outcome = await runRoutineTurn('r', 'contact-a', 'go').completed
+
+    expect(outcome.error).toBe('spawn ENOENT')
+  })
+
+  it('settles when the turn errors mid-stream, carrying the reason', async () => {
+    harness.script = [
+      { type: 'error', kind: 'auth', message: 'Not authenticated.' },
+      { type: 'done', finalText: '', usage: null }
+    ]
+
+    const outcome = await runRoutineTurn('r', 'contact-a', 'go').completed
+
+    expect(outcome.error).toBe('Not authenticated.')
+  })
+
+  it('settles when the turn is stopped, and says so', async () => {
+    const { runId, completed } = runRoutineTurn('r', 'contact-a', 'go')
+    cancelRun(runId)
+
+    const outcome = await completed
+
+    expect(outcome.aborted).toBe(true)
+  })
+
+  // The lock has to be gone before the caller reacts, or a routine writing rows
+  // in response could be refused by the very turn it is reacting to.
+  it('resolves only after the lock has been released', async () => {
+    const { completed } = runRoutineTurn('r', 'contact-a', 'go')
+
+    await completed
+
+    expect(listActiveRuns()).toHaveLength(0)
   })
 })

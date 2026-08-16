@@ -120,6 +120,45 @@ describe('summarizeTurn', () => {
     })
   })
 
+  /**
+   * A routine's summary IS its Group record: it replaces the system_summary
+   * rather than joining it, so one unattended fire leaves one row rather than
+   * two saying much the same thing. It still carries category/durable, because
+   * contextForRepo reads both types — work done while nobody was watching is
+   * exactly what §6 has to carry across Contact boundaries.
+   */
+  it('files a routine turn as routine_run instead, keeping its category', async () => {
+    summarizeResult = GOOD
+
+    await summarizeTurn('contact-1', 'sweep lint', 'I cached it.', {
+      kind: 'routine',
+      routineId: 'routine-1'
+    })
+
+    expect(listGroupMessages(GROUP)[0]).toMatchObject({
+      type: 'routine_run',
+      contactId: 'contact-1',
+      content: 'Cached the token read.',
+      category: 'decision',
+      durable: true
+    })
+  })
+
+  it('returns the summary it wrote, so a routine has a sentence for its history', async () => {
+    summarizeResult = GOOD
+
+    const result = await summarizeTurn('contact-1', 'q', 'a', {
+      kind: 'routine',
+      routineId: 'routine-1'
+    })
+
+    expect(result).toMatchObject({
+      summary: 'Cached the token read.',
+      category: 'decision',
+      durable: true
+    })
+  })
+
   it('marks a tradeoff durable too', async () => {
     summarizeResult = {
       ...GOOD,
