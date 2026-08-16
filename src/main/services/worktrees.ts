@@ -30,6 +30,13 @@ import type { Contact } from '../../shared/domain'
 
 export const WORKTREE_DIR = 'worktrees'
 
+/**
+ * Every branch this app creates lives under here, which is what lets the
+ * Branches panel enumerate them without a database and so still find the ones
+ * whose Contact has been deleted.
+ */
+export const PERSONA_BRANCH_PREFIX = 'persona/'
+
 export function worktreeRoot(): string {
   return join(app.getPath('userData'), WORKTREE_DIR)
 }
@@ -58,7 +65,7 @@ export function plannedWorktree(
   const persona = slug(personaName) || 'persona'
   const name = `${persona}-${shortId(contactId)}`
 
-  return { path: join(worktreeRoot(), repo, name), branch: `persona/${name}` }
+  return { path: join(worktreeRoot(), repo, name), branch: `${PERSONA_BRANCH_PREFIX}${name}` }
 }
 
 /**

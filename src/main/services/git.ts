@@ -289,6 +289,40 @@ export async function gitWritePathsFor(worktreePath: string): Promise<string[]> 
   return [ownDir, join(commonDir, 'objects'), join(commonDir, 'refs'), join(commonDir, 'logs')]
 }
 
+export interface BranchRef {
+  branch: string
+  headSha: string
+  /** Epoch ms of the tip commit, for ordering the panel by recency. */
+  committedAt: number
+}
+
+/**
+ * Every branch under a prefix, with its tip.
+ *
+ * `for-each-ref` rather than `branch --list` because its output is a format
+ * string rather than a human table — no column alignment, no `*` on the current
+ * branch, and no truncation to fit a terminal.
+ */
+export async function listBranches(repoPath: string, prefix: string): Promise<BranchRef[]> {
+  const result = await git(
+    [
+      'for-each-ref',
+      '--format=%(refname:short)%09%(objectname)%09%(committerdate:unix)',
+      `refs/heads/${prefix}`
+    ],
+    repoPath
+  )
+  if (result.code !== 0) throw localGitError('Could not list branches', result)
+
+  return result.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [branch, headSha, committed] = line.split('\t')
+      return { branch, headSha, committedAt: Number(committed) * 1000 }
+    })
+}
+
 export async function headSha(workingPath: string): Promise<string | null> {
   const result = await git(['rev-parse', 'HEAD'], workingPath)
   return result.code === 0 ? result.stdout.trim() : null

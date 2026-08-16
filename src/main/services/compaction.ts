@@ -182,6 +182,24 @@ export async function summarizeTurn(
       ...(branch ? { branch } : {})
     })
 
+    // A separate row rather than a field on the summary: this is the one thing
+    // in the phase a persona cannot do for itself, it needs its own shape in the
+    // thread because it is actionable, and it must not be swept up by the
+    // recency limits that govern the decision log.
+    // Compared against the row rather than against `work`, so it holds whether
+    // or not the worktree has been materialised: asking for a merge of the
+    // branch you are already on is a model mistake, not an instruction.
+    const needs = parsed.data.needs
+    if (needs && needs.branch !== contact.branch) {
+      insertGroupMessage({
+        groupId: group.id,
+        type: 'branch_request',
+        contactId,
+        content: needs.reason,
+        branch: needs.branch
+      })
+    }
+
     return { id: row.id, summary: parsed.data.summary, category: parsed.data.category, durable }
   } catch (error) {
     // The turn this summarises was committed before we got here. Losing a

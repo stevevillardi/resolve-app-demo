@@ -176,6 +176,23 @@ describe('contextForRepo', () => {
     expect(contextForRepo(REPO)).toHaveLength(ROUTINE_CONTEXT_LIMIT)
   })
 
+  // Written from the claim: a branch request is addressed to the human, because
+  // only a person can merge. Injecting it would read to every other persona as
+  // a task — the same failure the group-context preamble exists to prevent.
+  it('never injects a branch request, which is addressed to the human', () => {
+    now += 1000
+    vi.setSystemTime(now)
+    insertGroupMessage({
+      groupId: GROUP,
+      type: 'branch_request',
+      content: 'Needs the new auth helper.',
+      branch: 'persona/refactor-buddy-a3f9'
+    })
+    summary('a real decision', 'decision')
+
+    expect(contextForRepo(REPO).map((m) => m.content)).toEqual(['a real decision'])
+  })
+
   it('returns oldest first, so the block reads as a history', () => {
     summary('older', 'decision')
     summary('newer', 'decision')

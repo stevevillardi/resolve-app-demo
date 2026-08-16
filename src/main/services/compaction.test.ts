@@ -225,11 +225,64 @@ describe('summarizeTurn', () => {
     await summarizeTurn('contact-1', 'q', 'a')
     const properties = lastSummarizeCall?.schema.properties as Record<string, unknown>
     expect(Object.keys(properties)).toContain('branch')
-    // `branch` is in `required` because Codex runs this through OpenAI's strict
-    // mode, which rejects a schema whose `required` omits any property — see
-    // the schema tests in adapters/codex.test.ts. Its absence is expressed as a
+    // Every property is in `required` because Codex runs this through OpenAI's
+    // strict mode, which rejects a schema whose `required` omits any of them —
+    // see the schema tests in adapters/codex.test.ts. Absence is expressed as a
     // nullable type instead.
-    expect(lastSummarizeCall?.schema.required).toEqual(['summary', 'category', 'branch'])
+    expect(lastSummarizeCall?.schema.required).toEqual(['summary', 'category', 'branch', 'needs'])
+  })
+
+  // Strict mode applies to sub-objects too. Getting this wrong rejects *every*
+  // summary, not merely the rare turn that fills `needs` in — so it is worth an
+  // assertion rather than a live discovery.
+  it('gives the nested needs object its own required list and closed shape', async () => {
+    summarizeResult = GOOD
+    await summarizeTurn('contact-1', 'q', 'a')
+    const properties = lastSummarizeCall?.schema.properties as Record<
+      string,
+      { required?: string[]; additionalProperties?: boolean }
+    >
+
+    expect(properties.needs.required).toEqual(['branch', 'reason'])
+    expect(properties.needs.additionalProperties).toBe(false)
+  })
+})
+
+describe('branch requests', () => {
+  function needing(needs: { branch: string; reason: string } | null): void {
+    summarizeResult = { ...GOOD, data: { ...(GOOD.data as object), needs } }
+  }
+
+  it('writes nothing extra when the turn was not blocked', async () => {
+    needing(null)
+    await summarizeTurn('contact-1', 'q', 'a')
+
+    expect(listGroupMessages(GROUP).map((m) => m.type)).toEqual(['system_summary'])
+  })
+
+  // A separate row rather than a field on the summary: it is the one step of
+  // the phase a human has to take, so it needs a shape of its own in the thread.
+  it('records a request as its own row alongside the summary', async () => {
+    needing({ branch: 'persona/refactor-buddy-a3f9', reason: 'Needs the new auth helper.' })
+    await summarizeTurn('contact-1', 'q', 'a')
+
+    const rows = listGroupMessages(GROUP)
+    expect(rows.map((m) => m.type)).toEqual(['system_summary', 'branch_request'])
+    expect(rows[1]).toMatchObject({
+      branch: 'persona/refactor-buddy-a3f9',
+      content: 'Needs the new auth helper.',
+      contactId: 'contact-1'
+    })
+  })
+
+  // Asking for a merge of its own branch is a request to merge work into the
+  // tree it is already in, which is a model mistake rather than an instruction.
+  it('ignores a request for the branch the session is already on', async () => {
+    db.update(contacts).set({ branch: 'persona/mine' }).run()
+    needing({ branch: 'persona/mine', reason: 'I need my own work.' })
+    await summarizeTurn('contact-1', 'q', 'a')
+
+    expect(listGroupMessages(GROUP).map((m) => m.type)).toEqual(['system_summary'])
   })
 })
 

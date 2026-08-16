@@ -61,7 +61,14 @@ describe('contract shape', () => {
         'groups.getForRepo',
         'groupMessages.list',
         'groupMessages.previews',
-        'groups.mention'
+        'groups.mention',
+        // Phase 12
+        'contacts.delete',
+        'branches.list',
+        'branches.targets',
+        'branches.preview',
+        'branches.merge',
+        'branches.discard'
       ])
     )
   })

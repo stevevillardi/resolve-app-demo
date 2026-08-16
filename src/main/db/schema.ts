@@ -129,7 +129,7 @@ export const groupMessages = sqliteTable(
       .references(() => groups.id, { onDelete: 'cascade' }),
     timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
     type: text('type', {
-      enum: ['system_summary', 'user_mention', 'agent_reply', 'routine_run']
+      enum: ['system_summary', 'user_mention', 'agent_reply', 'routine_run', 'branch_request']
     }).notNull(),
     // Nullable because a `user_mention` comes from the user, not a contact.
     // set null rather than cascade: the group's history should survive one of

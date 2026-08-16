@@ -21,7 +21,13 @@ export const groupMessageTypeSchema = z.enum([
   'system_summary',
   'user_mention',
   'agent_reply',
-  'routine_run'
+  'routine_run',
+  /**
+   * A persona asking for somebody else's branch to be merged into its tree —
+   * the one step of docs/plan/12-worktree-isolation.md that a human has to
+   * take. `branch` carries what it wants, `content` carries why.
+   */
+  'branch_request'
 ])
 export const systemSummaryCategorySchema = z.enum(['decision', 'tradeoff', 'routine'])
 export const usageSourceSchema = z.enum(['message', 'routine', 'mention', 'summary'])
@@ -130,13 +136,16 @@ export const groupMessageSchema = z.object({
   /** `system_summary` only — durable entries are always re-injected (§6). */
   durable: z.boolean().optional(),
   /**
-   * `system_summary` only — the branch the work landed on, when there was one.
+   * The branch this row is about.
    *
-   * Unset until worktrees land (docs/plan/12-worktree-isolation.md): with one
-   * shared checkout there is usually no branch worth naming. It exists now
-   * because these rows are already injected into every session on the repo,
-   * which makes them the channel by which a writer's invisible branch becomes
-   * known.
+   * On a summary it is where the work landed, which is how a writer's otherwise
+   * invisible branch becomes known to every later session on the repo — these
+   * rows are already injected into each one. On a `branch_request` it is the
+   * branch being asked for instead.
+   *
+   * Still absent whenever a Contact works in the main tree, which is the common
+   * case for readers: there is no branch worth naming when the changes are
+   * simply on disk.
    */
   branch: z.string().optional()
 })
