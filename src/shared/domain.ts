@@ -60,6 +60,22 @@ export const personaTemplateSchema = z.object({
   model: z.string().nullable(),
   systemPrompt: z.string(),
   skillIds: z.array(z.string()),
+  /**
+   * The MCP servers this persona may use, by id — an allowlist over the app's
+   * own curated registry, never arbitrary URLs.
+   *
+   * Blueprint §4 names two governance axes and stops being sufficient here: an
+   * MCP server is *network reach*, which neither `sandbox` (disk) nor
+   * `githubScope` (GitHub authority) describes. Rather than invent a third enum
+   * with one meaningful value in it, this allowlist **is** the axis in its v1
+   * form — the registry is closed and its only entry is GitHub, whose reach is
+   * exactly what `githubScope` already governs. A named `network` axis becomes
+   * necessary the day arbitrary servers can be added, and not before.
+   *
+   * A JSON array for the same reasons as `skillIds`: no relational queries, and
+   * the order the user picked is worth keeping.
+   */
+  mcpServerIds: z.array(z.string()),
   /** Two independent axes (blueprint §4): disk access and GitHub authority. */
   sandbox: sandboxLevelSchema,
   githubScope: githubScopeSchema
@@ -96,6 +112,33 @@ export function isolationOf(isolation: Isolation | null): Isolation {
   return isolation ?? 'shared'
 }
 
+/**
+ * What this Contact has been told it may take from the repository it is bound
+ * to (docs/plan/14-agent-capability-surface.md §3).
+ *
+ * Per Contact rather than per persona, for the same reason `isolation` is: the
+ * same persona may trust one repository and not another. And it is a trust
+ * question rather than a preference — `CLAUDE.md`, `AGENTS.md` and a `SKILL.md`
+ * are instructions written by whoever owns the repo, which is a different thing
+ * from the persona's own system prompt. A persona bound to a repo cloned from a
+ * colleague would otherwise start taking direction from it silently.
+ *
+ * `skills` is an allowlist of names rather than a boolean on purpose: a skill
+ * committed to the repository *after* the human approved what was there must
+ * not inherit that approval.
+ */
+export const repoTrustSchema = z.object({
+  /** Whether the repo's own CLAUDE.md / AGENTS.md reaches the model. */
+  instructions: z.boolean(),
+  /** Repo skill names this Contact may use. Everything else stays disabled. */
+  skills: z.array(z.string())
+})
+
+/** Null means nothing is trusted, which is where every Contact starts. */
+export function repoTrustOf(trust: RepoTrust | null): RepoTrust {
+  return trust ?? { instructions: false, skills: [] }
+}
+
 export const contactSchema = z.object({
   id: z.string(),
   personaTemplateId: z.string(),
@@ -115,7 +158,9 @@ export const contactSchema = z.object({
   /** The branch that worktree is on. Null whenever worktreePath is. */
   branch: z.string().nullable(),
   /** Null reads as `shared` — that is what every pre-0007 row means. */
-  isolation: isolationSchema.nullable()
+  isolation: isolationSchema.nullable(),
+  /** Null reads as "nothing trusted" — every pre-0009 row, and every new one. */
+  repoTrust: repoTrustSchema.nullable()
 })
 
 export const groupSchema = z.object({
@@ -233,7 +278,18 @@ export const personaTemplateDraftSchema = personaTemplateSchema.omit({ id: true 
  * the bind flow actually asks the user to make.
  */
 export const contactDraftSchema = contactSchema
-  .omit({ id: true, backendSessionId: true, worktreePath: true, branch: true, isolation: true })
+  .omit({
+    id: true,
+    backendSessionId: true,
+    worktreePath: true,
+    branch: true,
+    isolation: true,
+    // Not offered at bind time at all. Trusting a repository's instructions or
+    // its skills means reading what they say first, and the bind flow has not
+    // shown them — approval lives in the thread header, where the text is on
+    // screen next to the switch. A new Contact starts trusting nothing.
+    repoTrust: true
+  })
   // Optional rather than nullable: an absent isolation means "decide for me",
   // and main picks from the persona's sandbox level. Null is only ever a stored
   // value, meaning a row written before the column existed.
@@ -271,6 +327,7 @@ export type SystemSummaryCategory = z.infer<typeof systemSummaryCategorySchema>
 export type UsageSource = z.infer<typeof usageSourceSchema>
 export type CostSource = z.infer<typeof costSourceSchema>
 export type Isolation = z.infer<typeof isolationSchema>
+export type RepoTrust = z.infer<typeof repoTrustSchema>
 
 export type Skill = z.infer<typeof skillSchema>
 export type PersonaTemplate = z.infer<typeof personaTemplateSchema>

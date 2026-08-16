@@ -44,6 +44,7 @@ export function updatePersonaTemplate(persona: PersonaTemplate): PersonaTemplate
       model: persona.model,
       systemPrompt: persona.systemPrompt,
       skillIds: persona.skillIds,
+      mcpServerIds: persona.mcpServerIds,
       sandbox: persona.sandbox,
       githubScope: persona.githubScope
     })

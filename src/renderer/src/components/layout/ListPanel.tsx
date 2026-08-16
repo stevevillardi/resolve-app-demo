@@ -38,7 +38,10 @@ const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLab
   branches: { title: 'Branches', searchPlaceholder: 'Search branches' }
 }
 
-/** What a brand-new persona starts as — the safest scope on both axes (§4). */
+/**
+ * What a brand-new persona starts as — the safest scope on both axes (§4), and
+ * no MCP servers, which is the third thing that has to start closed.
+ */
 const NEW_PERSONA: PersonaTemplateDraft = {
   name: 'New persona',
   avatarColor: '#2a78d6',
@@ -46,6 +49,7 @@ const NEW_PERSONA: PersonaTemplateDraft = {
   model: null,
   systemPrompt: '',
   skillIds: [],
+  mcpServerIds: [],
   sandbox: 'read_only',
   githubScope: 'read_only'
 }

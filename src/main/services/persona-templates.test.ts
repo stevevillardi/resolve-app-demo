@@ -31,6 +31,7 @@ const DRAFT: PersonaTemplateDraft = {
   model: null,
   systemPrompt: 'Review carefully.',
   skillIds: ['skill-a'],
+  mcpServerIds: [],
   sandbox: 'read_only',
   githubScope: 'read_only'
 }
@@ -107,6 +108,26 @@ describe('update', () => {
 
     updatePersonaTemplate({ ...persona, model: null })
     expect(getPersonaTemplate(persona.id)?.model).toBeNull()
+  })
+
+  // The debt the comment above asks for, paid on the way in rather than after
+  // somebody notices their server selection does not stick.
+  it('persists an MCP server allowlist, and emptying it again', () => {
+    const persona = createPersonaTemplate(DRAFT)
+
+    updatePersonaTemplate({ ...persona, mcpServerIds: ['github'] })
+    expect(getPersonaTemplate(persona.id)?.mcpServerIds).toEqual(['github'])
+
+    // Emptying has to survive the round trip too: the column is nullable and
+    // toPersonaTemplate() coalesces null to [], so a revocation that wrote
+    // nothing would read back as though it had worked.
+    updatePersonaTemplate({ ...persona, mcpServerIds: [] })
+    expect(getPersonaTemplate(persona.id)?.mcpServerIds).toEqual([])
+  })
+
+  it('starts a persona with no servers at all', () => {
+    // A capability has to be granted, never inherited from a default.
+    expect(createPersonaTemplate(DRAFT).mcpServerIds).toEqual([])
   })
 
   it('throws for a persona that no longer exists', () => {

@@ -67,6 +67,7 @@ export const SEED_PERSONA_TEMPLATES: PersonaTemplate[] = [
     systemPrompt:
       'You are a meticulous code reviewer. Read diffs carefully, flag correctness and security issues, and never edit files directly.',
     skillIds: ['skill-typescript-style', 'skill-security-checklist'],
+    mcpServerIds: [],
     sandbox: 'read_only',
     githubScope: 'read_only'
   },
@@ -79,6 +80,7 @@ export const SEED_PERSONA_TEMPLATES: PersonaTemplate[] = [
     systemPrompt:
       'You are a refactoring specialist. Make small, well-reasoned structural improvements and always explain your rationale.',
     skillIds: ['skill-typescript-style', 'skill-conventional-commits'],
+    mcpServerIds: [],
     sandbox: 'workspace_write',
     githubScope: 'open_pr'
   },
@@ -90,6 +92,7 @@ export const SEED_PERSONA_TEMPLATES: PersonaTemplate[] = [
     model: null,
     systemPrompt: 'You keep documentation accurate and readable. You do not modify source code.',
     skillIds: ['skill-conventional-commits'],
+    mcpServerIds: [],
     sandbox: 'read_only',
     githubScope: 'read_only'
   }

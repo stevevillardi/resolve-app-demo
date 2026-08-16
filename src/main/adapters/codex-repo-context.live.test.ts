@@ -44,6 +44,7 @@ const PERSONA: PersonaTemplate = {
   model: null,
   systemPrompt: 'You are a terse assistant. Answer in one short sentence.',
   skillIds: [],
+  mcpServerIds: [],
   sandbox: 'read_only',
   githubScope: 'read_only'
 }

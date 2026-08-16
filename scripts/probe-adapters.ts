@@ -123,6 +123,7 @@ async function main(): Promise<void> {
     model: null,
     systemPrompt: flags.system,
     skillIds: flags.skillFiles.map((_, index) => `probe-skill-${index}`),
+    mcpServerIds: [],
     sandbox: flags.sandbox,
     githubScope: 'read_only'
   }

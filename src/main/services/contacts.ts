@@ -69,7 +69,11 @@ export function createContact(draft: ContactDraft): Contact {
       backendSessionId: null,
       isolation,
       worktreePath: planned?.path ?? null,
-      branch: planned?.branch ?? null
+      branch: planned?.branch ?? null,
+      // A new Contact trusts nothing its repository says. Granting that is a
+      // separate, deliberate act taken with the text on screen — see
+      // repoTrustSchema in shared/domain.ts.
+      repoTrust: null
     }
 
     ensureGroupForRepo(contact.repoPath, tx)

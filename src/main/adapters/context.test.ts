@@ -16,6 +16,7 @@ function persona(skillIds: string[], systemPrompt = 'You review code.'): Persona
     model: null,
     systemPrompt,
     skillIds,
+    mcpServerIds: [],
     sandbox: 'read_only',
     githubScope: 'read_only'
   }

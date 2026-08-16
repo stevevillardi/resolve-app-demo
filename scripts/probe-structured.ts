@@ -87,6 +87,7 @@ async function main(): Promise<void> {
       'You summarise a finished coding session for a shared project log. ' +
       'Answer only with the requested JSON object.',
     skillIds: [],
+    mcpServerIds: [],
     sandbox: flags.sandbox,
     githubScope: 'read_only'
   }

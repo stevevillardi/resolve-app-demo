@@ -5,6 +5,7 @@ import {
   defaultIsolation,
   isolationOf,
   groupMessageSchema,
+  repoTrustOf,
   personaTemplateDraftSchema,
   personaTemplateSchema,
   routineSchema,
@@ -27,6 +28,7 @@ const PERSONA = {
   model: null,
   systemPrompt: 'Review carefully.',
   skillIds: ['s1'],
+  mcpServerIds: [],
   sandbox: 'read_only',
   githubScope: 'read_only'
 }
@@ -46,6 +48,30 @@ describe('personaTemplate', () => {
 
   it('rejects an unknown github scope', () => {
     expect(() => personaTemplateSchema.parse({ ...PERSONA, githubScope: 'admin' })).toThrow()
+  })
+
+  it('lets a persona reach MCP servers at any sandbox or GitHub scope', () => {
+    // The server allowlist is the third governance axis in its v1 form, and
+    // like the other two it does not have to agree with them: an MCP server is
+    // network reach, which neither of the others describes. A read-only persona
+    // reading GitHub issues through a tool is the whole point of Journey 3.
+    expect(() =>
+      personaTemplateSchema.parse({
+        ...PERSONA,
+        sandbox: 'read_only',
+        githubScope: 'read_only',
+        mcpServerIds: ['github']
+      })
+    ).not.toThrow()
+  })
+
+  it('requires the server list to be present, even when empty', () => {
+    // Absent must not read as "none" here the way a nullable column does: this
+    // is the renderer's shape, and a persona editor that forgot to send the
+    // field would silently strip every server the user had chosen.
+    const without = { ...PERSONA }
+    delete (without as { mcpServerIds?: unknown }).mcpServerIds
+    expect(() => personaTemplateSchema.parse(without)).toThrow()
   })
 
   it('keeps the two permission axes independent', () => {
@@ -113,7 +139,8 @@ describe('contact', () => {
     backendSessionId: null,
     worktreePath: null,
     branch: null,
-    isolation: null
+    isolation: null,
+    repoTrust: null
   }
 
   function without(key: keyof typeof base): Record<string, unknown> {
@@ -143,6 +170,26 @@ describe('contact', () => {
 
   it('rejects an isolation mode it does not know', () => {
     expect(() => contactSchema.parse({ ...base, isolation: 'sandbox' })).toThrow()
+  })
+
+  it('takes repo trust as a shape or an explicit null', () => {
+    expect(() =>
+      contactSchema.parse({ ...base, repoTrust: { instructions: true, skills: ['review'] } })
+    ).not.toThrow()
+    expect(() => contactSchema.parse(without('repoTrust'))).toThrow()
+    // Half a trust decision is not a trust decision.
+    expect(() => contactSchema.parse({ ...base, repoTrust: { instructions: true } })).toThrow()
+  })
+
+  it('reads an unset trust as trusting nothing', () => {
+    // The direction of this default is the whole point: an absent value can
+    // only ever mean *less* access, so a row written before the column existed
+    // and a Contact nobody has answered for behave identically.
+    expect(repoTrustOf(null)).toEqual({ instructions: false, skills: [] })
+    expect(repoTrustOf({ instructions: true, skills: ['a'] })).toEqual({
+      instructions: true,
+      skills: ['a']
+    })
   })
 
   // The draft is the renderer's shape, and a renderer-supplied working path

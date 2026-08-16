@@ -1,4 +1,5 @@
 import { sqliteTable, integer, real, text, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import type { RepoTrust } from '../../shared/domain'
 
 /**
  * Blueprint §12, one table per bullet. The column shapes mirror the Zod
@@ -56,6 +57,15 @@ export const personaTemplates = sqliteTable('persona_templates', {
    * position column to fake it back.
    */
   skillIds: text('skill_ids', { mode: 'json' }).$type<string[]>().notNull(),
+  /**
+   * MCP server ids from the app's own curated registry — never arbitrary URLs.
+   * Same JSON-array treatment as `skillIds` above, and for the same reasons.
+   *
+   * Nullable rather than `notNull` so migration 0009 needs no backfill: a row
+   * without it reads as "no servers", which is what every persona created
+   * before this column meant and what a persona should default to anyway.
+   */
+  mcpServerIds: text('mcp_server_ids', { mode: 'json' }).$type<string[]>(),
   sandbox: text('sandbox', { enum: ['read_only', 'workspace_write', 'full_access'] }).notNull(),
   githubScope: text('github_scope', {
     enum: ['read_only', 'open_pr', 'full_access']
@@ -104,7 +114,21 @@ export const contacts = sqliteTable(
      * As with usage_events.source below, the enum is a Drizzle/Zod assertion
      * rather than a DB CHECK, so a fourth mode later needs no migration.
      */
-    isolation: text('isolation', { enum: ['shared', 'worktree', 'exclusive'] })
+    isolation: text('isolation', { enum: ['shared', 'worktree', 'exclusive'] }),
+    /**
+     * What this Contact may take from the repository it is bound to:
+     * `{ instructions: boolean, skills: string[] }`.
+     *
+     * Null means nothing is trusted, so every row written before this column —
+     * and every row written after it — starts sealed. That is the safe
+     * direction for a default, which is why the column carries no NOT NULL and
+     * no server default: an absent value can only ever mean less access.
+     *
+     * JSON rather than two columns because the pair is written and read
+     * together, always through repoTrustOf() in shared/domain.ts, and because
+     * a third kind of trust would otherwise be another migration.
+     */
+    repoTrust: text('repo_trust', { mode: 'json' }).$type<RepoTrust>()
   },
   (table) => [index('contacts_repo_path_idx').on(table.repoPath)]
 )

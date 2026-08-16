@@ -76,6 +76,7 @@ const PERSONA: PersonaTemplate = {
   model: null,
   systemPrompt: 'You review code.',
   skillIds: [],
+  mcpServerIds: [],
   sandbox: 'read_only',
   githubScope: 'read_only'
 }

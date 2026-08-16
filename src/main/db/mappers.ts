@@ -63,6 +63,10 @@ export function toPersonaTemplate(row: PersonaTemplateRow): PersonaTemplate {
     model: row.model,
     systemPrompt: row.systemPrompt,
     skillIds: row.skillIds,
+    // Null coalesced to [] rather than passed through: unlike `model` above,
+    // "no servers" and "not set" are the same thing, and the domain type is an
+    // array so every consumer can iterate without a guard.
+    mcpServerIds: row.mcpServerIds ?? [],
     sandbox: row.sandbox,
     githubScope: row.githubScope
   }
@@ -81,7 +85,11 @@ export function toContact(row: ContactRow): Contact {
     // the key is always present.
     worktreePath: row.worktreePath,
     branch: row.branch,
-    isolation: row.isolation
+    isolation: row.isolation,
+    // Null on purpose, and read through repoTrustOf(): the difference between
+    // "trusts nothing" and "was never asked" is worth keeping, because the UI
+    // shows a first-time prompt for one and a settled state for the other.
+    repoTrust: row.repoTrust
   }
 }
 

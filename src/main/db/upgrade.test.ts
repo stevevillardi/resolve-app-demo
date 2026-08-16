@@ -118,6 +118,19 @@ describe('migrating a populated database', () => {
     const attribution = upgraded.get(
       `SELECT contact_id, persona_template_id, repo_path FROM usage_events WHERE id = 'u1'` as never
     ) as Record<string, unknown>
+    // 0009. Both new columns read as *less* access when absent, which is the
+    // only safe direction for a capability default: an upgraded profile trusts
+    // nothing its repositories say and hands no persona an MCP server, exactly
+    // as it behaved before the columns existed. repoTrustOf() and the `?? []`
+    // in toPersonaTemplate() are where those nulls acquire that meaning.
+    const capabilities = upgraded.get(
+      `SELECT c.repo_trust AS trust, p.mcp_server_ids AS servers
+         FROM contacts c JOIN persona_templates p ON p.id = c.persona_template_id
+        WHERE c.id = 'c1'` as never
+    ) as Record<string, unknown>
+    expect(capabilities.trust).toBeNull()
+    expect(capabilities.servers).toBeNull()
+
     expect(attribution.contact_id).toBe('c1')
     expect(attribution.persona_template_id).toBe('p1')
     expect(attribution.repo_path).toBe('/Users/dev/my-app')

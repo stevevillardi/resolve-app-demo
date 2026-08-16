@@ -37,6 +37,7 @@ function persona(sandbox: SandboxLevel): PersonaTemplate {
     backend: 'claude',
     systemPrompt: '',
     skillIds: [],
+    mcpServerIds: [],
     sandbox,
     githubScope: 'read_only',
     model: null
@@ -57,6 +58,7 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     repoPath: REPO,
     displayName: 'Code Reviewer · my-app',
     backendSessionId: null,
+    repoTrust: null,
     worktreePath: null,
     branch: null,
     isolation: null,
