@@ -1,6 +1,12 @@
 import { useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput
+} from '@/components/ui/input-group'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ConversationList } from '@/components/conversation/ConversationList'
@@ -90,16 +96,38 @@ export function ListPanel(): React.JSX.Element {
           )}
         </div>
         {config.searchPlaceholder && (
-          <div className="no-drag relative px-4 pb-2.5">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-6 size-3.5 -translate-y-1/2" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={config.searchPlaceholder}
-              aria-label={config.searchPlaceholder}
-              className="bg-background border-border focus-visible:border-ring focus-visible:ring-ring/40 placeholder:text-muted-foreground h-7 w-full rounded-md border pr-2 pl-7 text-xs outline-none focus-visible:ring-2 [&::-webkit-search-cancel-button]:appearance-none"
-            />
+          // InputGroup rather than an absolutely-positioned icon: the icon is a
+          // flex sibling of the field, so it centres on the input itself. The
+          // previous revision anchored it to `top-1/2` of this padded wrapper,
+          // which put it half the bottom padding below the text.
+          <div className="no-drag px-4 pb-2.5">
+            {/* `border-input` is near-white in light mode, which is invisible
+                against `--background`; the search field wants the same hairline
+                every other pane edge uses. */}
+            <InputGroup className="bg-background dark:bg-background border-border h-7 rounded-md">
+              <InputGroupAddon className="pl-2">
+                <Search className="text-muted-foreground size-3.5" />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={config.searchPlaceholder}
+                aria-label={config.searchPlaceholder}
+                className="h-7 text-xs [&::-webkit-search-cancel-button]:appearance-none"
+              />
+              {query && (
+                <InputGroupAddon align="inline-end" className="pr-1.5">
+                  <InputGroupButton
+                    size="icon-xs"
+                    aria-label="Clear search"
+                    onClick={() => setQuery('')}
+                  >
+                    <X className="size-3" />
+                  </InputGroupButton>
+                </InputGroupAddon>
+              )}
+            </InputGroup>
           </div>
         )}
       </div>

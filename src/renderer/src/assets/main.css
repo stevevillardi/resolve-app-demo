@@ -271,6 +271,22 @@
     overflow: hidden;
   }
 
+  /* One global honouring of the OS preference, rather than a per-component
+     opt-out. Durations collapse to ~0 instead of `animation: none` so that
+     Base UI's data-ending-style exit transitions still *fire* — Base UI keeps
+     a popup mounted until its transition ends, and removing the transition
+     outright leaves closed overlays on screen. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   /* Machine text is never proportional. Anything that is an identifier or a
      figure gets the mono face and tabular figures so columns align. */
   code,

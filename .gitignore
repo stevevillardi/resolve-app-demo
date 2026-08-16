@@ -20,6 +20,7 @@ dist-electron/
 coverage/
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # Logs / caches
 *.log*
