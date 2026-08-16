@@ -152,12 +152,22 @@ missing) and moved to undated aliases. Codex gained the three `gpt-5.6` models i
 (`terra`, `luna`, `cyber`) beside `sol`. A new `models.test.ts` pins the invariant models.ts only
 asserted in a comment: every Codex model offered has a price row, and so does the summariser.
 
-**Deliberately not done:** `SUMMARY_MODELS.codex` stays `gpt-5.4-mini` even though `gpt-5.6-luna`
-now undercuts it 3.75× on both input and output (0.20/1.20 against 0.75/4.50). A summariser runs
-after every turn so the saving is real, but its output is load-bearing — Phase 7 found a
-mis-categorised summary silently drops a turn's work out of every colleague's context — and nothing
-here can measure summary quality. **This is the open decision worth a live check**, not a change to
-make while refreshing a list.
+**Summariser moved to `gpt-5.6-luna`** (2026-08-17, at the user's direction). It undercuts
+`gpt-5.4-mini` 3.75× on both input and output (0.20/1.20 against 0.75/4.50), and compaction runs
+after every turn, so the saving is paid constantly. Cheaper in every case rather than on average:
+even luna's long-context tier (0.40/1.80) beats gpt-5.4-mini's flat rate, so no transcript size
+favours the old choice.
+
+The rule is now enforced instead of described — a test asserts no offered Codex model undercuts the
+summariser on **both** axes, which is the comparison that settled this one. Strict domination
+rather than a single ranking metric, because cheaper-on-one-axis-dearer-on-the-other is a real
+trade-off and a trade-off is a judgement call, not a test failure.
+
+**The risk this carries is quality, not cost, and no test can see it.** A summariser picks a
+category, and Phase 7 found a mis-categorised summary silently drops a turn's work out of every
+colleague's context — invisible in the thread where it happened, surfacing later as a colleague
+missing something it should have known. If summaries start reading thin or landing in the wrong
+category, `SUMMARY_MODELS.codex` is the first thing to suspect. Worth watching on the live pass.
 
 **One thing the follow-up found rather than fixed.** Adding an orphaned-spend row to the E2E
 exposed that the dashboard's scope filter still worked by contact id, so a deleted Contact's spend

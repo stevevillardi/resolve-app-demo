@@ -31,6 +31,25 @@ describe('the codex model menu', () => {
   it('offers the summariser as a choice, so it is visible in the picker', () => {
     expect(modelsForBackend('codex')).toContain(SUMMARY_MODELS.codex)
   })
+
+  it('summarises on a model nothing else undercuts', () => {
+    // The selection rule, enforced rather than described. Compaction runs after
+    // every turn, so the summariser is the one model whose price is paid
+    // constantly — and "cheapest" is exactly the sort of claim that quietly
+    // stops being true when a cheaper model is added to the list.
+    //
+    // Strict domination rather than a single ranking metric: a model only wins
+    // if it is cheaper on *both* axes, which is the comparison that actually
+    // settled gpt-5.6-luna over gpt-5.4-mini. Anything that is cheaper on one
+    // axis and dearer on the other is a real trade-off, and a trade-off is a
+    // judgement call rather than a test failure.
+    const summariser = CODEX_PRICES[summaryModelFor('codex')]
+    for (const model of modelsForBackend('codex')) {
+      const price = CODEX_PRICES[model]
+      const undercutsOnBoth = price.input < summariser.input && price.output < summariser.output
+      expect(undercutsOnBoth, `${model} is cheaper than the summariser on both axes`).toBe(false)
+    }
+  })
 })
 
 describe('the model menu', () => {

@@ -76,19 +76,26 @@ export function modelsForBackend(backend: PersonaBackend): string[] {
  * broken conversation.
  */
 export const SUMMARY_MODELS: Record<PersonaBackend, string> = {
+  // Still the cheapest Claude model, so nothing to move to.
   claude: 'claude-haiku-4-5',
   /**
-   * No longer the cheapest entry CODEX_PRICES knows, and left alone anyway.
+   * The cheapest entry CODEX_PRICES knows, which is the whole selection rule.
    *
-   * `gpt-5.6-luna` now undercuts it 3.75x on both input and output
-   * (0.20/1.20 against 0.75/4.50), which across a summary after every turn is
-   * real money. But the summariser's output is load-bearing rather than
-   * decorative — Phase 7 found a mis-categorised summary silently drops a
-   * turn's work out of every colleague's context — and nothing here can
-   * measure summary *quality*. So this is a decision to make behind a live
-   * check, not a side effect of refreshing a list.
+   * Took over from `gpt-5.4-mini` on 2026-08-17: 0.20/1.20 against 0.75/4.50
+   * per 1M is 3.75x less on both input and output, and compaction runs after
+   * *every* turn. It is cheaper in every case rather than on average — even
+   * luna's long-context tier (0.40/1.80) undercuts gpt-5.4-mini's flat rate,
+   * so there is no transcript size at which the old choice wins.
+   *
+   * The risk this carries is quality, not cost, and it is worth naming because
+   * nothing in the test suite can see it: a summariser picks a category, and
+   * Phase 7 found a mis-categorised summary silently drops a turn's work out of
+   * every colleague's context. That failure is invisible in the thread the turn
+   * happened in and shows up later as a colleague missing something it should
+   * have known. If summaries start reading thin or landing in the wrong
+   * category, this line is the first thing to suspect.
    */
-  codex: 'gpt-5.4-mini'
+  codex: 'gpt-5.6-luna'
 }
 
 export function summaryModelFor(backend: PersonaBackend): string {
