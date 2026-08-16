@@ -54,6 +54,27 @@ vi.mock('./compaction', () => ({
   }
 }))
 
+/**
+ * The pull-request action stubbed for the same reason compaction is: what this
+ * file asserts is what the *scheduler* does with the result — whether it fires
+ * at all, and how a refusal is reported — while `pull-requests.test.ts` owns
+ * whether a pull request should have been opened. Leaving it real would also
+ * spawn git against a repo path that does not exist.
+ */
+let prAvailable = false
+let prResult: { number: number; url: string; title: string; action: string } | Error = new Error(
+  'not configured'
+)
+const prAttempts: string[] = []
+vi.mock('./pull-requests', () => ({
+  pullRequestState: async () => ({ available: prAvailable, pr: null }),
+  openPullRequest: async (contactId: string) => {
+    prAttempts.push(contactId)
+    if (prResult instanceof Error) throw prResult
+    return prResult
+  }
+}))
+
 const { fireRoutine, armedRoutineIds, nextRuns, startScheduler, stopScheduler, syncSchedules } =
   await import('./scheduler')
 const { acquire, resetRunLocks } = await import('./run-lock')
@@ -158,6 +179,9 @@ beforeEach(() => {
   harness.reset()
   summarized.length = 0
   summaryResult = null
+  prAvailable = false
+  prResult = new Error('not configured')
+  prAttempts.length = 0
   engine = new FakeCronEngine()
 
   seedSkill(db)
@@ -400,6 +424,87 @@ describe('fireRoutine', () => {
 
     gate.open()
     await first.completed
+  })
+})
+
+// --- The unattended pull request (Phase 9, blueprint §16 Journey 3) -----------
+
+describe('a routine that made changes ends by opening a pull request', () => {
+  it('opens one and says so in the run history', async () => {
+    prAvailable = true
+    prResult = {
+      number: 12,
+      url: 'https://github.com/acme/app/pull/12',
+      title: 'Fix the parser',
+      action: 'created'
+    }
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    const result = await fireRoutine('routine-1').completed
+
+    expect(prAttempts).toEqual(['contact-writer'])
+    expect(result.status).toBe('completed')
+    // The run's own summary survives; the PR is appended to it, because both are
+    // things the user wants from one line in a list.
+    expect(getRoutine('routine-1')?.lastRunSummary).toContain('Opened PR #12.')
+  })
+
+  it('comments instead when the branch already had one open', async () => {
+    prAvailable = true
+    prResult = {
+      number: 12,
+      url: 'https://github.com/acme/app/pull/12',
+      title: 'Fix the parser',
+      action: 'commented'
+    }
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    await fireRoutine('routine-1').completed
+
+    expect(getRoutine('routine-1')?.lastRunSummary).toContain('Commented on PR #12.')
+  })
+
+  // The Contact has no pull-request path — a plain folder, no GitHub remote, or
+  // a read_only persona. Not a misconfiguration and not worth reporting.
+  it('says nothing when there is no pull-request path', async () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    await fireRoutine('routine-1').completed
+
+    expect(prAttempts).toEqual([])
+    expect(getRoutine('routine-1')?.lastRunSummary).not.toContain('PR')
+  })
+
+  /**
+   * The run did its work. Reporting it as failed because a push was refused
+   * would misrepresent what happened — and there is nobody at the screen to
+   * read the difference, so the record has to carry it.
+   */
+  it('records a refusal without failing the run', async () => {
+    prAvailable = true
+    prResult = new Error('Refactor Buddy left 2 uncommitted changes in its working copy.')
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    const result = await fireRoutine('routine-1').completed
+
+    expect(result.status).toBe('completed')
+    expect(getRoutine('routine-1')?.lastRunSummary).toContain('2 uncommitted changes')
+  })
+
+  it('does not attempt one for a run that failed', async () => {
+    prAvailable = true
+    harness.throwOnRun = new Error('the backend fell over')
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    const result = await fireRoutine('routine-1').completed
+
+    expect(result.status).toBe('failed')
+    expect(prAttempts).toEqual([])
   })
 })
 
