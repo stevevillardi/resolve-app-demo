@@ -38,7 +38,9 @@ import type { PersonaTemplate } from '../../shared/domain'
 const PROMPT_HEADER =
   'Summarise the exchange below for a shared project log that other agents working ' +
   'on this repository will read before they start. Record intent and rationale, not ' +
-  'a restatement of the code. Answer only with the requested JSON object.'
+  'a restatement of the code. Categorise by what the turn left behind rather than by ' +
+  'how much was deliberated: if the repository changed, it is not routine, even if ' +
+  'the change was asked for outright. Answer only with the requested JSON object.'
 
 /**
  * A persona for the summariser, derived from the one whose turn is being

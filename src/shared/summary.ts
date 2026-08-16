@@ -27,6 +27,14 @@ import { systemSummaryCategorySchema } from './domain'
  * neither says anything about strict mode. Claude accepts the same shape, so
  * one schema still serves both; a `branch` that is genuinely absent comes back
  * as `null` and is normalised away by summarySchema below.
+ *
+ * The `category` descriptions are load-bearing prose, not documentation: they
+ * are the only instruction the model gets about where the line falls, and
+ * `durable` is derived from the answer. An earlier wording defined `routine` as
+ * "everything else", and a live Journey 2 run classified an actual edit to
+ * auth.ts as routine — the model read the category as being about how much it
+ * had deliberated, and it had simply been told what to do. Written this way the
+ * question is what the turn left behind, which is what §6 actually cares about.
  */
 export const SUMMARY_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -41,9 +49,14 @@ export const SUMMARY_JSON_SCHEMA: Record<string, unknown> = {
       type: 'string',
       enum: ['decision', 'tradeoff', 'routine'],
       description:
-        'decision: a choice that later work must respect. ' +
-        'tradeoff: a choice made with a cost worth recording. ' +
-        'routine: everything else, including questions answered and code merely read.'
+        'Judge by what the turn left behind, not by how much was deliberated. ' +
+        'decision: the repository was changed, or a choice was made that later work ' +
+        'must respect — this applies even when the user asked for the change outright ' +
+        'and nothing was weighed up. ' +
+        'tradeoff: as decision, but an alternative was rejected or a cost accepted ' +
+        'that someone should know about. ' +
+        'routine: the repository is exactly as it was — a question answered, code ' +
+        'read, a search run, a command that changed nothing.'
     },
     branch: {
       type: ['string', 'null'],
