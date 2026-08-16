@@ -15,6 +15,20 @@
       "when": 1786854220471,
       "tag": "0001_pretty_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786857644154,
+      "tag": "0002_add_blueprint_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786857653308,
+      "tag": "0003_drop_bootstrap_check",
+      "breakpoints": true
     }
   ]
 }
