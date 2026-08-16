@@ -116,6 +116,44 @@ export async function deleteContact(id: string, discardUncommitted = false): Pro
 }
 
 /**
+ * Renames a Contact. Deliberately nothing else.
+ *
+ * `displayName` is the only column here a human ever wants to change after the
+ * fact, and it is also the only one nothing derives from. The three obvious
+ * candidates for a general `updateContact` are all load-bearing:
+ *
+ * - `repoPath` is the Group key (§4's one Group per repo), the run-lock key via
+ *   workingPathFor(), and the directory the backend session was opened against.
+ * - `worktreePath` and `branch` are derived from the repo and persona at bind
+ *   time and are pointed at by a real checkout on disk.
+ * - `personaTemplateId` decides the backend, so changing it would strand
+ *   `backendSessionId` on an SDK that has never heard of it.
+ *
+ * Changing any of them would silently orphan a live worktree and a live
+ * session. A Contact bound to the wrong thing is deleted and made again, which
+ * is what deleteContact's worktree cleanup exists for. Keeping the input at
+ * `{ id, displayName }` puts that constraint at the Zod boundary rather than in
+ * a service-level check somebody can forget to write.
+ */
+export function renameContact(id: string, displayName: string): Contact {
+  const trimmed = displayName.trim()
+  if (trimmed.length === 0) throw new Error('A contact needs a name.')
+
+  const result = initDb()
+    .update(contacts)
+    .set({ displayName: trimmed })
+    .where(eq(contacts.id, id))
+    .run()
+
+  if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+
+  // Re-read rather than patching the caller's copy: listContacts orders by
+  // display_name, so the row's place in the list has just moved and the caller
+  // should be looking at what is actually stored.
+  return getContact(id) as Contact
+}
+
+/**
  * Records the backend's resume key after a turn (Phase 6).
  *
  * Called once, after the first turn on a contact: the adapters fill

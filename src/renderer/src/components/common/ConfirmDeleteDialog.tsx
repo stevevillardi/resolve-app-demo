@@ -27,6 +27,19 @@ interface ConfirmDeleteDialogProps {
    */
   consequence?: React.ReactNode
   confirmLabel?: string
+  /**
+   * Whether confirming also dismisses the dialog. True for the deletes that
+   * cannot fail once asked.
+   *
+   * False where the answer comes back from main and may be *no* — deleting a
+   * Contact is refused while its worktree has uncommitted work. Closing on
+   * click there would drop the user back to the app with the refusal rendered
+   * somewhere else, or nowhere; staying open lets the same dialog carry main's
+   * own words and a second, differently-labelled button.
+   */
+  closeOnConfirm?: boolean
+  /** Disables the confirm button while the answer is outstanding. */
+  busy?: boolean
   onConfirm: () => void
 }
 
@@ -50,6 +63,8 @@ export function ConfirmDeleteDialog({
   description,
   consequence,
   confirmLabel = 'Delete',
+  closeOnConfirm = true,
+  busy = false,
   onConfirm
 }: ConfirmDeleteDialogProps): React.JSX.Element {
   return (
@@ -82,9 +97,10 @@ export function ConfirmDeleteDialog({
           </Button>
           <Button
             variant="destructive"
+            disabled={busy}
             onClick={() => {
               onConfirm()
-              onOpenChange(false)
+              if (closeOnConfirm) onOpenChange(false)
             }}
           >
             {confirmLabel}

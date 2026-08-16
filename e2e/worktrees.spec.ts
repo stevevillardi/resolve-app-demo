@@ -39,6 +39,8 @@ let scratch: string
 
 interface Contact {
   id: string
+  displayName: string
+  backendSessionId: string | null
   worktreePath: string | null
   branch: string | null
   isolation: string | null
@@ -154,6 +156,33 @@ test('deleting a contact takes its checkout with it and leaves the branch', asyn
   // Committed work is never destroyed by a delete — the branch survives, and
   // the Branches panel is where it gets dealt with.
   expect(git(['rev-parse', '--verify', contact.branch!])).toMatch(/^[0-9a-f]{40}$/)
+})
+
+test('renaming a contact leaves its checkout and its session alone', async () => {
+  // The unit test in contacts.test.ts asserts the same claim against a
+  // :memory: database; this one proves the contract entry, the Zod shapes and
+  // the preload round trip agree with it — and that a rename does not disturb
+  // the worktree, which only exists on a real filesystem.
+  const contact = await bindWriter('Writer F · my-app')
+  await runTurnAndSettle(contact.id)
+
+  const before = await invoke<Contact | null>(launched.window, 'contacts.get', { id: contact.id })
+  expect(before?.backendSessionId, 'a turn should have left a resume key').toBeTruthy()
+
+  const renamed = await invoke<Contact>(launched.window, 'contacts.update', {
+    id: contact.id,
+    displayName: 'Renamed Writer'
+  })
+
+  expect(renamed).toEqual({ ...before, displayName: 'Renamed Writer' })
+  expect(existsSync(contact.worktreePath!)).toBe(true)
+  expect(git(['rev-parse', '--verify', contact.branch!])).toMatch(/^[0-9a-f]{40}$/)
+
+  // The branches panel reads the name off the contact, so it has to follow.
+  const branches = await invoke<BranchSummary[]>(launched.window, 'branches.list')
+  expect(branches.find((entry) => entry.branch === contact.branch)?.contactName).toBe(
+    'Renamed Writer'
+  )
 })
 
 test('the branches panel sees the work, including after its contact is gone', async () => {

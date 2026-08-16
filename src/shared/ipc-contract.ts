@@ -368,6 +368,24 @@ export const ipcContract = {
     output: contactSchema
   },
   /**
+   * Renames a Contact, and does nothing else on purpose.
+   *
+   * The input is `{ id, displayName }` rather than a partial Contact because
+   * the other columns are load-bearing: repoPath is the Group key and the
+   * run-lock key, worktreePath and branch are pointed at by a real checkout on
+   * disk, and personaTemplateId decides which SDK owns backendSessionId. A
+   * permissive update shape here would be a way to silently orphan a live
+   * worktree and a live session; the narrow input makes that unavailable at the
+   * Zod boundary instead of relying on a service-level check.
+   *
+   * A Contact bound to the wrong repo is deleted and made again — which is what
+   * `contacts.delete`'s worktree cleanup below is for.
+   */
+  'contacts.update': {
+    input: z.object({ id: z.string(), displayName: z.string().min(1) }),
+    output: contactSchema
+  },
+  /**
    * Delete exists because a Contact now owns something outside the database —
    * its worktree — and nothing else can clean that up.
    *

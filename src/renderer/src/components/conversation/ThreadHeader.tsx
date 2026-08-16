@@ -11,6 +11,8 @@ interface ThreadHeaderProps {
   leading: React.ReactNode
   title: string
   subtitle: string
+  /** The full repo path, when `subtitle` is only its last segment. */
+  subtitleTitle?: string
   actions?: React.ReactNode
   className?: string
 }

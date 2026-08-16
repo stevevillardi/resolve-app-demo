@@ -7,6 +7,7 @@ import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { UsageBadge } from '@/components/usage/UsageBadge'
 import { OpenPRButton } from '@/components/github/OpenPRButton'
+import { ContactMenu } from './ContactMenu'
 import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
 import { MessageBubble } from './MessageBubble'
@@ -25,7 +26,7 @@ import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests
 import { useRunStore } from '@/store/useRunStore'
 import { streamText } from '@/lib/stream'
 import { usageForContact } from '@/lib/usage'
-import { isSameDay } from '@/lib/format'
+import { isSameDay, repoName } from '@/lib/format'
 
 interface ThreadViewProps {
   contactId: string
@@ -80,10 +81,18 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
+      {/*
+        The repo's name, not its path. The full path is often 60+ characters —
+        a macOS temp checkout is over 80 — and it was taking the entire header
+        while telling you nothing the last segment doesn't. The whole path is
+        still one hover away, which is the right ratio for something you need
+        about once a session.
+      */}
       <ThreadHeader
         leading={<AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="sm" />}
         title={persona.name}
-        subtitle={contact.repoPath}
+        subtitle={repoName(contact.repoPath)}
+        subtitleTitle={contact.repoPath}
         actions={
           <>
             <BackendBadge backend={persona.backend} />
@@ -98,12 +107,26 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                 openPr(contactId)
               }}
             />
+            <ContactMenu contact={contact} />
           </>
         }
       />
 
       <ScrollArea className="min-h-0 flex-1">
-        <div ref={contentRef} className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
+        {/*
+          `min-h-full justify-end`, so a short conversation sits just above the
+          composer instead of pinned to the top with several hundred pixels of
+          nothing between the last message and the field you reply in. Once the
+          thread outgrows the viewport this does nothing — justify-end only has
+          room to act while the content underflows.
+
+          It can go straight on the content element because Base UI's Viewport
+          renders its children directly, with no wrapper of its own.
+        */}
+        <div
+          ref={contentRef}
+          className="mx-auto flex min-h-full max-w-4xl flex-col justify-end gap-3 px-4 py-4"
+        >
           {thread.length === 0 && !turn ? (
             <EmptyState
               icon={MessageSquare}
