@@ -101,7 +101,9 @@ describe('listPersonaBranches', () => {
       contactId: contact.id,
       contactName: 'Refactor Buddy · my-app',
       files: ['src/b.ts'],
-      hasWorktree: true
+      hasWorktree: true,
+      // Carried so the panel knows whether to offer a pull request (Phase 9).
+      githubScope: 'open_pr'
     })
   })
 
@@ -118,6 +120,8 @@ describe('listPersonaBranches', () => {
     expect(summary.contactId).toBeNull()
     expect(summary.contactName).toBeNull()
     expect(summary.hasWorktree).toBe(false)
+    // No persona left to authorise a pull request, so the panel offers none.
+    expect(summary.githubScope).toBeNull()
   })
 
   it('marks a branch whose checkout the user deleted by hand', async () => {

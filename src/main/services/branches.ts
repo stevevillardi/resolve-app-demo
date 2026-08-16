@@ -1,8 +1,8 @@
-import { asc } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { existsSync } from 'fs'
 import { initDb } from '../db'
 import { toContact } from '../db/mappers'
-import { contacts } from '../db/schema'
+import { contacts, personaTemplates } from '../db/schema'
 import {
   changedFiles,
   deleteBranch,
@@ -16,6 +16,7 @@ import {
 import { listGroups } from './groups'
 import { PERSONA_BRANCH_PREFIX } from './worktrees'
 import type { MergePreview } from './git'
+import type { GithubScope } from '../../shared/domain'
 
 /**
  * The standing view of work that exists nowhere the user can see it.
@@ -43,6 +44,13 @@ export interface BranchSummary {
   files: string[]
   /** False when the Contact is gone or the user deleted the directory. */
   hasWorktree: boolean
+  /**
+   * The GitHub authority of the persona behind the branch (Phase 9), so the
+   * panel knows whether to offer a pull request. Null for an orphan branch —
+   * there is no persona left to authorise one, and merge and discard are all
+   * that remain.
+   */
+  githubScope: GithubScope | null
 }
 
 export interface MergeTarget {
@@ -104,7 +112,8 @@ async function branchesIn(
         contactId: owner?.id ?? null,
         contactName: owner?.displayName ?? null,
         files: await changedFiles(repoPath, 'HEAD', ref.branch),
-        hasWorktree: live.has(ref.branch)
+        hasWorktree: live.has(ref.branch),
+        githubScope: owner ? (scopeOf(owner.personaTemplateId) ?? null) : null
       }
     })
   )
@@ -190,4 +199,13 @@ async function headOf(workingPath: string): Promise<string> {
 
 function allContacts(): ReturnType<typeof toContact>[] {
   return initDb().select().from(contacts).orderBy(asc(contacts.displayName)).all().map(toContact)
+}
+
+/** One row rather than a join, since the panel lists a handful of branches. */
+function scopeOf(personaTemplateId: string): GithubScope | undefined {
+  return initDb()
+    .select({ githubScope: personaTemplates.githubScope })
+    .from(personaTemplates)
+    .where(eq(personaTemplates.id, personaTemplateId))
+    .get()?.githubScope
 }
