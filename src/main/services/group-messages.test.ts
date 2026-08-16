@@ -141,6 +141,41 @@ describe('contextForRepo', () => {
     expect(injected.at(-1)?.content).toBe(`decision ${DURABLE_CONTEXT_LIMIT + 4}`)
   })
 
+  // Written from the claim, not the query: a routine posts its summary as
+  // `routine_run` instead of `system_summary`, and unattended work is exactly
+  // what §6 has to carry across Contact boundaries. If this filter ever
+  // narrows back to `system_summary`, every routine goes silently invisible to
+  // its colleagues and nothing else in the suite would notice.
+  it('carries a routine run to a colleague, same as any other durable summary', () => {
+    now += 1000
+    vi.setSystemTime(now)
+    insertGroupMessage({
+      groupId: GROUP,
+      type: 'routine_run',
+      content: 'Cached the token read in auth.ts',
+      category: 'decision',
+      durable: true
+    })
+
+    expect(contextForRepo(REPO).map((m) => m.content)).toEqual(['Cached the token read in auth.ts'])
+  })
+
+  it('retains a non-durable routine run by recency, like any other routine entry', () => {
+    for (let i = 0; i < ROUTINE_CONTEXT_LIMIT + 3; i += 1) {
+      now += 1000
+      vi.setSystemTime(now)
+      insertGroupMessage({
+        groupId: GROUP,
+        type: 'routine_run',
+        content: `swept ${i}`,
+        category: 'routine',
+        durable: false
+      })
+    }
+
+    expect(contextForRepo(REPO)).toHaveLength(ROUTINE_CONTEXT_LIMIT)
+  })
+
   it('returns oldest first, so the block reads as a history', () => {
     summary('older', 'decision')
     summary('newer', 'decision')

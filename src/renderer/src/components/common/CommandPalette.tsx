@@ -20,9 +20,7 @@ import { usePersonas } from '@/hooks/usePersonas'
 import { useSkills } from '@/hooks/useSkills'
 import { buildCommandSections, type CommandItem as Command_ } from '@/lib/command-palette'
 import { repoName } from '@/lib/format'
-// Routines have no CRUD until Phase 8, so the palette reads the same fixtures
-// the routine list does rather than pretending they are live.
-import { contacts as mockContacts, personaTemplates as mockPersonas, routines } from '@/mocks'
+import { useRoutines } from '@/hooks/useRoutines'
 import { useUiStore } from '@/store/useUiStore'
 
 /**
@@ -52,6 +50,7 @@ export function CommandPalette(): React.JSX.Element {
   const { data: groups = [] } = useGroups()
   const { data: personas = [] } = usePersonas()
   const { data: skills = [] } = useSkills()
+  const { data: routines = [] } = useRoutines()
 
   const open = dialog === 'command'
   const close = (): void => {
@@ -171,8 +170,8 @@ export function CommandPalette(): React.JSX.Element {
     }
 
     for (const routine of routines) {
-      const contact = mockContacts.find((candidate) => candidate.id === routine.contactId)
-      const persona = mockPersonas.find((candidate) => candidate.id === contact?.personaTemplateId)
+      const contact = contacts.find((candidate) => candidate.id === routine.contactId)
+      const persona = personas.find((candidate) => candidate.id === contact?.personaTemplateId)
       const id = `routine:${routine.id}`
       items.push({
         id,
@@ -269,6 +268,7 @@ export function CommandPalette(): React.JSX.Element {
     contacts,
     groups,
     personas,
+    routines,
     skills,
     setDialog,
     setSection,

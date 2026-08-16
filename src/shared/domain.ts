@@ -166,6 +166,22 @@ export const contactDraftSchema = contactSchema.omit({ id: true, backendSessionI
  * renderer-supplied time would let a clock skew reorder the thread.
  */
 export const groupMessageDraftSchema = groupMessageSchema.omit({ id: true, timestamp: true })
+/**
+ * `lastRunAt`/`lastRunSummary` are omitted from *both* write shapes, not just
+ * the create one, because they are run history — written by the scheduler and
+ * by nothing else. Taking a whole `routineSchema` on update would let an editor
+ * that had been open across a fire save its stale copy back over what the fire
+ * recorded, silently losing the run.
+ */
+export const routineDraftSchema = routineSchema.omit({
+  id: true,
+  lastRunAt: true,
+  lastRunSummary: true
+})
+export const routineUpdateSchema = routineSchema.omit({
+  lastRunAt: true,
+  lastRunSummary: true
+})
 
 // --- Inferred types ---------------------------------------------------------
 
@@ -191,3 +207,5 @@ export type SkillDraft = z.infer<typeof skillDraftSchema>
 export type PersonaTemplateDraft = z.infer<typeof personaTemplateDraftSchema>
 export type ContactDraft = z.infer<typeof contactDraftSchema>
 export type GroupMessageDraft = z.infer<typeof groupMessageDraftSchema>
+export type RoutineDraft = z.infer<typeof routineDraftSchema>
+export type RoutineUpdate = z.infer<typeof routineUpdateSchema>

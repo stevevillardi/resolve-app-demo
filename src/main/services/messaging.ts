@@ -7,7 +7,7 @@ import { adapterForBackend } from './adapter-host'
 import { emitAgentEvent, emitRunsChanged } from './agent-events'
 import { summarizeTurn } from './compaction'
 import { getContact, setBackendSessionId } from './contacts'
-import { contextForRepo, insertGroupMessage } from './group-messages'
+import { contextForRepo, groupForRepo, insertGroupMessage } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
 import {
   acquire,
@@ -18,6 +18,7 @@ import {
   type Release
 } from './run-lock'
 import { skillsForPersona } from './skills'
+import type { TurnOrigin, TurnOutcome } from './turn-origin'
 import { baselineFor, recordUsage } from './usage-events'
 import type { AgentEvent } from '../../shared/agent'
 import type { GroupMessage, PersistedMessage } from '../../shared/domain'
@@ -53,12 +54,24 @@ export interface MentionResult {
   groupMessage: GroupMessage
 }
 
+export interface RoutineTurn {
+  runId: string
+  completed: Promise<TurnOutcome>
+}
+
 interface Run {
   controller: AbortController
   release: Release
   contactId: string
-  /** Set only for a turn started from a Group thread, so the reply is mirrored. */
-  groupId?: string
+  /** What started this turn — decides its Group rows and its usage source. */
+  origin: TurnOrigin
+  /**
+   * Resolved once at start: the mention's group, or the routine's repo group.
+   * Null for a 1:1 message, and for a routine whose repo has no Group yet.
+   */
+  groupId: string | null
+  /** Settles the caller's `completed` promise. Never throws — see StartedTurn. */
+  settle: (outcome: TurnOutcome) => void
 }
 
 const runs = new Map<string, Run>()
@@ -142,7 +155,7 @@ function insertMessage(
  * refusal.
  */
 export function sendMessage(contactId: string, content: string): SendResult {
-  const { runId, userMessage } = startTurn(contactId, content)
+  const { runId, userMessage } = startTurn(contactId, content, { kind: 'message' })
   return { runId, userMessage }
 }
 
@@ -162,9 +175,26 @@ export function sendMessage(contactId: string, content: string): SendResult {
  * written, so a refused mention leaves no row in either table.
  */
 export function mentionInGroup(groupId: string, contactId: string, content: string): MentionResult {
-  const { runId, groupMessage } = startTurn(contactId, content, groupId)
-  // Non-null by construction: startTurn writes one whenever a groupId is given.
+  const { runId, groupMessage } = startTurn(contactId, content, { kind: 'mention', groupId })
+  // Non-null by construction: startTurn writes one for a mention origin.
   return { runId, groupMessage: groupMessage as GroupMessage }
+}
+
+/**
+ * Runs a Routine's prompt as an ordinary turn (blueprint §7).
+ *
+ * The third and last entry point, and deliberately as thin as the other two:
+ * a routine fire *is* a message to that Contact, taking the same lock, resuming
+ * the same session, and writing the same `messages` rows. What it adds is a
+ * `routine_run` on the way out and `source: 'routine'` on its spend.
+ *
+ * Unlike the other two it hands back `completed`, because nobody is watching:
+ * the scheduler has to write `lastRunAt`/`lastRunSummary` when the turn ends,
+ * and there is no renderer subscribed to the event stream to notice for it.
+ */
+export function runRoutineTurn(routineId: string, contactId: string, prompt: string): RoutineTurn {
+  const { runId, completed } = startTurn(contactId, prompt, { kind: 'routine', routineId })
+  return { runId, completed }
 }
 
 interface StartedTurn {
@@ -172,6 +202,19 @@ interface StartedTurn {
   userMessage: PersistedMessage
   /** Only when the turn was started from a Group thread. */
   groupMessage: GroupMessage | null
+  /**
+   * How the turn ended, once every durable write is done.
+   *
+   * A promise rather than a caller-supplied callback, and the reason is not
+   * style: `finish()` does its work inside a `finally`, and a callback that
+   * threw there would *replace* the in-flight error path — one bad line of
+   * routine bookkeeping would silently corrupt the teardown of every turn in
+   * the app. `resolve()` is total and cannot throw.
+   *
+   * Settles exactly once and never rejects: `finish()` is on every path out of
+   * `runTurn`, including an aborted turn and one whose adapter threw.
+   */
+  completed: Promise<TurnOutcome>
 }
 
 /**
@@ -182,7 +225,7 @@ interface StartedTurn {
  * load-bearing in two directions — the lock before any write, and the release
  * on every failure path — and a second copy would drift.
  */
-function startTurn(contactId: string, content: string, groupId?: string): StartedTurn {
+function startTurn(contactId: string, content: string, origin: TurnOrigin): StartedTurn {
   const contact = getContact(contactId)
   if (!contact) throw new Error(`No such contact: ${contactId}`)
 
@@ -216,14 +259,35 @@ function startTurn(contactId: string, content: string, groupId?: string): Starte
   // constructs an SDK client; neither is guaranteed not to throw, and a lock
   // leaked here would wedge the repo until the app restarts.
   try {
+    // Written for a routine too: blueprint §7 wants opening the Contact to show
+    // what it did while asleep, and an assistant bubble with no question above
+    // it reads as a glitch rather than as unattended work.
     const userMessage = insertMessage(contactId, 'user', content)
+
+    // A mention's group is chosen, a routine's is derived from its repo. A
+    // routine whose repo has no Group yet degrades to no Group row rather than
+    // throwing — the turn itself is still worth running.
+    const groupId =
+      origin.kind === 'mention'
+        ? origin.groupId
+        : origin.kind === 'routine'
+          ? (groupForRepo(contact.repoPath)?.id ?? null)
+          : null
+
+    // Only a mention has an inbound row. A routine's prompt was never typed
+    // into the group thread, and posting one would invent a user utterance.
     // No contactId: a mention comes from the user, not from a persona.
-    const groupMessage = groupId
-      ? insertGroupMessage({ groupId, type: 'user_mention', content })
-      : null
+    const groupMessage =
+      origin.kind === 'mention'
+        ? insertGroupMessage({ groupId: origin.groupId, type: 'user_mention', content })
+        : null
 
     const controller = new AbortController()
-    runs.set(runId, { controller, release, contactId, ...(groupId ? { groupId } : {}) })
+    let settle: (outcome: TurnOutcome) => void
+    const completed = new Promise<TurnOutcome>((resolve) => {
+      settle = resolve
+    })
+    runs.set(runId, { controller, release, contactId, origin, groupId, settle: settle! })
 
     const spec = {
       persona,
@@ -251,7 +315,7 @@ function startTurn(contactId: string, content: string, groupId?: string): Starte
     void runTurn(runId, adapter, session, content)
     emitRunsChanged()
 
-    return { runId, userMessage, groupMessage }
+    return { runId, userMessage, groupMessage, completed }
   } catch (error) {
     runs.delete(runId)
     release()
@@ -279,9 +343,14 @@ async function runTurn(
   // matters when a turn is stopped mid-stream and never produces one.
   let streamed = ''
   let done: Extract<AgentEvent, { type: 'done' }> | null = null
+  // Kept so a caller with nobody watching can say *why* it failed. A routine
+  // whose lastRunSummary reads "produced nothing" is not actionable; one that
+  // reads "Failed — not authenticated" is.
+  let failure: string | null = null
 
   try {
     for await (const event of adapter.run(session, prompt, run.controller.signal)) {
+      if (event.type === 'error') failure = event.message
       if (event.type === 'done') {
         // Held back rather than forwarded here: the renderer treats `done` as
         // its cue to refetch, so it must not arrive before the rows it will
@@ -296,13 +365,10 @@ async function runTurn(
     // Both adapters wrap their streams and guarantee a `done`, so reaching here
     // means something outside that wrapper failed. The thread still has to end
     // in a terminal state rather than a bubble that spins forever.
-    emitAgentEvent(runId, {
-      type: 'error',
-      kind: 'unknown',
-      message: error instanceof Error ? error.message : String(error)
-    })
+    failure = error instanceof Error ? error.message : String(error)
+    emitAgentEvent(runId, { type: 'error', kind: 'unknown', message: failure })
   } finally {
-    finish(runId, run.contactId, session, prompt, done?.finalText ?? streamed, done, run.groupId)
+    finish(runId, run, session, prompt, done?.finalText ?? streamed, done, failure)
   }
 }
 
@@ -316,13 +382,14 @@ async function runTurn(
  */
 function finish(
   runId: string,
-  contactId: string,
+  run: Run,
   session: Session,
   prompt: string,
   finalText: string,
   done: Extract<AgentEvent, { type: 'done' }> | null,
-  groupId?: string
+  failure: string | null
 ): void {
+  const { contactId, origin, groupId } = run
   try {
     // An aborted turn usually has no final text, but it may have produced
     // billable tokens all the same — so the two are recorded independently
@@ -334,17 +401,24 @@ function finish(
       // the conversation; this is the Group's record that it happened, and the
       // two carry identical text on purpose — the 1:1 thread and the Group
       // thread are two views of one exchange, not two exchanges.
-      if (groupId) {
+      //
+      // A routine writes no reply row here. Its Group record is the single
+      // `routine_run` that compaction posts in place of the usual
+      // `system_summary` — one unattended event, one row, and a summary rather
+      // than a wall of text in what RoutineRunNotice renders as a log line.
+      if (groupId && origin.kind === 'mention') {
         insertGroupMessage({ groupId, type: 'agent_reply', contactId, content: finalText })
       }
     }
     // A mention is spend the user asked for from the Group rather than from a
-    // 1:1 thread; separating them lets the dashboard show what coordination
-    // costs (see usageSourceSchema).
+    // 1:1 thread, and a routine is spend nobody asked for directly; separating
+    // them lets the dashboard show what coordination and autonomy each cost
+    // (see usageSourceSchema). The origin's discriminant *is* the source, so
+    // there is no mapping table here to fall out of step with the branch above.
     // Stamped with the session so the next turn can subtract what this one
     // already accounted for — the row is a delta, and baselineFor() sums them.
     if (done?.usage) {
-      recordUsage(contactId, groupId ? 'mention' : 'message', done.usage, session.sessionId)
+      recordUsage(contactId, origin.kind, done.usage, session.sessionId)
     }
 
     // Read after the run, never before: the adapters fill this in mid-stream at
@@ -365,7 +439,37 @@ function finish(
     // the lock is released and after the renderer has been told the turn is
     // over, so a slow summariser delays nothing the user is waiting on. Not
     // awaited, and it never rejects — see summarizeTurn's contract.
-    void summarizeTurn(contactId, prompt, finalText)
+    const summarising = summarizeTurn(contactId, prompt, finalText, origin)
+
+    // Settled after the lock is released, so a routine writing its own rows in
+    // reaction cannot be refused by the very turn it is reacting to. It waits
+    // on the summariser because that is where a routine's lastRunSummary and
+    // its `routine_run` row come from — the one already-paid-for summary of
+    // this turn, rather than a second model call for a UI subtitle.
+    void summarising.then((summary) =>
+      settleRun(run, {
+        runId,
+        finalText,
+        error: failure,
+        aborted: run.controller.signal.aborted,
+        usage: done?.usage ?? null,
+        summary
+      })
+    )
+  }
+}
+
+/**
+ * Hands the outcome back to whoever started the turn.
+ *
+ * Wrapped so a consumer that throws cannot escape into `finish`'s `finally` and
+ * replace the error path of a turn that has already been committed.
+ */
+function settleRun(run: Run, outcome: TurnOutcome): void {
+  try {
+    run.settle(outcome)
+  } catch (error) {
+    console.error('[messaging] a turn-completion consumer threw', error)
   }
 }
 

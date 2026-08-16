@@ -25,7 +25,10 @@ export type {
   UsageEvent,
   SkillDraft,
   PersonaTemplateDraft,
-  ContactDraft
+  ContactDraft,
+  /** Both omit run history — that is the scheduler's to write, not an editor's. */
+  RoutineDraft,
+  RoutineUpdate
 } from '../../../shared/domain'
 
 // Renderer-only: adds the in-flight turn state that isn't persisted.

@@ -3,6 +3,7 @@ import { adapterForBackend } from './adapter-host'
 import { getContact } from './contacts'
 import { groupForRepo, insertGroupMessage } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
+import type { TurnOrigin, TurnSummary } from './turn-origin'
 import { recordUsage } from './usage-events'
 import { SUMMARY_JSON_SCHEMA, summarySchema } from '../../shared/summary'
 import type { PersonaTemplate } from '../../shared/domain'
@@ -72,8 +73,9 @@ function summariserPersona(persona: PersonaTemplate): PersonaTemplate {
 export async function summarizeTurn(
   contactId: string,
   prompt: string,
-  reply: string
-): Promise<{ id: string } | null> {
+  reply: string,
+  origin: TurnOrigin = { kind: 'message' }
+): Promise<TurnSummary | null> {
   try {
     // Nothing was said, so there is nothing to record. Catches aborted turns,
     // which reach finish() with empty text but are otherwise ordinary.
@@ -115,20 +117,28 @@ export async function summarizeTurn(
     const parsed = summarySchema.safeParse(data)
     if (!parsed.success) return null
 
-    return insertGroupMessage({
+    const durable = parsed.data.category !== 'routine'
+    // A routine's summary IS its Group record — it replaces the `system_summary`
+    // rather than joining it, so one unattended fire leaves one row. It still
+    // carries `category`/`durable`, because contextForRepo reads both types and
+    // work done while nobody watched is exactly what §6 has to carry across
+    // Contact boundaries.
+    const row = insertGroupMessage({
       groupId: group.id,
-      type: 'system_summary',
+      type: origin.kind === 'routine' ? 'routine_run' : 'system_summary',
       contactId,
       content: parsed.data.summary,
       category: parsed.data.category,
       // §6's rule, and the only place it is decided: decisions and tradeoffs
       // are the running decision log and are always re-injected; routine
       // entries stay queryable but fall out of context by recency.
-      durable: parsed.data.category !== 'routine',
+      durable,
       // Falsy covers both shapes of "no branch": Codex is obliged to send the
       // key and sends null, Claude may omit it. Neither should be stored.
       ...(parsed.data.branch ? { branch: parsed.data.branch } : {})
     })
+
+    return { id: row.id, summary: parsed.data.summary, category: parsed.data.category, durable }
   } catch (error) {
     // The turn this summarises was committed before we got here. Losing a
     // Group entry is a degradation; propagating would corrupt a finished turn.

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, Play } from 'lucide-react'
+import { Clock, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -14,25 +14,39 @@ import {
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { PaneBody } from '@/components/common/PaneBody'
 import { Field } from '@/components/common/Field'
 import { Section } from '@/components/common/Section'
 import { formatRelative } from '@/lib/format'
-// Still mock-fed: the routines table exists as of Phase 4 but has no CRUD
-// and no scheduler until Phase 8 (docs/plan/08-routines-scheduler.md).
-import { contacts, personaTemplates, routines } from '@/mocks'
+import { useContacts } from '@/hooks/useConversations'
+import { usePersonas } from '@/hooks/usePersonas'
+import {
+  useCronValidation,
+  useDeleteRoutine,
+  useRoutines,
+  useRunRoutineNow,
+  useUpdateRoutine
+} from '@/hooks/useRoutines'
 import { useUiStore } from '@/store/useUiStore'
 import type { Routine } from '@/types'
 
-// A cron string is unreadable at a glance; this covers the common cases and
-// falls back to showing the raw expression. Real parsing lands in Phase 8.
-const SCHEDULE_LABEL: Record<string, string> = {
-  '0 9 * * *': 'Every day at 09:00',
-  '0 */6 * * *': 'Every 6 hours',
-  '0 0 * * *': 'Every day at midnight',
-  '*/15 * * * *': 'Every 15 minutes',
-  '0 9 * * 1': 'Every Monday at 09:00'
+/**
+ * When a valid schedule next fires, as an absolute local time.
+ *
+ * Replaces a lookup table of five hardcoded cron strings that fell back to
+ * echoing the raw expression at the person who just typed it. The next fire is
+ * both more useful and true of any expression, and it comes from node-cron
+ * itself rather than from our reading of the syntax.
+ */
+function scheduleHint(nextRuns: number[]): string {
+  if (nextRuns.length === 0) return 'Cron expression, e.g. 0 9 * * * for every day at 09:00.'
+  return `Next: ${new Date(nextRuns[0]).toLocaleString(undefined, {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  })}`
 }
 
 function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
@@ -40,8 +54,15 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
   const [prompt, setPrompt] = useState(routine.prompt)
   const [enabled, setEnabled] = useState(routine.enabled)
   const [contactId, setContactId] = useState(routine.contactId)
-  // Reserved for Phase 8's cron validation — always undefined this phase.
-  const cronError: string | undefined = undefined
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  const contacts = useContacts().data ?? []
+  const personaTemplates = usePersonas().data ?? []
+  const { error: cronError, nextRuns } = useCronValidation(schedule)
+  const { save, isPending: saving, error: saveError } = useUpdateRoutine()
+  const { remove } = useDeleteRoutine()
+  const { runNow, isPending: running, skipped } = useRunRoutineNow()
+  const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
 
   const contact = contacts.find((c) => c.id === contactId)
   const persona = personaTemplates.find((p) => p.id === contact?.personaTemplateId)
@@ -54,11 +75,31 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
         {...(contact && { subtitle: contact.repoPath })}
         actions={
           <>
-            <Button variant="outline" size="sm" className="gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Delete routine"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={running}
+              onClick={() => runNow(routine.id)}
+            >
               <Play className="size-3.5" />
               Run now
             </Button>
-            <Button size="sm">Save</Button>
+            <Button
+              size="sm"
+              disabled={saving || Boolean(cronError)}
+              onClick={() => save({ id: routine.id, contactId, schedule, prompt, enabled })}
+            >
+              Save
+            </Button>
           </>
         }
       />
@@ -116,7 +157,7 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
         <Field
           label="Schedule"
           htmlFor="routine-schedule"
-          hint={SCHEDULE_LABEL[schedule] ?? `Cron expression — ${schedule}`}
+          hint={scheduleHint(nextRuns)}
           {...(cronError ? { error: cronError } : {})}
         >
           <Input
@@ -142,6 +183,20 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
           />
         </Field>
 
+        {/* Blueprint §7: an unattended task should propose via PR, not push
+            unsupervised. The persona is where githubScope lives, so this steers
+            rather than silently overriding what the persona was set up with. */}
+        {persona?.githubScope === 'full_access' && (
+          <p className="text-muted-foreground border-border rounded-lg border border-dashed p-3 text-xs">
+            {persona.name} can push directly. For something that runs unattended, a persona scoped
+            to <span className="font-medium">open PR</span> is safer — the work still happens, it
+            just arrives as a pull request someone can look at.
+          </p>
+        )}
+
+        {skipped && <p className="text-muted-foreground text-xs">{skipped}</p>}
+        {saveError && <p className="text-destructive text-xs">{saveError}</p>}
+
         <Section title="Last run">
           {routine.lastRunAt ? (
             <div className="border-border rounded-lg border p-3">
@@ -155,13 +210,21 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
           )}
         </Section>
       </PaneBody>
+
+      <ConfirmDeleteDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title={`Delete this routine?`}
+        description="It stops firing immediately. The conversation it has been having with its contact is kept."
+        onConfirm={() => remove(routine.id, () => setSelectedRoutineId(null))}
+      />
     </div>
   )
 }
 
 export function RoutineEditor(): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedRoutineId)
-  const routine = routines.find((r) => r.id === selectedId)
+  const routine = useRoutines().data?.find((r) => r.id === selectedId)
 
   if (!routine) {
     return (

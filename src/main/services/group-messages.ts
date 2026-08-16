@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toGroup, toGroupMessage } from '../db/mappers'
 import { groupMessages, groups } from '../db/schema'
@@ -125,7 +125,14 @@ export function contextForRepo(
       .where(
         and(
           eq(groupMessages.groupId, group.id),
-          eq(groupMessages.type, 'system_summary'),
+          // Both summary-shaped types, not just `system_summary`. A routine
+          // posts its summary as `routine_run` so one unattended fire leaves
+          // one row — and work done while nobody was watching is precisely
+          // what §6 exists to carry across Contact boundaries. Filtering on
+          // `system_summary` alone would make every routine invisible to its
+          // colleagues, which is the same failure as a real change filed as
+          // `routine` and dropped from context.
+          inArray(groupMessages.type, ['system_summary', 'routine_run']),
           eq(groupMessages.durable, durable)
         )
       )
