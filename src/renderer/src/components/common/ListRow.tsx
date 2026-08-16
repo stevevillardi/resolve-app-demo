@@ -33,6 +33,11 @@ export function ListRow({
       type="button"
       onClick={onSelect}
       data-active={active}
+      // Not for styling — it is how the screenshot sweep selects a row in any
+      // section without knowing what that section's rows say, and how
+      // "every list comes from ListRow" is checked mechanically rather than by
+      // reading six files and hoping.
+      data-testid="list-row"
       className={cn(
         'group flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
         'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',

@@ -174,7 +174,9 @@ export function ListPanel(): React.JSX.Element {
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="p-2">
+        {/* data-slot so the screenshot sweep can address "the rows of whatever
+            section is open" without knowing which component drew them. */}
+        <div data-slot="list-body" className="p-2">
           {section === 'chats' && <ConversationList query={query} />}
           {section === 'personas' && <PersonaList query={query} />}
           {section === 'skills' && <SkillList query={query} />}
