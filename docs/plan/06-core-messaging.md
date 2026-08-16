@@ -16,6 +16,24 @@ Wire everything built so far into the first real end-to-end loop: create a Conta
 - **`messages` has no `status` or `error` column, on purpose.** Blueprint §12 lists five fields; `streaming` and `error` describe an in-flight turn, not a stored fact, so they live in `src/renderer/src/types/message.ts` as a renderer-only extension of `PersistedMessage`. Keep them there — a message loaded from disk is by definition finished.
 - `src/main/db/mappers.ts` has `toMessage` and `toUsageEvent` ready; `messageSchema` and `usageEventSchema` are in `src/shared/domain.ts`.
 
+## Inherited from Phase 5 — what already exists
+
+- **`adapterFor(backend, config)` (`src/main/adapters/index.ts`) is live for both backends**, with `createSession` / `resume` / `run` and a normalized `AgentEvent` stream (`src/shared/agent.ts`). Item 2's "calls `AgentAdapter.run()`" is a call, not a build.
+- **Nothing in `src/main/` imports the adapters yet.** Wiring them up is this phase's first job, and it needs three things the probe CLI supplies today: `codexBinaryPath: resolveCodexBinary()` (without it a _packaged_ app cannot find the Codex binary — dev works either way, so this fails late), resolved `Skill[]` for the persona, and an absolute `repoPath`. Adapters deliberately import neither `electron` nor the database, so the caller does all three.
+- **`AgentSession.sessionId` is filled in mid-stream**, at the `session_started` event. Read it _after_ the run to persist onto `Contact.backendSessionId`; it is null before the first turn.
+- **Usage is ready to become a `UsageEvent` row.** `AgentUsage` mirrors `usageEventSchema` field-for-field. Do not re-derive it — in particular, do not sum Claude's per-step assistant messages; see the decisions log for why that reads 80× low.
+- **Errors already arrive as events, classified.** `AgentErrorKind` is a superset of the renderer's `MessageBubbleError['kind']`, so item 4 maps across without a translation table. Both adapters guarantee a `done` event even when a turn throws, so the UI always has a terminal state to settle on.
+- **Sandbox enforcement is done and tested** (`src/main/adapters/sandbox.ts`), including live proof on both backends. Item 3 is a demonstration in the real app, not new enforcement code.
+- **`npm run probe:adapters` reproduces any turn without the UI.** Use it to tell "the adapter is wrong" apart from "the wiring is wrong" — that distinction is most of the debugging cost in this phase.
+
+Still entirely this phase's:
+
+- **The streaming IPC push channel.** Phase 1's bridge is strictly request/response — `src/preload/index.ts` exposes only `invoke`, and there is no `webContents.send` anywhere. Item 2's event-push mechanism is unbuilt, and it is the genuinely new thing here.
+- **`ThreadView`, `GroupThreadView`, `NewContactFlow`'s Create button, and the repo picker** are all still on Phase 2 mocks.
+- **The concurrency lock** (item 5) does not exist in any form.
+
+One caveat carried forward: `StreamingIndicator.tsx`'s comment says Claude emits nothing during tool execution. The SDK now defines `SDKToolProgressMessage` and the adapter maps it, but it was never observed firing (every probe used fast tools), so `capabilities.streamsToolProgress` is true on both backends while only Codex has been _seen_ to stream progress. Don't rewrite that comment on the strength of the type alone.
+
 ## Scope
 
 1. **`NewContactFlow` goes live**
@@ -40,6 +58,16 @@ Wire everything built so far into the first real end-to-end loop: create a Conta
 5. **Concurrency lock, minimal version**
    - Even though Groups/routines aren't built yet, the "one active session per repo" rule (blueprint §15D) should exist now as the in-memory `repoPath → busy` map, since Phase 7 and 8 both depend on it and it's simplest to introduce while there's only one caller (a user-sent message) to test it against.
 
+6. **Per-persona model selection** — do this before item 2, since a session cannot run without resolving a model.
+
+   Nothing in the app lets a user choose a model today: blueprint §4's `PersonaTemplate` has no such field, §12's table has no such column, and Phase 2's `PersonaDetailPanel` offers only backend and sandbox. Phase 5 made that a correctness problem rather than a missing nicety — model availability turns out to depend on the **account**, not just the SDK version, so any hardcoded default is wrong for somebody. A ChatGPT-account Codex user gets a 400 on `gpt-5.2-codex` and `gpt-5.3-codex`; the adapter's `DEFAULT_CODEX_MODEL` is only correct until it isn't.
+
+   - Add `model: string | null` to `PersonaTemplate` (`src/shared/domain.ts`, `src/main/db/schema.ts`, plus a new migration — Phase 4's `0002`/`0003` are already applied, so this is `0004`, additive and nullable). **Null means "the backend's default"**, which keeps every existing persona and the first-run seed valid without a backfill.
+   - It belongs on the persona rather than the Contact because that is where `backend` already lives, and a model that doesn't match its backend is meaningless — the two have to be chosen and validated together.
+   - `PersonaDetailPanel` gets a model `Select` beside the existing backend one, repopulating when the backend changes. Keep "Default" as the first option so the null state is expressible in the UI, not just in the schema.
+   - The adapter side is already done: `SessionSpec.model` is honoured by both adapters, so this is plumbing a persisted value into a field that exists.
+   - Model lists: hardcode per backend for v1 and note the date, the same way `pricing.ts` does. Neither SDK exposes a "list models available to this account" call, and the failure mode is a 400 on first use — so surface that error clearly (it already classifies as an `error` event) rather than pretending the list is authoritative.
+
 ## Explicitly out of scope
 
 - Group thread real functionality (Phase 7) — `GroupThreadView` can stay on Phase 2's mock data for now.
@@ -52,5 +80,6 @@ Wire everything built so far into the first real end-to-end loop: create a Conta
 - [ ] Blueprint §16 Journey 1 runs live, start to finish, exactly as scripted: create "Code Reviewer" persona (`read_only`, Claude), bind via real repo picker, send "review the changes in `auth.ts`," get a real streamed response that makes no edit attempts.
 - [ ] Closing and reopening the app preserves the Contact and its message history, and sending a new message resumes the correct backend session.
 - [ ] A deliberately triggered error (e.g. temporarily revoke the API key) renders as a visible error bubble, not a hang or crash.
-- [ ] A `UsageEvent` row is created per turn with correct token/cost figures.
+- [ ] A `UsageEvent` row is created per turn with correct token/cost figures, attributed to the model that actually ran.
+- [ ] A persona's model can be changed in the UI, persists across a restart, and the next turn actually uses it — verified against a model whose name appears in the resulting `UsageEvent`, not just in the form.
 - [ ] Attempting to run two messages concurrently against Contacts on the same repo is prevented (second one queues or is rejected with a clear message, not a race).
