@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -8,15 +8,35 @@ import { setupIpc } from './ipc'
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1180,
+    height: 780,
+    // The shell is three panes wide (nav rail + conversation list + thread).
+    // Below this the list panel can no longer hold a readable row.
+    minWidth: 940,
+    minHeight: 620,
     show: false,
     autoHideMenuBar: true,
+    // Painted behind the renderer so the window doesn't flash white while the
+    // bundle loads. Matches --background: light #ffffff, dark #000000.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#ffffff',
+    // Hide the macOS title bar and let the nav rail own that space, with the
+    // traffic lights inset into it. The renderer marks its own drag regions
+    // (see the .drag-region / .no-drag utilities in assets/main.css).
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 13, y: 18 } }
+      : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
+  })
+
+  // Keep the pre-paint background in step if the OS theme flips while running,
+  // so a reload never flashes the wrong colour.
+  nativeTheme.on('updated', () => {
+    if (mainWindow.isDestroyed()) return
+    mainWindow.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#000000' : '#ffffff')
   })
 
   mainWindow.on('ready-to-show', () => {
