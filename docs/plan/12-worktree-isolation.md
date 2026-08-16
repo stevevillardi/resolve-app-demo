@@ -1,6 +1,6 @@
 # Phase 12 — Worktree Isolation
 
-**Status:** Not started
+**Status:** In review — built and verified except the paid live checks (see below)
 **Blueprint refs:** §6 (shared context), §15D (concurrency), §13 (v1 scope cuts)
 **Depends on:** Phase 6 (the write lock and its `workingPathFor` seam), Phase 7 (durable summaries, which carry branch awareness)
 **Runs:** between Phases 8 and 9 in execution order, despite the number — numbered 12 so nothing else had to be renumbered.
@@ -59,7 +59,17 @@ still keys on the repo, the session just runs somewhere else.
   longer working in the same directory. Its unit test pins the current answer,
   so this is a deliberate edit to a failing test.
 - `SessionSpec.repoPath` becomes the worktree path, so `isInsideRepo()` fences
-  the right directory with **no change to `sandbox.ts`**.
+  the right directory. ~~with **no change to `sandbox.ts`**~~ — **this was wrong,
+  and it is the finding the phase turns on.** A linked worktree's `.git` is a
+  *file* pointing at `<repo>/.git/worktrees/<name>`, so the index, every new
+  object and every ref update land *outside* the working directory: a sandbox
+  fenced to the cwd fails at `git add`. `SessionSpec` gained `writablePaths`,
+  resolved by `gitWritePathsFor()` and applied as Claude's `allowWrite` and
+  Codex's `--add-dir`. The grant is the narrowest that permits a commit
+  (`worktrees/<name>` + `objects` + `refs` + `logs`) and deliberately excludes
+  `.git/hooks` and `.git/config` — a writable hooks directory is a sandbox
+  *escape*, because a hook written during a turn runs unsandboxed on the user's
+  next git command. `isInsideRepo()` itself is unchanged, as promised.
 
 ### 4. Chosen per Contact, at bind time
 
@@ -122,9 +132,15 @@ subcommands on the deny side, so this needs checking rather than assuming, or a
 - The Group thread renders it as an actionable row, and a standing **Branches
   panel** lists every open persona branch so the human can act without waiting to
   be asked.
-- Row actions: **View diff**, **Merge into `<target working path>`**, **Open PR**
-  (Phase 9), **Discard**. Run `git merge --no-commit --no-ff` as a dry run first,
-  so the merge button is honest about conflicts *before* it is clicked.
+- Row actions: **Merge into `<target working path>`** and **Discard** (Open PR
+  waits for Phase 9). The conflict check is `git merge-tree --write-tree`, not
+  the `git merge --no-commit --no-ff` this doc originally proposed — that one is
+  a dry run that *isn't*, leaving the target tree conflicted on failure, which is
+  a poor thing to do to a directory somebody is working in. `merge-tree` merges
+  in the object store: exit 1 signals conflicts, `--name-only` names the files,
+  and HEAD and the working tree are untouched. It answers "do these two commits
+  merge cleanly", so a dirty target is reported separately — conflating the two
+  would make the button lie in the one case the user most needs it not to.
 - Merges target a **specific working path**: merging for Code Reviewer touches
   Code Reviewer's tree, not the user's. Nothing merges without a click.
 
@@ -157,17 +173,87 @@ discover them:
 
 ## Acceptance checks
 
-- [ ] Two `workspace_write` Contacts on the same repo, both `worktree`, run at
-      the same time and both complete — neither refused, neither's edits visible
-      in the other's tree.
-- [ ] `workingPathFor()` returns the worktree path, and the run lock stops
-      treating those two as contending.
-- [ ] A `read_only` Contact in the main tree can read an unmerged sibling branch
-      via `git show`/`git diff` without anything being merged, and without its
-      sandbox refusing the command.
-- [ ] A writer's end-of-session summary names its branch, and the next session
-      on that repo starts already aware of it.
-- [ ] The Branches panel lists open persona branches; Merge reports conflicts
-      before the click, and merging targets the chosen working path only.
-- [ ] Deleting a Contact removes its worktree; a relaunch prunes any orphan.
-- [ ] A Contact bound to a plain (non-git) directory still works, as `exclusive`.
+- [x] Two `workspace_write` Contacts on the same repo, both `worktree`, get
+      separate checkouts and neither's edits appear in the other's tree —
+      `e2e/worktrees.spec.ts`, against the real app on a real repo. **The
+      "both complete" half is still open**: it needs two paid turns, see below.
+- [x] `workingPathFor()` returns the worktree path, and the run lock stops
+      treating those two as contending — `run-lock.test.ts`, a deliberate edit
+      to the test that pinned the old answer, plus the matrix for decision 5
+      below.
+- [x] A `read_only` Contact can read an unmerged sibling branch via `git
+      show`/`git diff` without anything merged and without the sandbox refusing
+      — measured directly under a write fence, and the allowlist already
+      permitted all three commands (`sandbox.test.ts`).
+- [x] A writer's end-of-session summary names its branch, and the next session
+      on that repo starts already aware of it — `compaction.test.ts` for the
+      stamping, `context.test.ts` for the injected block. Stamped by git, not
+      reported by the model.
+- [x] The Branches panel lists open persona branches; Merge reports conflicts
+      before the click, and merging targets the chosen working path only —
+      `branches.test.ts`, including that the preview leaves HEAD and the working
+      tree untouched.
+- [x] Deleting a Contact removes its worktree; a relaunch prunes any orphan —
+      `worktrees-lifecycle.test.ts` and `e2e/worktrees.spec.ts`. The branch
+      survives both, deliberately.
+- [x] A Contact bound to a plain (non-git) directory still works, as
+      `exclusive` — the bind flow disables the worktree option with the reason
+      when the folder is not a repo.
+
+### Still open: the paid live checks
+
+Three checks need real backend turns and so real money, and have not been run:
+
+1. **A worktree writer actually commits, per backend.** Verified free for Codex
+   against its own sandbox (`codex sandbox`, in a repo outside `/tmp` so its
+   unconditional `/tmp` grant could not confound it): without the grant `git
+   add` fails on `index.lock`, with it add and commit both succeed, and
+   `.git/hooks` and the home directory stay denied. **Claude is unverified.** It
+   takes a different configuration path (`sandbox.filesystem.allowWrite` rather
+   than `--add-dir`), and one backend passing says nothing about the other. The
+   OS primitive underneath is the same seatbelt fence, and the same four paths
+   were proven sufficient there by hand — but that is evidence, not the check.
+2. **Two writers running at the same time and both completing.** The separation
+   is proven; concurrent completion is not.
+3. **A `read_only` persona reading a sibling branch mid-turn.** The commands are
+   allowed and work under a fence; a model actually using them is unverified.
+
+
+## Verified live (2026-08-16)
+
+Everything below was measured, not reasoned about.
+
+- **git 2.50.1 lifecycle**, all of it surprising in at least one direction: two
+  worktrees cannot share a branch (hard `fatal`); `prune` reclaims a
+  hand-deleted worktree and **the branch survives**, which is what makes that
+  deletion recoverable; `worktree remove` refuses a dirty tree without `--force`
+  and the branch survives removal too; a *failed* `add` still creates its
+  branch, which had to be cleaned up or the next attempt would silently reuse a
+  branch pointing at nothing meaningful; `add` creates missing intermediate
+  directories; and `.git/worktrees/<name>` is deduped from the path's basename
+  (`work`, `work1`), so it cannot be derived and has to be read.
+- **Branch names need slugging.** `persona/Code Reviewer-x1` and
+  `persona/weird..name` are both rejected by `git check-ref-format`, so the
+  tests ask git rather than encoding a guess about its rules.
+- **The `needs` field passes strict structured output on both backends**, each
+  returning `needs: null` and parsing cleanly. Nested objects need their own
+  `required` and `additionalProperties: false` or every summary is rejected.
+- **Mutation-tested rather than trusted green**, per the repo's rule: collapsing
+  the worktree name, forcing the worktree removal, granting the whole `.git`,
+  and swapping `merge-tree` back for `merge --no-commit` each fail exactly the
+  test written from the corresponding claim.
+
+## Limitations, recorded rather than solved
+
+- **Two repos with the same basename share a worktree directory name.** The
+  path is `<userData>/worktrees/<repo-name>/<persona-slug>-<short-id>`, and the
+  repo component is the basename. Two Contacts always differ by short id, so
+  nothing collides in practice, but the directory is named for readability and
+  it is the *branch* that git actually polices.
+- **A packed ref reports no head in the sibling-branch block.** The list is
+  resolved synchronously while the session spec is built, so it reads
+  `refs/heads/<branch>` off disk rather than running git. Worktree branches are
+  freshly written and so loose in practice; a packed one simply loses its short
+  sha annotation, and the branch name — the load-bearing part — is unaffected.
+- **`branches.list` shells out to git per repo.** Fine for a panel the user
+  navigates to; it would not survive being polled.
