@@ -251,7 +251,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               value={source}
               onChange={setSource}
               aria-label="Repo source"
-              className="w-56"
+              className="self-start"
             />
 
             {source === 'local' && (
