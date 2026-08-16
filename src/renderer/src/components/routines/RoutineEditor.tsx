@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ScopeChip } from '@/components/common/ScopeChip'
-import { EmptyState } from '@/components/common/EmptyState'
+import { EmptyPane } from '@/components/common/EmptyPane'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { PaneBody } from '@/components/common/PaneBody'
@@ -228,14 +228,11 @@ export function RoutineEditor(): React.JSX.Element {
 
   if (!routine) {
     return (
-      <div className="bg-background flex h-full flex-col">
-        <div className="drag-region h-12 shrink-0" />
-        <EmptyState
-          icon={Clock}
-          title="No routine selected"
-          description="Routines wake a persona on a schedule and post what they did to the repo group."
-        />
-      </div>
+      <EmptyPane
+        icon={Clock}
+        title="No routine selected"
+        description="Routines wake a persona on a schedule and post what they did to the repo group."
+      />
     )
   }
 

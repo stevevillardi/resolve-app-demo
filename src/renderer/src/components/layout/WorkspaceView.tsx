@@ -6,7 +6,7 @@ import { SkillLibraryView } from '@/components/persona/SkillLibraryView'
 import { RoutineEditor } from '@/components/routines/RoutineEditor'
 import { UsageDashboard } from '@/components/usage/UsageDashboard'
 import { BranchDetail } from '@/components/branches/BranchDetail'
-import { EmptyState } from '@/components/common/EmptyState'
+import { EmptyPane } from '@/components/common/EmptyPane'
 import { Button } from '@/components/ui/button'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -26,18 +26,15 @@ export function WorkspaceView(): React.JSX.Element {
   if (selected?.kind === 'group') return <GroupThreadView groupId={selected.id} />
 
   return (
-    <div className="bg-background flex h-full flex-col">
-      <div className="drag-region h-12 shrink-0" />
-      <EmptyState
-        icon={MessagesSquare}
-        title="No conversation selected"
-        description="Pick a contact to message one persona, or a repo group to see everything working in it."
-        action={
-          <Button variant="outline" size="sm" onClick={() => setDialog('newContact')}>
-            New contact
-          </Button>
-        }
-      />
-    </div>
+    <EmptyPane
+      icon={MessagesSquare}
+      title="No conversation selected"
+      description="Pick a contact to message one persona, or a repo group to see everything working in it."
+      action={
+        <Button variant="outline" size="sm" onClick={() => setDialog('newContact')}>
+          New contact
+        </Button>
+      }
+    />
   )
 }

@@ -1,7 +1,7 @@
+import { ListRow } from '@/components/common/ListRow'
 import { RunPulse } from '@/components/common/RunIndicator'
 import { formatListTimestamp, repoName } from '@/lib/format'
 import { formatCostSummary } from '@/lib/usage'
-import { cn } from '@/lib/utils'
 import type { UsageSummary } from '@/types'
 
 interface ConversationListItemProps {
@@ -35,18 +35,8 @@ export function ConversationListItem({
   const showRepo = shortRepo !== name
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      data-active={active}
-      className={cn(
-        'group flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
-        'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-        active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-      )}
-    >
-      {leading}
-      <span className="min-w-0 flex-1">
+    <ListRow active={active} onSelect={onSelect} leading={leading}>
+      <span className="block">
         <span className="flex items-baseline justify-between gap-2">
           <span className="truncate text-row font-medium">{name}</span>
           {/* A run outlives this view — switching conversations unmounts the
@@ -81,6 +71,6 @@ export function ConversationListItem({
           )}
         </span>
       </span>
-    </button>
+    </ListRow>
   )
 }

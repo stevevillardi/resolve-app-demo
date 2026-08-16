@@ -1,6 +1,8 @@
 import { Github } from './GithubMark'
 import { SidebarMenuButton } from '@/components/ui/sidebar'
 import { useAuthStatus } from '@/hooks/useAuth'
+import { RAIL_BUTTON } from '@/lib/nav-items'
+import { cn } from '@/lib/utils'
 import { useUiStore } from '@/store/useUiStore'
 
 export function GitHubStatusButton(): React.JSX.Element {
@@ -16,7 +18,7 @@ export function GitHubStatusButton(): React.JSX.Element {
           : 'GitHub · not connected'
       }
       onClick={() => setDialog('github')}
-      className="relative h-10 gap-2.5 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center"
+      className={cn('relative', RAIL_BUTTON)}
     >
       <Github />
       <span className="group-data-[collapsible=icon]:hidden">GitHub</span>

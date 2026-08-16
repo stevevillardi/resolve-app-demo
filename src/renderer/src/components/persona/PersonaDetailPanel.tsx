@@ -15,7 +15,7 @@ import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
-import { EmptyState } from '@/components/common/EmptyState'
+import { EmptyPane } from '@/components/common/EmptyPane'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { PaneBody } from '@/components/common/PaneBody'
@@ -327,14 +327,11 @@ export function PersonaDetailPanel(): React.JSX.Element {
 
   if (!persona) {
     return (
-      <div className="bg-background flex h-full flex-col">
-        <div className="drag-region h-12 shrink-0" />
-        <EmptyState
-          icon={Users2}
-          title="No persona selected"
-          description="A persona is a system prompt, a set of skills, and a permission scope. Pick one to edit it."
-        />
-      </div>
+      <EmptyPane
+        icon={Users2}
+        title="No persona selected"
+        description="A persona is a system prompt, a set of skills, and a permission scope. Pick one to edit it."
+      />
     )
   }
 

@@ -3,7 +3,7 @@ import { BookOpen, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { EmptyState } from '@/components/common/EmptyState'
+import { EmptyPane } from '@/components/common/EmptyPane'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
@@ -160,14 +160,11 @@ export function SkillLibraryView(): React.JSX.Element {
 
   if (!skill) {
     return (
-      <div className="bg-background flex h-full flex-col">
-        <div className="drag-region h-12 shrink-0" />
-        <EmptyState
-          icon={BookOpen}
-          title="No skill selected"
-          description="Skills are reusable instructions any persona can attach. Pick one to read or edit it."
-        />
-      </div>
+      <EmptyPane
+        icon={BookOpen}
+        title="No skill selected"
+        description="Skills are reusable instructions any persona can attach. Pick one to read or edit it."
+      />
     )
   }
 
