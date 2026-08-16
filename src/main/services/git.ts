@@ -82,8 +82,14 @@ export async function cloneRepo(
   return destination
 }
 
-/** Injects the token as the userinfo of an https URL. Non-https is left alone. */
-function withToken(cloneUrl: string, token: string): string {
+/**
+ * Injects the token as the userinfo of an https URL. Non-https is left alone.
+ *
+ * Exported for tests: this and describeGitError are the two places a credential
+ * could escape, so they are worth asserting on directly rather than through a
+ * real clone.
+ */
+export function withToken(cloneUrl: string, token: string): string {
   try {
     const url = new URL(cloneUrl)
     if (url.protocol !== 'https:') return cloneUrl
@@ -103,7 +109,7 @@ function withToken(cloneUrl: string, token: string): string {
  * cases get written out by hand and everything else becomes a generic message —
  * losing some detail is the right trade against printing a token.
  */
-function describeGitError(stderr: string, safeUrl: string): string {
+export function describeGitError(stderr: string, safeUrl: string): string {
   if (/Authentication failed|could not read Username|403/i.test(stderr)) {
     return `GitHub refused the clone of ${safeUrl}. The stored token may not cover this repository.`
   }
