@@ -3,7 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { expect, test } from '@playwright/test'
-import { createProfile, destroyProfile, invoke, launchApp, type LaunchedApp } from './fixtures'
+import {
+  createProfile,
+  destroyProfile,
+  invoke,
+  launchApp,
+  waitForShell,
+  type LaunchedApp
+} from './fixtures'
 
 /**
  * The acceptance checks of docs/plan/12-worktree-isolation.md that can be
@@ -165,4 +172,28 @@ test('the branches panel sees the work, including after its contact is gone', as
   expect(orphan, 'a branch must outlive the contact that made it').toBeTruthy()
   expect(orphan?.contactName).toBeNull()
   expect(orphan?.hasWorktree).toBe(false)
+})
+
+/**
+ * The Branches panel and the isolation step are new UI that nothing else in the
+ * suite has ever rendered. This is a mount check rather than an interaction
+ * test: a component that throws on first render is invisible to every unit test
+ * here, since none of them render anything.
+ */
+test('the branches panel renders and shows the repo’s branches', async () => {
+  const contact = await bindWriter('Writer F · my-app')
+  await runTurnAndSettle(contact.id)
+
+  await invoke(launched.window, 'auth.completeOnboarding')
+  await launched.window.reload()
+  await waitForShell(launched.window)
+
+  await launched.window.getByRole('button', { name: 'Branches' }).first().click()
+
+  await expect(launched.window.getByText(contact.branch!, { exact: false }).first()).toBeVisible()
+
+  // And the detail pane mounts with a real branch selected.
+  await launched.window.getByText(contact.branch!, { exact: false }).first().click()
+  await expect(launched.window.getByRole('button', { name: /^Merge/ })).toBeVisible()
+  await expect(launched.window.getByText('Your checkout')).toBeVisible()
 })
