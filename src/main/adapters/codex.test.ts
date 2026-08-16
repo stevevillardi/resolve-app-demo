@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk'
 import type { AgentEvent, AgentUsage } from '../../shared/agent'
@@ -56,8 +59,14 @@ class FakeCodex {
 
 vi.mock('@openai/codex-sdk', () => ({ Codex: FakeCodex }))
 
-const { DEFAULT_CODEX_MODEL, createCodexAdapter, toolDetailFor, toolNameFor, usageFromTurn } =
-  await import('./codex')
+const {
+  DEFAULT_CODEX_MODEL,
+  createCodexAdapter,
+  discoverCodexSkills,
+  toolDetailFor,
+  toolNameFor,
+  usageFromTurn
+} = await import('./codex')
 
 const PERSONA: PersonaTemplate = {
   id: 'p1',
@@ -280,6 +289,72 @@ describe('session wiring', () => {
     expect((lastClientOptions?.config as Record<string, string>).developer_instructions).toBe(
       'You review code.'
     )
+  })
+
+  // Written from the claim rather than from the code, per 00-progress.md: the
+  // property is "a repository cannot instruct a persona", and the live proof is
+  // codex-agents-md.live.test.ts. This is the cheap guard that stops the option
+  // being dropped in a refactor.
+  it('seals the repo AGENTS.md by capping project docs at zero bytes', async () => {
+    await collect([])
+    expect((lastClientOptions?.config as Record<string, number>).project_doc_max_bytes).toBe(0)
+  })
+
+  it('seals the summariser the same way, since it runs in the repo too', async () => {
+    turnResult = { finalResponse: '{}', usage: null, items: [] }
+    const adapter = createCodexAdapter()
+    await adapter.summarize(adapter.createSession(SPEC), 'summarise', SUMMARY_JSON_SCHEMA)
+    expect((lastClientOptions?.config as Record<string, number>).project_doc_max_bytes).toBe(0)
+  })
+
+  // Codex's hook engine is stable and on by default, and a repo's
+  // `.codex/hooks.json` feeds it. A hook is an arbitrary command run at
+  // session start, outside every sandbox this app has — the same hazard Phase
+  // 12 refused when it left `.git/hooks` unwritable.
+  it('turns the hooks engine off outright', async () => {
+    await collect([])
+    const features = (lastClientOptions?.config as Record<string, Record<string, boolean>>).features
+    expect(features.hooks).toBe(false)
+  })
+
+  it('disables every repo skill the contact was not given, by name', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'codex-skills-'))
+    mkdirSync(join(repo, '.codex', 'skills', 'pineapple'), { recursive: true })
+    writeFileSync(join(repo, '.codex', 'skills', 'pineapple', 'SKILL.md'), '---\nname: x\n---\n')
+    mkdirSync(join(repo, '.codex', 'skills', 'allowed'), { recursive: true })
+    writeFileSync(join(repo, '.codex', 'skills', 'allowed', 'SKILL.md'), '---\nname: y\n---\n')
+
+    const adapter = createCodexAdapter()
+    const spec: SessionSpec = { ...SPEC, repoPath: repo, repoSkills: ['allowed'] }
+    for await (const _ of adapter.run(adapter.createSession(spec), 'go')) void _
+
+    const skills = (lastClientOptions?.config as Record<string, { config: { name: string }[] }>)
+      .skills
+    const names = skills.config.map((entry) => entry.name)
+    expect(names).toContain('pineapple')
+    expect(names).not.toContain('allowed')
+    rmSync(repo, { recursive: true, force: true })
+  })
+
+  it('finds skills declared above the working directory', () => {
+    // Codex walks cwd upward collecting .codex/skills and .agents/skills at
+    // every level, so a seal that only looked at the working directory would
+    // miss a skill declared at the repo root by a worktree session.
+    const root = mkdtempSync(join(tmpdir(), 'codex-walk-'))
+    mkdirSync(join(root, '.agents', 'skills', 'from-above'), { recursive: true })
+    writeFileSync(join(root, '.agents', 'skills', 'from-above', 'SKILL.md'), '---\nname: z\n---\n')
+    const nested = join(root, 'packages', 'app')
+    mkdirSync(nested, { recursive: true })
+
+    expect(discoverCodexSkills(nested)).toContain('from-above')
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('ignores a skill directory with no SKILL.md in it', () => {
+    const root = mkdtempSync(join(tmpdir(), 'codex-empty-'))
+    mkdirSync(join(root, '.codex', 'skills', 'not-a-skill'), { recursive: true })
+    expect(discoverCodexSkills(root)).not.toContain('not-a-skill')
+    rmSync(root, { recursive: true, force: true })
   })
 
   it('builds a client per session, so personas cannot share instructions', async () => {
