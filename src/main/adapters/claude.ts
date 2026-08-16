@@ -100,7 +100,9 @@ interface ResultLike {
       outputTokens: number
       cacheReadInputTokens: number
       cacheCreationInputTokens: number
-      costUSD: number
+      /** Optional so a payload without it degrades to the token tiebreak in
+       *  usageFromResult() rather than failing to type-check. */
+      costUSD?: number
     }
   >
   usage?: Record<string, unknown>
@@ -129,11 +131,26 @@ export function usageFromResult(result: ResultLike): AgentUsage | null {
     { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteInputTokens: 0 }
   )
 
-  // A turn can touch several models (subagents, compaction). The one that did
-  // the most generating is the one worth naming on the UsageEvent.
-  const [model] = entries.reduce((best, entry) =>
-    entry[1].outputTokens > best[1].outputTokens ? entry : best
-  )
+  // A turn can touch several models (subagents, compaction, and — on the first
+  // turn of any session — an SDK-internal haiku call). Name the one that spent
+  // the most, because the figure this is attached to is a *cost*.
+  //
+  // Picking by output tokens instead, which this did until a live probe caught
+  // it, gets the first turn of every session wrong. Measured on a fresh session
+  // with the main loop on sonnet-5:
+  //
+  //   claude-haiku-4-5   521 in /  11 out /     0 cacheWrite   $0.000576
+  //   claude-sonnet-5      2 in /   5 out / 27911 cacheWrite   $0.167547
+  //
+  // The internal call out-talks the real one, so the dashboard showed $0.168
+  // against haiku. Cost is the honest tiebreak; output tokens is the fallback
+  // for a payload that omits costUSD.
+  const [model] = entries.reduce((best, entry) => {
+    const spent = entry[1].costUSD ?? 0
+    const bestSpent = best[1].costUSD ?? 0
+    if (spent !== bestSpent) return spent > bestSpent ? entry : best
+    return entry[1].outputTokens > best[1].outputTokens ? entry : best
+  })
 
   return {
     ...totals,

@@ -151,8 +151,62 @@ describe('usageFromResult', () => {
     expect(usage?.outputTokens).toBe(225)
     expect(usage?.cachedInputTokens).toBe(15)
     expect(usage?.cacheWriteInputTokens).toBe(3)
-    // Named after whichever model actually generated the most.
+    // Named after whichever model actually spent the most.
     expect(usage?.model).toBe('main')
+  })
+
+  // Captured verbatim from `npm run probe:adapters -- --backend claude
+  // --model claude-sonnet-5` on a *fresh* session. The SDK makes an internal
+  // haiku call on every session start, and it out-talks the main loop 11
+  // tokens to 5 while costing 0.3% as much. Naming by output tokens put the
+  // whole $0.168 against haiku on the first turn of every Claude session.
+  it('names the model that spent the most, not the one that talked the most', () => {
+    const usage = usageFromResult({
+      total_cost_usd: 0.168123,
+      modelUsage: {
+        'claude-haiku-4-5-20251001': {
+          inputTokens: 521,
+          outputTokens: 11,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          costUSD: 0.000576
+        },
+        'claude-sonnet-5': {
+          inputTokens: 2,
+          outputTokens: 5,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 27911,
+          costUSD: 0.167547
+        }
+      }
+    })
+
+    expect(usage?.model).toBe('claude-sonnet-5')
+    expect(usage?.costUsd).toBe(0.168123)
+    // The totals still cover both — only the attribution changed.
+    expect(usage?.inputTokens).toBe(523)
+    expect(usage?.outputTokens).toBe(16)
+    expect(usage?.cacheWriteInputTokens).toBe(27911)
+  })
+
+  it('falls back to output tokens when no entry reports a cost', () => {
+    const usage = usageFromResult({
+      modelUsage: {
+        quiet: {
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0
+        },
+        loud: {
+          inputTokens: 1,
+          outputTokens: 99,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0
+        }
+      }
+    })
+    expect(usage?.model).toBe('loud')
   })
 
   it('returns null when the result carries no modelUsage at all', () => {
