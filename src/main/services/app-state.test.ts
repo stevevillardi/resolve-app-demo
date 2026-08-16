@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
-import * as schema from '../db/schema'
+import { createTestDb } from '../db/test-db'
+import type { AppDatabase } from '../db/create'
 
 /**
  * Runs against a real in-memory SQLite rather than a mocked Drizzle, so the
  * generated SQL and the onConflictDoUpdate upsert are actually exercised —
  * mocking the query builder would only assert that the code calls itself.
+ *
+ * The schema comes from the checked-in migrations via createTestDb rather than
+ * a hand-written CREATE TABLE: a copy here would drift from the real migration
+ * the moment either changed, and the drift would look like a passing test.
  */
 
-let db: ReturnType<typeof drizzle<typeof schema>>
+let db: AppDatabase
 
 vi.mock('../db', () => ({ initDb: () => db }))
 
@@ -17,10 +20,7 @@ const { getAppState, setAppState, deleteAppState, getAppStateFlag, setAppStateFl
   await import('./app-state')
 
 beforeEach(() => {
-  const sqlite = new Database(':memory:')
-  // Mirrors drizzle/0001_pretty_warlock.sql.
-  sqlite.exec('CREATE TABLE app_state (key text PRIMARY KEY NOT NULL, value text NOT NULL)')
-  db = drizzle(sqlite, { schema })
+  db = createTestDb()
 })
 
 describe('read and write', () => {
