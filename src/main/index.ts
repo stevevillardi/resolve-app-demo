@@ -6,6 +6,7 @@ import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { beginQuit, isQuitting } from './lifecycle'
 import { nodeCronEngine } from './services/cron-engine'
+import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
 import { seedIfNeeded } from './services/seed'
 import { createTray, destroyTray, hasTray, refreshTrayMenu } from './tray'
@@ -95,6 +96,11 @@ app.whenReady().then(() => {
   // empty library and render the "no skills" empty state on a fresh install.
   seedIfNeeded()
   setupIpc()
+
+  // Not awaited: a stale worktree registration costs nothing until something
+  // tries to use it, and blocking the window on one git process per repo would
+  // trade a real delay for a tidiness nobody is waiting on.
+  void pruneOrphanedWorktrees()
 
   // Before the tray, so its first menu has real next-run times rather than an
   // empty list it would have to be told about later — and before the window,

@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto'
 import { asc, eq } from 'drizzle-orm'
+import { existsSync } from 'fs'
 import { initDb } from '../db'
 import { toContact } from '../db/mappers'
 import { contacts, personaTemplates } from '../db/schema'
+import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
 import { defaultIsolation, plannedWorktree } from './worktrees'
 import type { Contact, ContactDraft } from '../../shared/domain'
@@ -73,6 +75,35 @@ export function createContact(draft: ContactDraft): Contact {
 
     return contact
   })
+}
+
+/**
+ * Deletes a Contact, and the worktree it owns.
+ *
+ * The worktree goes first: the row is the only thing that knows where it is, so
+ * deleting in the other order would strand a directory nothing can find again.
+ *
+ * Refuses by default when the worktree has uncommitted work. Committed work is
+ * never at risk — `git worktree remove` leaves the branch, and the Branches
+ * panel is where a human decides what to do with it — but uncommitted changes
+ * exist nowhere else, and silently discarding them on a delete that was only
+ * meant to tidy up a Contact is not a recoverable mistake. `discardUncommitted`
+ * is how the caller says it asked.
+ */
+export async function deleteContact(id: string, discardUncommitted = false): Promise<boolean> {
+  const contact = getContact(id)
+  if (!contact) return false
+
+  if (contact.worktreePath && existsSync(contact.worktreePath)) {
+    await worktreeRemove(contact.repoPath, contact.worktreePath, discardUncommitted)
+  }
+
+  // The FK cascades take this contact's thread, routines and usage with it;
+  // group_messages.contact_id is `set null`, so the Group's history survives its
+  // author (schema.ts). Both are enforced only because initDb() turns foreign
+  // keys on.
+  const result = initDb().delete(contacts).where(eq(contacts.id, id)).run()
+  return result.changes > 0
 }
 
 /**

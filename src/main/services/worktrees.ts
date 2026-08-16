@@ -1,7 +1,10 @@
+import { isNotNull } from 'drizzle-orm'
 import { app } from 'electron'
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { gitWritePathsFor, worktreeAdd } from './git'
+import { initDb } from '../db'
+import { contacts } from '../db/schema'
+import { gitWritePathsFor, worktreeAdd, worktreePrune } from './git'
 import type { Contact, Isolation, SandboxLevel } from '../../shared/domain'
 
 /**
@@ -15,10 +18,12 @@ import type { Contact, Isolation, SandboxLevel } from '../../shared/domain'
  *
  *     <userData>/worktrees/<repo-name>/<persona-slug>-<short-id>
  *
- * Nothing here touches git or the filesystem. The path is *planned* when the
- * Contact is created and the directory is materialised later, on the first
- * writing turn — see the worktree_path comment in src/main/db/schema.ts for why
- * the two are separated.
+ * Split in two on purpose. Naming is pure and synchronous, because the path is
+ * *planned* when the Contact is created — before any git command has run, and
+ * before the directory exists — so that workingPathFor() stays a pure function
+ * of the row. Materialising is async and lives below it, because it runs git.
+ * See the worktree_path comment in src/main/db/schema.ts for why the two are
+ * separated at all.
  */
 
 export const WORKTREE_DIR = 'worktrees'
@@ -73,6 +78,44 @@ export function defaultIsolation(sandbox: SandboxLevel): Isolation {
 /** Null reads as `shared` — that is what every pre-0007 row means. */
 export function isolationOf(isolation: Isolation | null): Isolation {
   return isolation ?? 'shared'
+}
+
+/**
+ * Clears registrations for worktrees whose directories are gone.
+ *
+ * Run at startup because the app is not the only thing that can delete a
+ * directory. git keeps a prunable registration until told otherwise, and while
+ * one exists the branch is still "checked out somewhere" — which would make
+ * re-creating that Contact's worktree fail with a message about a worktree the
+ * user already deleted.
+ *
+ * Pruning never destroys work: the branch and its commits survive, which is what
+ * makes deleting a worktree by hand a recoverable thing to have done.
+ *
+ * Failures are logged, not thrown. A repo that has been moved or unmounted since
+ * the Contact was created must not stop the app from starting.
+ */
+export async function pruneOrphanedWorktrees(
+  repoPaths: string[] = repoPathsWithWorktrees()
+): Promise<void> {
+  for (const repoPath of repoPaths) {
+    try {
+      await worktreePrune(repoPath)
+    } catch (error) {
+      console.warn(`[worktrees] could not prune ${repoPath}:`, error)
+    }
+  }
+}
+
+/** The repos that have at least one isolated Contact, deduplicated. */
+function repoPathsWithWorktrees(): string[] {
+  const rows = initDb()
+    .select({ repoPath: contacts.repoPath })
+    .from(contacts)
+    .where(isNotNull(contacts.worktreePath))
+    .all()
+
+  return [...new Set(rows.map((row) => row.repoPath))]
 }
 
 /**

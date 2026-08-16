@@ -280,8 +280,6 @@ export const ipcContract = {
     output: z.object({ runId: z.string().nullable(), skipped: z.string().nullable() })
   },
 
-  // Read + create only. Sessions, messages, and the UI that calls create are
-  // Phase 6; these exist so personas and groups have real relationships now.
   'contacts.list': {
     input: z.void(),
     output: z.array(contactSchema)
@@ -293,6 +291,19 @@ export const ipcContract = {
   'contacts.create': {
     input: contactDraftSchema,
     output: contactSchema
+  },
+  /**
+   * Delete exists because a Contact now owns something outside the database —
+   * its worktree — and nothing else can clean that up.
+   *
+   * `discardUncommitted` defaults to false, so the first attempt refuses when
+   * the worktree has unsaved changes and the caller has to decide. Committed
+   * work is never at risk: the branch survives, and the Branches panel is where
+   * it gets dealt with.
+   */
+  'contacts.delete': {
+    input: z.object({ id: z.string(), discardUncommitted: z.boolean().optional() }),
+    output: z.object({ deleted: z.boolean() })
   },
 
   /** No create: a group is implied by its repo, never made directly (§4). */
