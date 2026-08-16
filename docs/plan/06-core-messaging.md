@@ -16,6 +16,24 @@ Wire everything built so far into the first real end-to-end loop: create a Conta
 - **`messages` has no `status` or `error` column, on purpose.** Blueprint §12 lists five fields; `streaming` and `error` describe an in-flight turn, not a stored fact, so they live in `src/renderer/src/types/message.ts` as a renderer-only extension of `PersistedMessage`. Keep them there — a message loaded from disk is by definition finished.
 - `src/main/db/mappers.ts` has `toMessage` and `toUsageEvent` ready; `messageSchema` and `usageEventSchema` are in `src/shared/domain.ts`.
 
+## Inherited from Phase 5 — what already exists
+
+- **`adapterFor(backend, config)` (`src/main/adapters/index.ts`) is live for both backends**, with `createSession` / `resume` / `run` and a normalized `AgentEvent` stream (`src/shared/agent.ts`). Item 2's "calls `AgentAdapter.run()`" is a call, not a build.
+- **Nothing in `src/main/` imports the adapters yet.** Wiring them up is this phase's first job, and it needs three things the probe CLI supplies today: `codexBinaryPath: resolveCodexBinary()` (without it a _packaged_ app cannot find the Codex binary — dev works either way, so this fails late), resolved `Skill[]` for the persona, and an absolute `repoPath`. Adapters deliberately import neither `electron` nor the database, so the caller does all three.
+- **`AgentSession.sessionId` is filled in mid-stream**, at the `session_started` event. Read it _after_ the run to persist onto `Contact.backendSessionId`; it is null before the first turn.
+- **Usage is ready to become a `UsageEvent` row.** `AgentUsage` mirrors `usageEventSchema` field-for-field. Do not re-derive it — in particular, do not sum Claude's per-step assistant messages; see the decisions log for why that reads 80× low.
+- **Errors already arrive as events, classified.** `AgentErrorKind` is a superset of the renderer's `MessageBubbleError['kind']`, so item 4 maps across without a translation table. Both adapters guarantee a `done` event even when a turn throws, so the UI always has a terminal state to settle on.
+- **Sandbox enforcement is done and tested** (`src/main/adapters/sandbox.ts`), including live proof on both backends. Item 3 is a demonstration in the real app, not new enforcement code.
+- **`npm run probe:adapters` reproduces any turn without the UI.** Use it to tell "the adapter is wrong" apart from "the wiring is wrong" — that distinction is most of the debugging cost in this phase.
+
+Still entirely this phase's:
+
+- **The streaming IPC push channel.** Phase 1's bridge is strictly request/response — `src/preload/index.ts` exposes only `invoke`, and there is no `webContents.send` anywhere. Item 2's event-push mechanism is unbuilt, and it is the genuinely new thing here.
+- **`ThreadView`, `GroupThreadView`, `NewContactFlow`'s Create button, and the repo picker** are all still on Phase 2 mocks.
+- **The concurrency lock** (item 5) does not exist in any form.
+
+One caveat carried forward: `StreamingIndicator.tsx`'s comment says Claude emits nothing during tool execution. The SDK now defines `SDKToolProgressMessage` and the adapter maps it, but it was never observed firing (every probe used fast tools), so `capabilities.streamsToolProgress` is true on both backends while only Codex has been _seen_ to stream progress. Don't rewrite that comment on the strength of the type alone.
+
 ## Scope
 
 1. **`NewContactFlow` goes live**
