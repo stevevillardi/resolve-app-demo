@@ -1,109 +1,185 @@
 import { useState } from 'react'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle
-} from '@/components/ui/sheet'
+import { Clock, Play } from 'lucide-react'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { contacts } from '@/mocks'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
+import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ScopeChip } from '@/components/common/ScopeChip'
+import { EmptyState } from '@/components/common/EmptyState'
+import { formatRelative } from '@/lib/format'
+import { contacts, personaTemplates, routines } from '@/mocks'
+import { useUiStore } from '@/store/useUiStore'
 import type { Routine } from '@/types'
 
-interface RoutineEditorProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  routine?: Routine
+// A cron string is unreadable at a glance; this covers the common cases and
+// falls back to showing the raw expression. Real parsing lands in Phase 8.
+const SCHEDULE_LABEL: Record<string, string> = {
+  '0 9 * * *': 'Every day at 09:00',
+  '0 */6 * * *': 'Every 6 hours',
+  '0 0 * * *': 'Every day at midnight',
+  '*/15 * * * *': 'Every 15 minutes',
+  '0 9 * * 1': 'Every Monday at 09:00'
 }
 
-export function RoutineEditor({
-  open,
-  onOpenChange,
-  routine
-}: RoutineEditorProps): React.JSX.Element {
-  const [schedule, setSchedule] = useState(routine?.schedule ?? '0 9 * * *')
-  const [prompt, setPrompt] = useState(routine?.prompt ?? '')
-  const [enabled, setEnabled] = useState(routine?.enabled ?? true)
-  const [contactId, setContactId] = useState(routine?.contactId ?? contacts[0]?.id ?? '')
+function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
+  const [schedule, setSchedule] = useState(routine.schedule)
+  const [prompt, setPrompt] = useState(routine.prompt)
+  const [enabled, setEnabled] = useState(routine.enabled)
+  const [contactId, setContactId] = useState(routine.contactId)
   // Reserved for Phase 8's cron validation — always undefined this phase.
   const cronError: string | undefined = undefined
 
+  const contact = contacts.find((c) => c.id === contactId)
+  const persona = personaTemplates.find((p) => p.id === contact?.personaTemplateId)
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right">
-        <SheetHeader>
-          <SheetTitle>{routine ? 'Edit routine' : 'New routine'}</SheetTitle>
-          <SheetDescription>
-            Runs on a schedule, on the persona it&apos;s bound to.
-          </SheetDescription>
-        </SheetHeader>
-        <div className="flex flex-col gap-4 px-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" htmlFor="routine-contact">
-              Contact
-            </label>
-            <select
-              id="routine-contact"
-              value={contactId}
-              onChange={(event) => setContactId(event.target.value)}
-              className="border-input bg-background h-8 rounded-lg border px-2 text-sm"
-            >
-              {contacts.map((contact) => (
-                <option key={contact.id} value={contact.id}>
-                  {contact.displayName}
-                </option>
-              ))}
-            </select>
+    <div className="bg-background flex h-full min-h-0 flex-col">
+      <header className="border-border drag-region flex h-12 shrink-0 items-center gap-2.5 border-b px-4">
+        <Clock className="text-muted-foreground size-4 shrink-0" />
+        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
+          {persona?.name ?? 'Routine'}
+        </h1>
+        <div className="no-drag flex shrink-0 items-center gap-1.5">
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <Play className="size-3.5" />
+            Run now
+          </Button>
+          <Button size="sm">Save</Button>
+        </div>
+      </header>
+
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="mx-auto flex max-w-2xl flex-col gap-5 p-5">
+          <div className="border-border flex items-center justify-between gap-4 rounded-lg border px-3 py-2.5">
+            <div>
+              <p className="text-[13px] font-medium">Enabled</p>
+              <p className="text-muted-foreground text-xs">
+                {enabled
+                  ? 'Fires on schedule even when the window is closed.'
+                  : 'Paused. Kept, but never fires.'}
+              </p>
+            </div>
+            <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Routine enabled" />
           </div>
+
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" htmlFor="routine-schedule">
-              Schedule (cron)
-            </label>
+            <Label>Runs as</Label>
+            <Select
+              value={contactId}
+              onValueChange={(value) => setContactId(value as string)}
+              items={contacts.map((c) => ({ label: c.displayName, value: c.id }))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {contacts.map((option) => {
+                  const optionPersona = personaTemplates.find(
+                    (p) => p.id === option.personaTemplateId
+                  )
+                  return (
+                    <SelectItem key={option.id} value={option.id}>
+                      <AvatarColorSwatch
+                        name={optionPersona?.name ?? option.displayName}
+                        color={optionPersona?.avatarColor ?? 'var(--muted)'}
+                        size="xs"
+                      />
+                      {option.displayName}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+            {/* An unattended routine inherits its persona's permissions, so
+                what it is allowed to do belongs right next to who runs it. */}
+            {persona && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <ScopeChip axis="sandbox" value={persona.sandbox} />
+                <ScopeChip axis="github" value={persona.githubScope} />
+                <span className="text-muted-foreground font-mono text-[11px]">
+                  {contact?.repoPath}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="routine-schedule">Schedule</Label>
             <Input
               id="routine-schedule"
               value={schedule}
               onChange={(event) => setSchedule(event.target.value)}
               aria-invalid={Boolean(cronError)}
+              className="font-mono"
             />
-            {cronError && <p className="text-destructive text-xs">{cronError}</p>}
+            {cronError ? (
+              <p className="text-destructive text-xs">{cronError}</p>
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                {SCHEDULE_LABEL[schedule] ?? `Cron expression — ${schedule}`}
+              </p>
+            )}
           </div>
+
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" htmlFor="routine-prompt">
-              Prompt
-            </label>
+            <Label htmlFor="routine-prompt">Prompt</Label>
             <Textarea
               id="routine-prompt"
-              rows={4}
+              rows={5}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder="What should this routine do when it wakes up?"
             />
+            <p className="text-muted-foreground text-xs">
+              Sent as the opening message each time it fires. The result posts to the repo group.
+            </p>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Enabled</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={enabled}
-              onClick={() => setEnabled((v) => !v)}
-              className={`relative h-5 w-9 rounded-full transition-colors ${enabled ? 'bg-primary' : 'bg-muted'}`}
-            >
-              <span
-                className={`absolute top-0.5 size-4 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`}
-              />
-            </button>
+
+          <div className="flex flex-col gap-2">
+            <h2 className="text-sm font-semibold tracking-tight">Last run</h2>
+            {routine.lastRunAt ? (
+              <div className="border-border rounded-lg border p-3">
+                <p className="text-muted-foreground font-mono text-[11px]">
+                  {formatRelative(routine.lastRunAt)}
+                </p>
+                <p className="mt-1 text-[13px]">{routine.lastRunSummary}</p>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-xs">Hasn&apos;t run yet.</p>
+            )}
           </div>
-          {routine?.lastRunSummary && (
-            <p className="text-muted-foreground text-xs">Last run: {routine.lastRunSummary}</p>
-          )}
         </div>
-        <SheetFooter>
-          <Button onClick={() => onOpenChange(false)}>Save routine</Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+      </ScrollArea>
+    </div>
   )
+}
+
+export function RoutineEditor(): React.JSX.Element {
+  const selectedId = useUiStore((state) => state.selectedRoutineId)
+  const routine = routines.find((r) => r.id === selectedId)
+
+  if (!routine) {
+    return (
+      <div className="bg-background flex h-full flex-col">
+        <div className="drag-region h-12 shrink-0" />
+        <EmptyState
+          icon={Clock}
+          title="No routine selected"
+          description="Routines wake a persona on a schedule and post what they did to the repo group."
+        />
+      </div>
+    )
+  }
+
+  return <RoutineForm key={routine.id} routine={routine} />
 }

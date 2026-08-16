@@ -1,35 +1,42 @@
 import { Clock } from 'lucide-react'
+import { formatTime } from '@/lib/format'
 
 interface RoutineRunNoticeProps {
   content: string
   authorName?: string
+  timestamp?: number
 }
 
-// Different container shape (no bubble, no tail, a small clock glyph) so it
-// reads as distinct from a live agent_reply at a glance — "ran while you
-// were away," not a conversation turn (blueprint §8/§10).
+/**
+ * A log entry, not a conversation turn — this ran on a schedule while nobody
+ * was watching (blueprint §8/§10).
+ *
+ * Shaped accordingly: a fixed monospace timestamp gutter, a glyph, and a
+ * hairline rule down the left the way a terminal log or a CI run reads. It is
+ * left-aligned like an inbound message but has no bubble, so it can't be
+ * mistaken for one even in greyscale.
+ */
 export function RoutineRunNotice({
   content,
-  authorName
+  authorName,
+  timestamp
 }: RoutineRunNoticeProps): React.JSX.Element {
   return (
-    <div
-      className="flex items-start gap-2.5 rounded-lg border-l-[3px] border border-dashed p-3 text-sm"
-      style={{
-        backgroundColor: 'var(--notice-routine-bg)',
-        color: 'var(--notice-routine-fg)',
-        borderColor: 'var(--notice-routine-border)',
-        borderLeftColor: 'var(--notice-routine-rail)',
-        borderLeftStyle: 'solid'
-      }}
-    >
-      <Clock className="mt-0.5 size-4 shrink-0 opacity-70" />
-      <div className="min-w-0 flex-1">
-        <p className="mb-1 text-xs font-semibold tracking-wide uppercase opacity-80">
-          Routine run{authorName ? ` · ${authorName}` : ''}
-        </p>
-        <p className="leading-relaxed">{content}</p>
-      </div>
+    <div className="flex items-start gap-3 py-0.5 pl-0.5">
+      <span className="text-muted-foreground flex w-11 shrink-0 justify-end pt-0.5 font-mono text-[10px] tabular-nums">
+        {timestamp !== undefined ? formatTime(timestamp) : ''}
+      </span>
+      <span className="border-border flex min-w-0 flex-1 items-start gap-2 border-l pl-3">
+        <Clock className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
+        <span className="min-w-0 flex-1">
+          <span className="text-muted-foreground block text-[11px] font-medium tracking-wide uppercase">
+            Routine run{authorName ? ` · ${authorName}` : ''}
+          </span>
+          <span className="text-foreground/85 mt-0.5 block text-[13px] leading-relaxed">
+            {content}
+          </span>
+        </span>
+      </span>
     </div>
   )
 }

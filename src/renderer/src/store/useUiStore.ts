@@ -1,21 +1,93 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import type { ThemePreference } from '@/lib/theme'
+
+export type { ThemePreference }
+
+/** Which workspace the shell is showing. Each one is master-detail: the
+ *  resizable list panel on the left, its detail view on the right. */
+export type Section = 'chats' | 'personas' | 'skills' | 'routines' | 'usage'
 
 export type ConversationSelection =
   { kind: 'contact'; id: string } | { kind: 'group'; id: string } | null
 
-export type ThemePreference = 'system' | 'light' | 'dark'
+/** What the usage dashboard is scoped to. */
+export type UsageScope = { kind: 'all' } | { kind: 'persona'; id: string }
+
+/** The two surfaces that stay genuinely modal — everything else is a view. */
+export type ModalDialog = 'newContact' | 'github' | null
 
 interface UiState {
+  section: Section
+  setSection: (section: Section) => void
+
+  /** Whether the nav rail is expanded to show labels (⌘B). */
+  navExpanded: boolean
+  setNavExpanded: (expanded: boolean) => void
+
   selectedConversation: ConversationSelection
   setSelectedConversation: (selection: ConversationSelection) => void
+
+  selectedPersonaId: string | null
+  setSelectedPersonaId: (id: string | null) => void
+
+  selectedSkillId: string | null
+  setSelectedSkillId: (id: string | null) => void
+
+  selectedRoutineId: string | null
+  setSelectedRoutineId: (id: string | null) => void
+
+  usageScope: UsageScope
+  setUsageScope: (scope: UsageScope) => void
+
+  dialog: ModalDialog
+  setDialog: (dialog: ModalDialog) => void
+
   themePreference: ThemePreference
   setThemePreference: (preference: ThemePreference) => void
 }
 
-// Local-only, ephemeral UI state — never persisted, never touches IPC.
-export const useUiStore = create<UiState>((set) => ({
-  selectedConversation: null,
-  setSelectedConversation: (selection) => set({ selectedConversation: selection }),
-  themePreference: 'system',
-  setThemePreference: (preference) => set({ themePreference: preference })
-}))
+// Local-only UI state — never touches IPC. Only the two chrome preferences are
+// persisted; selection stays ephemeral per blueprint §10 (a relaunch should
+// land on the empty state, not resurrect a stale conversation id). Pane widths
+// are persisted separately by react-resizable-panels' own autoSaveId.
+export const useUiStore = create<UiState>()(
+  persist(
+    (set) => ({
+      section: 'chats',
+      setSection: (section) => set({ section }),
+
+      navExpanded: false,
+      setNavExpanded: (navExpanded) => set({ navExpanded }),
+
+      selectedConversation: null,
+      setSelectedConversation: (selectedConversation) => set({ selectedConversation }),
+
+      selectedPersonaId: null,
+      setSelectedPersonaId: (selectedPersonaId) => set({ selectedPersonaId }),
+
+      selectedSkillId: null,
+      setSelectedSkillId: (selectedSkillId) => set({ selectedSkillId }),
+
+      selectedRoutineId: null,
+      setSelectedRoutineId: (selectedRoutineId) => set({ selectedRoutineId }),
+
+      usageScope: { kind: 'all' },
+      setUsageScope: (usageScope) => set({ usageScope }),
+
+      dialog: null,
+      setDialog: (dialog) => set({ dialog }),
+
+      themePreference: 'system',
+      setThemePreference: (themePreference) => set({ themePreference })
+    }),
+    {
+      name: 'persona-router-ui',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        themePreference: state.themePreference,
+        navExpanded: state.navExpanded
+      })
+    }
+  )
+)

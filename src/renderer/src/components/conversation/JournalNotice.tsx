@@ -1,5 +1,6 @@
-import { BookMarked, Pin } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Pin } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { formatTime } from '@/lib/format'
 import type { SystemSummaryCategory } from '@/types'
 
 interface JournalNoticeProps {
@@ -7,6 +8,7 @@ interface JournalNoticeProps {
   category?: SystemSummaryCategory
   durable?: boolean
   authorName?: string
+  timestamp?: number
 }
 
 const CATEGORY_LABEL: Record<SystemSummaryCategory, string> = {
@@ -15,33 +17,59 @@ const CATEGORY_LABEL: Record<SystemSummaryCategory, string> = {
   routine: 'Routine summary'
 }
 
-// Renders as a quiet "decision record" card, not a chat bubble — this is an
-// automated end-of-session artifact, not a live reply (blueprint §10).
+/**
+ * A structured end-of-session record, not a chat turn — nobody typed this and
+ * nobody was watching when it was written (blueprint §10).
+ *
+ * So it is shaped like a record: centred, full width, a hairline rule carrying
+ * a small-caps label, body text below. No fill, no border box, no accent
+ * colour. An earlier revision gave this a tinted card with a coloured left
+ * rail, which made it read as just another message wearing a different paint —
+ * the shape is what has to differ, because shape survives greyscale.
+ */
 export function JournalNotice({
   content,
   category = 'decision',
   durable,
-  authorName
+  authorName,
+  timestamp
 }: JournalNoticeProps): React.JSX.Element {
   return (
-    <div
-      className={cn('flex gap-2.5 rounded-lg border-l-[3px] border p-3 text-sm')}
-      style={{
-        backgroundColor: 'var(--notice-journal-bg)',
-        color: 'var(--notice-journal-fg)',
-        borderColor: 'var(--notice-journal-border)',
-        borderLeftColor: 'var(--notice-journal-rail)'
-      }}
-    >
-      <BookMarked className="mt-0.5 size-4 shrink-0 opacity-70" />
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase opacity-80">
-          <span>{CATEGORY_LABEL[category]}</span>
-          {authorName && <span className="font-normal normal-case opacity-70">· {authorName}</span>}
-          {durable && <Pin className="size-3" aria-label="Kept indefinitely" />}
-        </div>
-        <p className="leading-relaxed">{content}</p>
+    <div className="my-1 flex flex-col items-center gap-1.5 py-1">
+      <div className="flex w-full items-center gap-2.5">
+        <span className="bg-border h-px flex-1" />
+        <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-[11px] font-medium tracking-wide uppercase">
+          {CATEGORY_LABEL[category]}
+          {durable && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className="text-foreground/70 inline-flex cursor-default">
+                    <Pin className="size-3" />
+                    <span className="sr-only">Kept indefinitely</span>
+                  </span>
+                }
+              />
+              <TooltipContent>
+                Durable — re-injected into every future session on this repo.
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
+        <span className="bg-border h-px flex-1" />
       </div>
+      <p className="text-foreground/85 max-w-[46rem] px-6 text-center text-[13px] leading-relaxed text-pretty">
+        {content}
+      </p>
+      {(authorName || timestamp !== undefined) && (
+        <p className="text-muted-foreground text-[11px]">
+          {authorName}
+          {authorName && timestamp !== undefined && ' · '}
+          {timestamp !== undefined && (
+            <span className="font-mono tabular-nums">{formatTime(timestamp)}</span>
+          )}
+        </p>
+      )}
     </div>
   )
 }

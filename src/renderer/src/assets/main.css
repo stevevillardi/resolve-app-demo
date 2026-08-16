@@ -1,199 +1,185 @@
 @import 'tailwindcss';
 
+/* Bundled, not CDN-loaded — the renderer must render identically offline and
+   inside a packaged asar. Inter for UI, JetBrains Mono for machine text. */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
 /*
- * Persona Router visual identity (Phase 2 — docs/plan/02-design-system.md).
+ * Persona Router visual identity.
  *
- * Concept: a "signal rail" — a 3px colored left border, applied consistently
- * to sidebar rows, message bubbles, and notices — literally encodes which
- * channel (persona, group, or notice type) a piece of content is on. This
- * is the app's one recurring signature element, chosen because the product
- * is fundamentally about routing conversations across multiple agent
- * "channels," not because colored borders are decorative.
+ * Concept: this is a console for a fleet of scoped workers, not a chat app.
+ * The thing worth seeing at a glance is what each persona is *allowed to do* —
+ * its sandbox level and its independent GitHub scope (blueprint §9, §16
+ * Journey 3). So the recurring signature element is the scope chip
+ * (components/common/ScopeChip.tsx): a small monospace capsule, icon + label,
+ * tinted by --scope-*. It is never color-alone, and it encodes real data
+ * rather than decorating a container.
  *
- * Palette: a warm-neutral canvas (not stark white/black) so long review
- * sessions don't fight a sterile background. A single brand/contact accent
- * (signal violet) marks 1:1 contacts and outbound bubbles; a distinct warm
- * coral marks groups, since groups need to read differently from contacts
- * at a glance in the sidebar. Journal/routine/mention notices each get
- * their own quiet tint + rail color so all four GroupMessage types are
- * legible without reading the text.
+ * Structure, not hue, separates content types. The four GroupMessage variants
+ * are told apart by shape — a filled bubble, an outbound bubble, a centered
+ * hairline record, a timeline log row — so they survive greyscale. That is
+ * why this file has no per-notice color families: an earlier revision gave
+ * each one its own tint and left border, which made every surface look the
+ * same wearing different paint.
  *
- * Typography: system-ui stack for UI chrome — this app deliberately mirrors
- * the native messaging app's interaction grammar, so leaning on the OS's own
- * system font (San Francisco on macOS) reinforces that rather than fighting
- * it with an imported display face. Code renders in a monospace stack via
- * shiki. Bubbles use their own larger radius scale (--radius-bubble),
- * separate from the tighter radius used by buttons/inputs/cards.
+ * Typography carries a rule: anything that is a machine identifier — repo
+ * path, cron expression, sandbox level, cost, token count, session id — is
+ * set in JetBrains Mono. The mono face has a job instead of being reserved
+ * for code fences.
+ *
+ * Palette is oklch throughout. Light mode inverts the usual card relationship
+ * (--card is slightly *darker* than --background) so the three panes read as
+ * distinct planes without needing shadows; dark mode uses true black for the
+ * canvas with a lifted card, which is what gives the shell its depth.
  */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #f7f6f3;
-  --foreground: #1b1d22;
-  --card: #ffffff;
-  --card-foreground: #1b1d22;
-  --popover: #ffffff;
-  --popover-foreground: #1b1d22;
-  --primary: #4c4ddc;
-  --primary-foreground: #ffffff;
-  --secondary: #eeece6;
-  --secondary-foreground: #1b1d22;
-  --muted: #eeece6;
-  --muted-foreground: #6b6d76;
-  --accent: #eeece6;
-  --accent-foreground: #1b1d22;
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: #e4e2dc;
-  --input: #e4e2dc;
-  --ring: #4c4ddc;
-  --radius: 0.5rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.1884 0.0128 248.5103);
+  --card: oklch(0.9784 0.0011 197.1387);
+  --card-foreground: oklch(0.1884 0.0128 248.5103);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.1884 0.0128 248.5103);
+
+  /* Vivid brand blue with near-black text on it, rather than the more common
+     white-on-blue. White on this blue is 2.97:1 — below AA for button labels;
+     near-black is 6.5:1, and the electric-accent-with-dark-text pairing is a
+     deliberate identity choice, not a fallback. */
+  --primary: oklch(0.6723 0.1606 244.9955);
+  --primary-foreground: oklch(0.17 0.017 248);
+
+  --secondary: oklch(0.1884 0.0128 248.5103);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.9222 0.0013 286.3737);
+  /* Corrected: the source theme set this identical to --foreground, so muted
+     text was not actually muted. 5.7:1 on --background, 5.4:1 on --card. */
+  --muted-foreground: oklch(0.51 0.013 248);
+  --accent: oklch(0.9392 0.0166 250.8453);
+  /* Corrected: the source theme used --primary here, giving 2.5:1 on the
+     accent fill. Stepped down to 5.9:1. */
+  --accent-foreground: oklch(0.46 0.14 246);
+  --destructive: oklch(0.55 0.215 26);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.9317 0.0118 231.6594);
+  --input: oklch(0.9809 0.0025 228.7836);
+  --ring: oklch(0.6818 0.1584 243.354);
+
+  /* Categorical series. Validated with the dataviz validator on both surfaces:
+     worst adjacent CVD ΔE 9.1 (protan), worst adjacent normal-vision ΔE 19.6.
+     Re-stepped per mode below — the same five hues, not a second palette.
+     Three slots sit under 3:1 on the light surface, so charts using them ship
+     visible direct labels plus the table toggle (the relief rule). */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+
+  --sidebar: oklch(0.9784 0.0011 197.1387);
+  --sidebar-foreground: oklch(0.1884 0.0128 248.5103);
+  --sidebar-primary: oklch(0.6723 0.1606 244.9955);
+  --sidebar-primary-foreground: oklch(0.17 0.017 248);
+  --sidebar-accent: oklch(0.9392 0.0166 250.8453);
+  --sidebar-accent-foreground: oklch(0.46 0.14 246);
+  --sidebar-border: oklch(0.9271 0.0101 238.5177);
+  --sidebar-ring: oklch(0.6818 0.1584 243.354);
+
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', monospace;
+
+  /* 10px. The source theme used 1.3rem (~21px), which turns a 32px-tall input
+     into a lozenge and wastes horizontal space in dense lists. The large curve
+     survives only where it means something: bubbles and pill badges. */
+  --radius: 0.625rem;
   --radius-bubble: 1.125rem;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', monospace;
+  /* Flat by default — hairline borders plus the background/card/sidebar plane
+     split carry the hierarchy. Only genuinely floating surfaces (dialog,
+     popover, dropdown, tooltip) get elevation. */
+  --shadow-xs: 0 1px 2px 0 oklch(0.1884 0.0128 248.5103 / 0.05);
+  --shadow-sm: 0 1px 3px 0 oklch(0.1884 0.0128 248.5103 / 0.08);
+  --shadow-md: 0 4px 12px -2px oklch(0.1884 0.0128 248.5103 / 0.1);
+  --shadow-lg: 0 12px 32px -8px oklch(0.1884 0.0128 248.5103 / 0.16);
+  --shadow-xl: 0 24px 56px -12px oklch(0.1884 0.0128 248.5103 / 0.22);
 
-  /* Contact vs. group — distinct accents so the sidebar reads at a glance. */
-  --accent-contact: #4c4ddc;
-  --accent-group: #e8663d;
+  /* Message bubbles. Outbound reuses the brand pair verbatim so the accent
+     reads as one colour across buttons and messages. */
+  --bubble-outbound: oklch(0.6723 0.1606 244.9955);
+  --bubble-outbound-foreground: oklch(0.17 0.017 248);
+  --bubble-inbound: oklch(0.9222 0.0013 286.3737);
+  --bubble-inbound-foreground: oklch(0.1884 0.0128 248.5103);
 
-  /* Message bubbles. */
-  --bubble-outbound-bg: #4c4ddc;
-  --bubble-outbound-fg: #ffffff;
-  --bubble-inbound-bg: #eeeef2;
-  --bubble-inbound-fg: #1b1d22;
-  --bubble-inbound-border: #e0dfe8;
-
-  /* JournalNotice (system_summary) — a quiet "decision record" card, not a
-     bubble, so it visibly reads as an artifact rather than a live reply. */
-  --notice-journal-bg: #f3e9d6;
-  --notice-journal-fg: #5b4a22;
-  --notice-journal-border: #d9c79a;
-  --notice-journal-rail: #a9762f;
-
-  /* RoutineRunNotice — cool/calm, "ran while you were away." */
-  --notice-routine-bg: #dceeec;
-  --notice-routine-fg: #1f4744;
-  --notice-routine-border: #b7dad6;
-  --notice-routine-rail: #0f766e;
-
-  /* user_mention in a Group thread. */
-  --notice-mention-bg: #edeafb;
-  --notice-mention-fg: #34306b;
-  --notice-mention-border: #d6d0f5;
-  --notice-mention-rail: #4c4ddc;
-
-  /* MessageBubble error variant (rate limit / sandbox denial / network). */
-  --status-error-bg: #fdecec;
-  --status-error-fg: #7a2222;
-  --status-error-border: #f3c6c6;
-
-  /* StreamingIndicator — Claude can't show live tool progress (quiet,
-     contemplative amber pulse); Codex streams live tool status (an active,
-     "signal LED" cyan). Distinct hues so the backend is obvious at a glance. */
-  --status-streaming-accent-claude: #d97706;
-  --status-streaming-accent-codex: #14b8ac;
+  /* Governance. Three levels, ordered by blast radius, shared by SandboxLevel
+     and GithubScope. Always rendered with an icon and a label — never colour
+     alone. All three clear 5:1 fg-on-bg. */
+  --scope-safe: oklch(0.45 0.02 250);
+  --scope-safe-bg: oklch(0.955 0.004 250);
+  --scope-elevated: oklch(0.5 0.115 68);
+  --scope-elevated-bg: oklch(0.955 0.035 85);
+  --scope-full: oklch(0.52 0.19 26);
+  --scope-full-bg: oklch(0.955 0.028 25);
 }
 
 .dark {
-  --background: #15161a;
-  --foreground: #ededf0;
-  --card: #1e2027;
-  --card-foreground: #ededf0;
-  --popover: #1e2027;
-  --popover-foreground: #ededf0;
-  --primary: #7c7ff0;
-  --primary-foreground: #12131a;
-  --secondary: #23252c;
-  --secondary-foreground: #ededf0;
-  --muted: #23252c;
-  --muted-foreground: #9a9ca6;
-  --accent: #23252c;
-  --accent-foreground: #ededf0;
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: #2b2d35;
-  --input: #2b2d35;
-  --ring: #7c7ff0;
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.9328 0.0025 228.7857);
+  --card: oklch(0.2097 0.008 274.5332);
+  --card-foreground: oklch(0.9328 0.0025 228.7857);
+  --popover: oklch(0.2097 0.008 274.5332);
+  --popover-foreground: oklch(0.9328 0.0025 228.7857);
 
-  --accent-contact: #7c7ff0;
-  --accent-group: #f0805a;
+  --primary: oklch(0.6692 0.1607 245.011);
+  --primary-foreground: oklch(0.17 0.017 248);
 
-  --bubble-outbound-bg: #5b5ce8;
-  --bubble-outbound-fg: #ffffff;
-  --bubble-inbound-bg: #23252c;
-  --bubble-inbound-fg: #ededf0;
-  --bubble-inbound-border: #2f313a;
+  --secondary: oklch(0.9622 0.0035 219.5331);
+  --secondary-foreground: oklch(0.1884 0.0128 248.5103);
+  --muted: oklch(0.209 0 0);
+  /* Nudged up from the source theme's 0.5637, which was 3.9:1 on --card. */
+  --muted-foreground: oklch(0.63 0.008 248);
+  --accent: oklch(0.1928 0.0331 242.5459);
+  --accent-foreground: oklch(0.6692 0.1607 245.011);
+  --destructive: oklch(0.6188 0.2376 25.7658);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.2674 0.0047 248.0045);
+  --input: oklch(0.302 0.0288 244.8244);
+  --ring: oklch(0.6818 0.1584 243.354);
 
-  --notice-journal-bg: #2a2416;
-  --notice-journal-fg: #e8d9ae;
-  --notice-journal-border: #4a3f24;
-  --notice-journal-rail: #c99a4a;
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
 
-  --notice-routine-bg: #16292a;
-  --notice-routine-fg: #a9dad6;
-  --notice-routine-border: #244745;
-  --notice-routine-rail: #2dd4c4;
+  --sidebar: oklch(0.2097 0.008 274.5332);
+  --sidebar-foreground: oklch(0.9328 0.0025 228.7857);
+  --sidebar-primary: oklch(0.6692 0.1607 245.011);
+  --sidebar-primary-foreground: oklch(0.17 0.017 248);
+  --sidebar-accent: oklch(0.1928 0.0331 242.5459);
+  --sidebar-accent-foreground: oklch(0.6692 0.1607 245.011);
+  --sidebar-border: oklch(0.3195 0.015 240.5943);
+  --sidebar-ring: oklch(0.6818 0.1584 243.354);
 
-  --notice-mention-bg: #211e3a;
-  --notice-mention-fg: #c9c4f5;
-  --notice-mention-border: #35316b;
-  --notice-mention-rail: #7c7ff0;
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.5);
+  --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.6);
+  --shadow-md: 0 4px 12px -2px oklch(0 0 0 / 0.7);
+  --shadow-lg: 0 12px 32px -8px oklch(0 0 0 / 0.8);
+  --shadow-xl: 0 24px 56px -12px oklch(0 0 0 / 0.9);
 
-  --status-error-bg: #331515;
-  --status-error-fg: #f2b8b8;
-  --status-error-border: #5c2323;
+  --bubble-outbound: oklch(0.6692 0.1607 245.011);
+  --bubble-outbound-foreground: oklch(0.17 0.017 248);
+  --bubble-inbound: oklch(0.25 0.008 265);
+  --bubble-inbound-foreground: oklch(0.9328 0.0025 228.7857);
 
-  --status-streaming-accent-claude: #f59e0b;
-  --status-streaming-accent-codex: #22d3c7;
+  --scope-safe: oklch(0.72 0.02 250);
+  --scope-safe-bg: oklch(0.265 0.008 250);
+  --scope-elevated: oklch(0.82 0.12 80);
+  --scope-elevated-bg: oklch(0.29 0.055 75);
+  --scope-full: oklch(0.72 0.16 25);
+  --scope-full-bg: oklch(0.29 0.075 25);
 }
-
-/* Falls back to OS preference until useThemeSync applies a .dark/.light
-   class on <html> — see src/renderer/src/hooks/useThemeSync.ts. */
-@media (prefers-color-scheme: dark) {
-  :root:not(.light):not(.dark) {
-    --background: #15161a;
-    --foreground: #ededf0;
-    --card: #1e2027;
-    --card-foreground: #ededf0;
-    --popover: #1e2027;
-    --popover-foreground: #ededf0;
-    --primary: #7c7ff0;
-    --primary-foreground: #12131a;
-    --secondary: #23252c;
-    --secondary-foreground: #ededf0;
-    --muted: #23252c;
-    --muted-foreground: #9a9ca6;
-    --accent: #23252c;
-    --accent-foreground: #ededf0;
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: #2b2d35;
-    --input: #2b2d35;
-    --ring: #7c7ff0;
-    --accent-contact: #7c7ff0;
-    --accent-group: #f0805a;
-    --bubble-outbound-bg: #5b5ce8;
-    --bubble-outbound-fg: #ffffff;
-    --bubble-inbound-bg: #23252c;
-    --bubble-inbound-fg: #ededf0;
-    --bubble-inbound-border: #2f313a;
-    --notice-journal-bg: #2a2416;
-    --notice-journal-fg: #e8d9ae;
-    --notice-journal-border: #4a3f24;
-    --notice-journal-rail: #c99a4a;
-    --notice-routine-bg: #16292a;
-    --notice-routine-fg: #a9dad6;
-    --notice-routine-border: #244745;
-    --notice-routine-rail: #2dd4c4;
-    --notice-mention-bg: #211e3a;
-    --notice-mention-fg: #c9c4f5;
-    --notice-mention-border: #35316b;
-    --notice-mention-rail: #7c7ff0;
-    --status-error-bg: #331515;
-    --status-error-fg: #f2b8b8;
-    --status-error-border: #5c2323;
-    --status-streaming-accent-claude: #f59e0b;
-    --status-streaming-accent-codex: #22d3c7;
-  }
-}
-
-@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -211,52 +197,158 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* App-semantic, wired here so they are real Tailwind utilities — the
+     previous revision applied these through inline style={{}}, which meant no
+     dark: variant, no hover:, and no /opacity modifier ever worked on them. */
+  --color-bubble-outbound: var(--bubble-outbound);
+  --color-bubble-outbound-foreground: var(--bubble-outbound-foreground);
+  --color-bubble-inbound: var(--bubble-inbound);
+  --color-bubble-inbound-foreground: var(--bubble-inbound-foreground);
+
+  --color-scope-safe: var(--scope-safe);
+  --color-scope-safe-bg: var(--scope-safe-bg);
+  --color-scope-elevated: var(--scope-elevated);
+  --color-scope-elevated-bg: var(--scope-elevated-bg);
+  --color-scope-full: var(--scope-full);
+  --color-scope-full-bg: var(--scope-full-bg);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-bubble: var(--radius-bubble);
 
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-
-  --color-accent-contact: var(--accent-contact);
-  --color-accent-group: var(--accent-group);
-
-  --color-bubble-outbound: var(--bubble-outbound-bg);
-  --color-bubble-outbound-fg: var(--bubble-outbound-fg);
-  --color-bubble-inbound: var(--bubble-inbound-bg);
-  --color-bubble-inbound-fg: var(--bubble-inbound-fg);
-  --color-bubble-inbound-border: var(--bubble-inbound-border);
-
-  --color-notice-journal: var(--notice-journal-bg);
-  --color-notice-journal-fg: var(--notice-journal-fg);
-  --color-notice-journal-border: var(--notice-journal-border);
-  --color-notice-journal-rail: var(--notice-journal-rail);
-
-  --color-notice-routine: var(--notice-routine-bg);
-  --color-notice-routine-fg: var(--notice-routine-fg);
-  --color-notice-routine-border: var(--notice-routine-border);
-  --color-notice-routine-rail: var(--notice-routine-rail);
-
-  --color-notice-mention: var(--notice-mention-bg);
-  --color-notice-mention-fg: var(--notice-mention-fg);
-  --color-notice-mention-border: var(--notice-mention-border);
-  --color-notice-mention-rail: var(--notice-mention-rail);
-
-  --color-status-error: var(--status-error-bg);
-  --color-status-error-fg: var(--status-error-fg);
-  --color-status-error-border: var(--status-error-border);
-
-  --color-status-streaming-claude: var(--status-streaming-accent-claude);
-  --color-status-streaming-codex: var(--status-streaming-accent-codex);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
 }
 
-body {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
-  font-family: var(--font-sans);
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    /* Inter's contextual alternates: straight-sided l and a single-storey a at
+       UI sizes, which read cleaner next to the mono face. */
+    font-feature-settings:
+      'cv05' 1,
+      'cv11' 1;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* Machine text is never proportional. Anything that is an identifier or a
+     figure gets the mono face and tabular figures so columns align. */
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* JetBrains Mono ships programming ligatures on by default, so `===` and
+     `!==` collapse into single glyphs. In a code-review tool the exact
+     operator is the thing being discussed — never abbreviate it. */
+  .font-mono,
+  code,
+  kbd,
+  pre,
+  samp {
+    font-variant-ligatures: none;
+    font-feature-settings:
+      'liga' 0,
+      'calt' 0;
+  }
+}
+
+/*
+ * Shiki emits dual-theme output (see markdown/CodeBlock.tsx: themes
+ * { light, dark } with defaultColor: false), which puts the light colour in
+ * `color:` and the dark colour in a --shiki-dark custom property. Without the
+ * rule below, dark mode renders code with light-theme colours — the previous
+ * revision shipped exactly that bug.
+ */
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+/* Overlay-style scrollbars. The stock Chromium bar is a wide light-grey slab
+   that breaks the plane split between the three panes. */
+@layer utilities {
+  .scrollbar-subtle {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--foreground) 18%, transparent);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  .scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--foreground) 32%, transparent);
+  }
+
+  /* Frameless-window drag regions. The macOS title bar is hidden (see
+     src/main/index.ts titleBarStyle: 'hiddenInset'), so the app has to say
+     which of its own chrome drags the window — and interactive children have
+     to opt back out, or they stop receiving clicks entirely. */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
 }

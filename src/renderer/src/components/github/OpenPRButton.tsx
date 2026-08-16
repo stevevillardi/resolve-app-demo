@@ -19,18 +19,24 @@ export function OpenPRButton({
 
   const copy =
     githubScope === 'open_pr'
-      ? 'Opens a pull request for review — this persona cannot push directly or merge.'
-      : 'Pushes a branch and opens a pull request. This persona also has merge access.'
+      ? 'Pushes a branch and opens a pull request for review. This persona cannot merge.'
+      : 'Pushes a branch and opens a pull request. This persona can also merge it.'
 
   return (
     <Tooltip>
-      <TooltipTrigger>
-        <Button variant="outline" size="sm" onClick={onClick} className="gap-1.5">
-          <GitPullRequest className="size-3.5" />
-          Open PR
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{copy}</TooltipContent>
+      {/* `render`, not children — the default TooltipTrigger is a <button>, so
+          wrapping one nests a button inside a button. */}
+      <TooltipTrigger
+        render={
+          <Button variant="outline" size="sm" onClick={onClick} className="gap-1.5">
+            <GitPullRequest className="size-3.5" />
+            Open PR
+          </Button>
+        }
+      />
+      <TooltipContent>
+        <span className="max-w-52 block">{copy}</span>
+      </TooltipContent>
     </Tooltip>
   )
 }

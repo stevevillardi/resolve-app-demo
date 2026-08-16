@@ -9,13 +9,14 @@ import {
   CommandList
 } from '@/components/ui/command'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ScopeChip } from '@/components/common/ScopeChip'
 import type { Contact, PersonaTemplate } from '@/types'
 
 interface MentionPickerProps {
   contacts: Contact[]
   personaTemplates: PersonaTemplate[]
   onSelect: (contact: Contact) => void
-  trigger: React.ReactNode
+  trigger: React.ReactElement
 }
 
 // Single-select only — v1 explicitly forbids @mention broadcast to multiple
@@ -35,30 +36,38 @@ export function MentionPicker({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger>{trigger}</PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-64 p-0">
+      {/* `render`, not children — wrapping a <Button> in the default trigger
+          nests a button inside a button. */}
+      <PopoverTrigger render={trigger} />
+      <PopoverContent align="start" side="top" className="w-72 p-0">
         <Command>
-          <CommandInput placeholder="Mention a contact…" />
+          <CommandInput placeholder="Mention a persona…" />
           <CommandList>
-            <CommandEmpty>No contacts in this repo.</CommandEmpty>
+            <CommandEmpty>No personas bound to this repo.</CommandEmpty>
             <CommandGroup>
               {contacts.map((contact) => {
                 const persona = personaFor(contact.personaTemplateId)
                 return (
                   <CommandItem
                     key={contact.id}
-                    value={contact.displayName}
+                    value={persona?.name ?? contact.displayName}
                     onSelect={() => {
                       onSelect(contact)
                       setOpen(false)
                     }}
+                    className="gap-2"
                   >
                     <AvatarColorSwatch
-                      name={contact.displayName}
-                      color={persona?.avatarColor ?? 'var(--accent-contact)'}
+                      name={persona?.name ?? contact.displayName}
+                      color={persona?.avatarColor ?? 'var(--muted)'}
                       size="sm"
                     />
-                    {contact.displayName}
+                    <span className="min-w-0 flex-1 truncate">
+                      {persona?.name ?? contact.displayName}
+                    </span>
+                    {/* Which persona you route to decides what can happen to
+                        the repo, so scope is part of the choice. */}
+                    {persona && <ScopeChip axis="sandbox" value={persona.sandbox} compact />}
                   </CommandItem>
                 )
               })}
