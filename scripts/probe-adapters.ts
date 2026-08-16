@@ -111,6 +111,7 @@ async function main(): Promise<void> {
     name: 'Probe',
     avatarColor: '#2a78d6',
     backend: flags.backend,
+    model: null,
     systemPrompt: flags.system,
     skillIds: flags.skillFiles.map((_, index) => `probe-skill-${index}`),
     sandbox: flags.sandbox,

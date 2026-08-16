@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { costSourceSchema } from './domain'
 
 /**
  * The normalized agent stream (blueprint §3). Both backends map their native
@@ -15,12 +16,17 @@ import { z } from 'zod'
  * Where the dollar figure came from. Claude's SDK bundles a price table and
  * returns `total_cost_usd`; Codex returns tokens only, so we compute it from
  * src/main/adapters/pricing.ts. Both are estimates, neither is billing.
+ *
+ * Re-exported from domain.ts, which owns it because UsageEvent persists it.
  */
-export const costSourceSchema = z.enum(['sdk', 'computed'])
+export { costSourceSchema }
 
 /**
  * Mirrors usageEventSchema's fields so Phase 6 can write a UsageEvent row
- * straight from this, plus the three the table doesn't keep.
+ * straight from this. The mirroring is now complete in both directions — the
+ * table gained `model`, `costSource`, `cacheWriteInputTokens` and
+ * `reasoningOutputTokens`, which this type had produced since Phase 5 with
+ * nowhere to put them.
  */
 export const agentUsageSchema = z.object({
   inputTokens: z.number(),
@@ -164,7 +170,7 @@ export const agentCapabilitiesSchema = z.object({
 
 // --- Inferred types ---------------------------------------------------------
 
-export type CostSource = z.infer<typeof costSourceSchema>
+export type { CostSource } from './domain'
 export type AgentUsage = z.infer<typeof agentUsageSchema>
 export type AgentErrorKind = z.infer<typeof agentErrorKindSchema>
 export type AgentEvent = z.infer<typeof agentEventSchema>

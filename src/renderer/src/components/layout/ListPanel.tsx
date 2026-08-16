@@ -31,6 +31,7 @@ const NEW_PERSONA: PersonaTemplateDraft = {
   name: 'New persona',
   avatarColor: '#2a78d6',
   backend: 'claude',
+  model: null,
   systemPrompt: '',
   skillIds: [],
   sandbox: 'read_only',

@@ -21,6 +21,7 @@ const PERSONA: PersonaTemplate = {
   name: 'Reviewer',
   avatarColor: '#000',
   backend: 'claude',
+  model: null,
   systemPrompt: 'You review code.',
   skillIds: [],
   sandbox: 'read_only',

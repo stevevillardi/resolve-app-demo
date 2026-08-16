@@ -21,6 +21,7 @@ const PERSONA = {
   name: 'Code Reviewer',
   avatarColor: '#2a78d6',
   backend: 'claude',
+  model: null,
   systemPrompt: 'Review carefully.',
   skillIds: ['s1'],
   sandbox: 'read_only',
@@ -54,6 +55,16 @@ describe('personaTemplate', () => {
         githubScope: 'full_access'
       })
     ).not.toThrow()
+  })
+
+  it('takes a model name or an explicit null, but not an absent one', () => {
+    // Null is a choice — "use whatever this backend defaults to" — so it has
+    // to be stated rather than left off. Free text because which models an
+    // account may use is decided by the vendor, not by this schema.
+    expect(() => personaTemplateSchema.parse({ ...PERSONA, model: 'gpt-5.5' })).not.toThrow()
+    expect(() => personaTemplateSchema.parse({ ...PERSONA, model: null })).not.toThrow()
+    const { model: _model, ...withoutModel } = PERSONA
+    expect(() => personaTemplateSchema.parse(withoutModel)).toThrow()
   })
 
   it('rejects skillIds that is not an array', () => {
@@ -208,6 +219,28 @@ describe('usageEvent', () => {
 
   it('rejects an unknown source', () => {
     expect(() => usageEventSchema.parse({ ...BASE, source: 'telepathy', costUsd: null })).toThrow()
+  })
+
+  it('records which model served the turn and where the cost came from', () => {
+    // Both are optional because rows written before migration 0004 have
+    // neither, and an absent model must not be mistaken for a known one.
+    expect(() =>
+      usageEventSchema.parse({
+        ...BASE,
+        costUsd: 0.04,
+        model: 'gpt-5.5',
+        costSource: 'computed',
+        cacheWriteInputTokens: 1845,
+        reasoningOutputTokens: 32
+      })
+    ).not.toThrow()
+    expect(() => usageEventSchema.parse({ ...BASE, costUsd: null })).not.toThrow()
+  })
+
+  it('rejects a cost source that is neither the backend nor us', () => {
+    expect(() =>
+      usageEventSchema.parse({ ...BASE, costUsd: 0.04, costSource: 'guessed' })
+    ).toThrow()
   })
 
   it('requires costUsd to be present, even as null', () => {

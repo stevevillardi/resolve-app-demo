@@ -25,6 +25,12 @@ export const groupMessageTypeSchema = z.enum([
 ])
 export const systemSummaryCategorySchema = z.enum(['decision', 'tradeoff', 'routine'])
 export const usageSourceSchema = z.enum(['message', 'routine'])
+/**
+ * Where a dollar figure came from: the backend returned it, or we computed it
+ * from src/main/adapters/pricing.ts. Defined here rather than in agent.ts
+ * because it is persisted on a UsageEvent, and agent.ts re-exports it.
+ */
+export const costSourceSchema = z.enum(['sdk', 'computed'])
 
 // --- Entities ---------------------------------------------------------------
 
@@ -40,6 +46,12 @@ export const personaTemplateSchema = z.object({
   name: z.string(),
   avatarColor: z.string(),
   backend: personaBackendSchema,
+  /**
+   * Null means the backend's own default. Free text, not an enum — model
+   * availability is decided per account by the vendor, so the set of valid
+   * values is not knowable here (see src/main/db/schema.ts).
+   */
+  model: z.string().nullable(),
   systemPrompt: z.string(),
   skillIds: z.array(z.string()),
   /** Two independent axes (blueprint §4): disk access and GitHub authority. */
@@ -100,6 +112,12 @@ export const routineSchema = z.object({
   lastRunSummary: z.string().nullable()
 })
 
+/**
+ * One row per turn. Mirrors AgentUsage (src/shared/agent.ts) field for field,
+ * so the adapter layer's output can be persisted without dropping anything —
+ * it used to keep only tokens and cost, which left the model that served the
+ * turn unrecorded and its spend unattributable.
+ */
 export const usageEventSchema = z.object({
   id: z.string(),
   contactId: z.string(),
@@ -108,8 +126,14 @@ export const usageEventSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cachedInputTokens: z.number().optional(),
-  /** Claude reports a figure; Codex doesn't, so it's computed or null (§3). */
-  costUsd: z.number().nullable()
+  cacheWriteInputTokens: z.number().optional(),
+  reasoningOutputTokens: z.number().optional(),
+  /** Null when no price is known — never 0, which reads as free (§3). */
+  costUsd: z.number().nullable(),
+  /** Recorded per event: a persona's model can change, its history can't. */
+  model: z.string().optional(),
+  /** Whether costUsd came from the backend or from our own price table. */
+  costSource: costSourceSchema.optional()
 })
 
 // --- Write shapes -----------------------------------------------------------
@@ -130,6 +154,7 @@ export type MessageRole = z.infer<typeof messageRoleSchema>
 export type GroupMessageType = z.infer<typeof groupMessageTypeSchema>
 export type SystemSummaryCategory = z.infer<typeof systemSummaryCategorySchema>
 export type UsageSource = z.infer<typeof usageSourceSchema>
+export type CostSource = z.infer<typeof costSourceSchema>
 
 export type Skill = z.infer<typeof skillSchema>
 export type PersonaTemplate = z.infer<typeof personaTemplateSchema>

@@ -37,6 +37,17 @@ export const personaTemplates = sqliteTable('persona_templates', {
   name: text('name').notNull(),
   avatarColor: text('avatar_color').notNull(),
   backend: text('backend', { enum: ['claude', 'codex'] }).notNull(),
+  /**
+   * Null means "whatever this backend defaults to", which is what every
+   * persona created before this column existed gets — so no backfill.
+   *
+   * Free text rather than an enum: which models an account may actually use is
+   * decided by the vendor at request time, not by us. A ChatGPT-plan Codex
+   * account rejects model names the CLI itself knows about (see
+   * DEFAULT_CODEX_MODEL), so an enum here would encode one account's
+   * entitlements as everyone's schema.
+   */
+  model: text('model'),
   systemPrompt: text('system_prompt').notNull(),
   /**
    * A JSON array rather than a join table, per blueprint §4. Skills are
@@ -145,10 +156,26 @@ export const usageEvents = sqliteTable(
     /**
      * REAL, not INTEGER — a turn costs fractions of a cent, and INTEGER
      * affinity on a dollar amount is the kind of thing that reads fine until
-     * someone rounds it. Null for Codex, which reports tokens but no dollar
-     * figure (§3).
+     * someone rounds it. Null when the model has no published price (§3).
      */
-    costUsd: real('cost_usd')
+    costUsd: real('cost_usd'),
+    /**
+     * The model that served this turn, recorded per event rather than read off
+     * the persona. A persona's model can be changed at any time, and pricing
+     * differs by an order of magnitude between them — attributing old spend to
+     * the current setting would silently reprice history.
+     */
+    model: text('model'),
+    /**
+     * Whether costUsd came from the backend or from our own price table
+     * (src/main/adapters/pricing.ts). The dashboard should not present an
+     * estimate we computed and a figure the vendor returned as the same kind
+     * of number.
+     */
+    costSource: text('cost_source', { enum: ['sdk', 'computed'] }),
+    /** Both backends report these; neither is included in the two above. */
+    cacheWriteInputTokens: integer('cache_write_input_tokens'),
+    reasoningOutputTokens: integer('reasoning_output_tokens')
   },
   (table) => [index('usage_events_contact_timestamp_idx').on(table.contactId, table.timestamp)]
 )

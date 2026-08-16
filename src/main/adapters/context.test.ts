@@ -13,6 +13,7 @@ function persona(skillIds: string[], systemPrompt = 'You review code.'): Persona
     name: 'Reviewer',
     avatarColor: '#000',
     backend: 'claude',
+    model: null,
     systemPrompt,
     skillIds,
     sandbox: 'read_only',

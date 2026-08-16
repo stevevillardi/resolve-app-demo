@@ -58,6 +58,9 @@ export function toPersonaTemplate(row: PersonaTemplateRow): PersonaTemplate {
     name: row.name,
     avatarColor: row.avatarColor,
     backend: row.backend,
+    // Nullable rather than optional: "use the backend default" is a choice the
+    // user can make, not an absent value.
+    model: row.model,
     systemPrompt: row.systemPrompt,
     skillIds: row.skillIds,
     sandbox: row.sandbox,
@@ -123,6 +126,10 @@ export function toUsageEvent(row: UsageEventRow): UsageEvent {
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
     costUsd: row.costUsd,
-    ...optional('cachedInputTokens', row.cachedInputTokens)
+    ...optional('cachedInputTokens', row.cachedInputTokens),
+    ...optional('cacheWriteInputTokens', row.cacheWriteInputTokens),
+    ...optional('reasoningOutputTokens', row.reasoningOutputTokens),
+    ...optional('model', row.model),
+    ...optional('costSource', row.costSource)
   }
 }
