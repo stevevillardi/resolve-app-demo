@@ -457,9 +457,49 @@ export async function headSha(workingPath: string): Promise<string | null> {
 
 /** Whether there is anything uncommitted, tracked or not. */
 export async function isDirty(workingPath: string): Promise<boolean> {
+  return (await dirtyFiles(workingPath)).length > 0
+}
+
+/**
+ * Everything uncommitted, tracked or not.
+ *
+ * The paths matter and not just the count: a persona that ended a turn without
+ * committing has to be told *what* it left behind, or the user has to go and
+ * look before they can decide whether to commit it or throw it away.
+ */
+export async function dirtyFiles(workingPath: string): Promise<string[]> {
   const result = await git(['status', '--porcelain'], workingPath)
   if (result.code !== 0) throw localGitError(`Could not read the status of ${workingPath}`, result)
-  return result.stdout.trim().length > 0
+
+  return result.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.slice(3).trim())
+}
+
+/** The checked-out branch, or null when HEAD is detached or the repo is empty. */
+export async function currentBranch(workingPath: string): Promise<string | null> {
+  const result = await git(['symbolic-ref', '--quiet', '--short', 'HEAD'], workingPath)
+  return result.code === 0 ? result.stdout.trim() || null : null
+}
+
+/**
+ * Subject lines of the commits `branch` has and `base` does not.
+ *
+ * Null — distinct from an empty array — when the range cannot be resolved,
+ * which happens when the repo has no local ref for the remote's default branch.
+ * The difference matters: empty means "nothing to open a PR about" and is worth
+ * refusing on, while null means "this check cannot be run here" and must not be
+ * mistaken for it.
+ */
+export async function commitSubjects(
+  repoPath: string,
+  base: string,
+  branch: string
+): Promise<string[] | null> {
+  const result = await git(['log', '--format=%s', `${base}..${branch}`], repoPath)
+  if (result.code !== 0) return null
+  return result.stdout.split('\n').filter(Boolean)
 }
 
 /**
