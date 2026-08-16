@@ -83,15 +83,14 @@ describe('acquire', () => {
   })
 
   // The whole point of narrowing blueprint §15D: this pair is Journey 2, and
-  // under the blueprint's literal repo-wide lock it would not run.
-  it('lets a reader and a writer run together', () => {
-    expect(acquire(holder('shared'))).not.toBeNull()
-    expect(acquire(holder('exclusive'))).toBeNull()
-
-    resetRunLocks()
-
+  // under the blueprint's literal repo-wide lock it would not run. Written from
+  // the claim in 00-progress.md ("readers are unlimited and never refused"),
+  // not from the implementation — the previous version of this test asserted
+  // the reader was refused, which is the behaviour the claim rules out.
+  it('admits a reader while a writer holds', () => {
     expect(acquire(holder('exclusive'))).not.toBeNull()
-    expect(acquire(holder('shared'))).toBeNull()
+    expect(acquire(holder('shared'))).not.toBeNull()
+    expect(holdersOf(REPO)).toHaveLength(2)
   })
 
   it('refuses a second writer on the same path', () => {
@@ -104,9 +103,16 @@ describe('acquire', () => {
     expect(acquire(holder('exclusive'))).toBeNull()
   })
 
-  it('refuses a reader while a writer holds', () => {
+  // The property, stated directly: nothing on the path refuses a reader. A
+  // reader that is admitted only because the path happens to be quiet would
+  // pass the test above without this holding.
+  it('never refuses a reader, whatever else holds the path', () => {
     acquire(holder('exclusive'))
-    expect(acquire(holder('shared'))).toBeNull()
+    acquire(holder('shared'))
+
+    expect(blockingHolder(REPO, 'shared')).toBeNull()
+    expect(acquire(holder('shared'))).not.toBeNull()
+    expect(holdersOf(REPO)).toHaveLength(3)
   })
 
   it('does not let one path block another', () => {
@@ -169,9 +175,16 @@ describe('release', () => {
 })
 
 describe('blockingHolder', () => {
-  it('names the writer that refuses a reader', () => {
+  // Replaces an earlier case that named the writer refusing a *reader*. That
+  // premise is gone: a reader is never refused, so there is no holder to name.
+  it('names the writer that refuses another writer', () => {
     acquire(holder('exclusive', REPO, 'Refactor Buddy'))
-    expect(blockingHolder(REPO, 'shared')?.contactName).toBe('Refactor Buddy')
+    expect(blockingHolder(REPO, 'exclusive')?.contactName).toBe('Refactor Buddy')
+  })
+
+  it('names nobody when a reader asks, whatever holds the path', () => {
+    acquire(holder('exclusive', REPO, 'Refactor Buddy'))
+    expect(blockingHolder(REPO, 'shared')).toBeNull()
   })
 
   it('names a reader that refuses a writer', () => {
