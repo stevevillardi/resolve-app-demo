@@ -63,6 +63,13 @@ export interface SessionSpec {
    * branch` and `git worktree` are denied at read_only on purpose.
    */
   siblingBranches?: SiblingBranch[]
+  /**
+   * Set only when the session runs somewhere other than its repository, so the
+   * prompt can say where that is. See the comment in composeInstructions: a
+   * worktree session can write to the repo's git admin directory, and a model
+   * given a bare relative filename will sometimes resolve it against that.
+   */
+  workingContext?: { workingPath: string; repoPath: string; branch: string }
   /** Already resolved from persona.skillIds by the caller (blueprint §5). */
   skills: Skill[]
   /**

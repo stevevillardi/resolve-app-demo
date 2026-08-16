@@ -310,6 +310,17 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
       // group context, so a branch created between two turns is visible on the
       // next one.
       siblingBranches: siblingBranchesFor(contact),
+      // Only when it is not the repo: a Contact working in its own repo needs
+      // no explanation of where it is.
+      ...(contact.worktreePath && contact.branch
+        ? {
+            workingContext: {
+              workingPath: contact.worktreePath,
+              repoPath: contact.repoPath,
+              branch: contact.branch
+            }
+          }
+        : {}),
       // What this session has already been billed for. Codex reports usage
       // cumulatively across a thread, so without this every turn after the
       // first over-reports — see baselineFor(). Claude ignores it.

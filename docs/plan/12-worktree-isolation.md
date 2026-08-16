@@ -1,6 +1,6 @@
 # Phase 12 — Worktree Isolation
 
-**Status:** In review — built and verified except the paid live checks (see below)
+**Status:** Done — every acceptance check verified, including live on both backends
 **Blueprint refs:** §6 (shared context), §15D (concurrency), §13 (v1 scope cuts)
 **Depends on:** Phase 6 (the write lock and its `workingPathFor` seam), Phase 7 (durable summaries, which carry branch awareness)
 **Runs:** between Phases 8 and 9 in execution order, despite the number — numbered 12 so nothing else had to be renumbered.
@@ -200,24 +200,32 @@ discover them:
       `exclusive` — the bind flow disables the worktree option with the reason
       when the folder is not a repo.
 
-### Still open: the paid live checks
+### The paid live checks, run 2026-08-16
 
-Three checks need real backend turns and so real money, and have not been run:
+All three ran against real backends, on **both** Claude and Codex, in
+`src/main/services/worktrees.live.test.ts` (skipped unless `LIVE_WORKTREES=1`,
+the same house rule as `journey2.live.test.ts`). Running per backend is the
+point rather than thoroughness theatre: the two reach the sandbox by different
+routes — `sandbox.filesystem.allowWrite` versus `--add-dir` — so one passing
+says nothing about the other.
 
-1. **A worktree writer actually commits, per backend.** Verified free for Codex
-   against its own sandbox (`codex sandbox`, in a repo outside `/tmp` so its
-   unconditional `/tmp` grant could not confound it): without the grant `git
-   add` fails on `index.lock`, with it add and commit both succeed, and
-   `.git/hooks` and the home directory stay denied. **Claude is unverified.** It
-   takes a different configuration path (`sandbox.filesystem.allowWrite` rather
-   than `--add-dir`), and one backend passing says nothing about the other. The
-   OS primitive underneath is the same seatbelt fence, and the same four paths
-   were proven sufficient there by hand — but that is evidence, not the check.
-2. **Two writers running at the same time and both completing.** The separation
-   is proven; concurrent completion is not.
-3. **A `read_only` persona reading a sibling branch mid-turn.** The commands are
-   allowed and work under a fence; a model actually using them is unverified.
+- [x] **A worktree writer actually commits.** Claude: reply *"Add GREETING
+      constant to util.ts"*, branch moved past `main`, `git show <branch>:util.ts`
+      contains the constant, and the user's own checkout is untouched and clean.
+      Codex: the same, on the same assertions.
+- [x] **Two writers run at once and both complete.** Neither refused, each file
+      present in its own tree and absent from the other's and from the user's.
+- [x] **A `read_only` Contact reads an unmerged sibling branch.** Asked for the
+      name of a constant that exists only on the writer's branch, it answered
+      `GREETING` — a string that appears nowhere in its own working directory
+      and nowhere in the prompt.
 
+Cost: about $0.84 per full Claude run at `claude-sonnet-5`, $0.08 on Codex at
+`gpt-5.4-mini`.
+
+Branch awareness was confirmed as a side effect, which is the cheapest kind of
+confirmation: the summaries came back stamped `on persona/refactor-buddy-…` with
+text of their own accord saying the work *"is not checked out in the main tree"*.
 
 ## Verified live (2026-08-16)
 
@@ -242,6 +250,37 @@ Everything below was measured, not reasoned about.
   the worktree name, forcing the worktree removal, granting the whole `.git`,
   and swapping `merge-tree` back for `merge --no-commit` each fail exactly the
   test written from the corresponding claim.
+
+## The defect the live pass found
+
+Gate 2 failed the first time it ran on `claude-sonnet-5`, and only there: seven
+runs on haiku and every Codex run passed. The failure was a permission denial on
+one writer, and the message named no path, so the first job was to make the
+adapter say *what* had been refused. With that in place it reproduced
+immediately and both writers named the same shape of target:
+
+    Blocked Write: this persona's sandbox does not allow it.
+    Refused: …/my-app/.git/worktrees/refactor-buddy-9d98/a.ts
+
+Asked to create `a.ts`, the model resolved the bare relative name against the
+repository's **git admin directory** — which is writable, because that is where
+git puts the index a commit has to lock — rather than against its own working
+tree. The right basename, the wrong parent. Both layers refused it correctly, so
+nothing escaped; the turn simply failed to do its work.
+
+Gate 1 never hit this because it *edits an existing file*, which gives the model
+an unambiguous path. It takes a **new** file with a bare name to expose it — and
+personas create files constantly, so this was a real defect rather than an
+artefact of the test prompt.
+
+The fix is to stop leaving it ambiguous: a session running somewhere other than
+its repo now gets a short "Where you are working" block naming its working
+directory, its repo, its branch, and saying not to write inside `.git`. Two
+sonnet runs of gate 2 immediately after, then a third full-file run in the exact
+configuration that had failed: no denials in any of them.
+
+Worth stating plainly: **no unit test could have found this.** Every one of them
+mocks the adapter, and a mocked adapter never resolves a path.
 
 ## Limitations, recorded rather than solved
 

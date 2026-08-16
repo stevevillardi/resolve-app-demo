@@ -213,3 +213,65 @@ describe('sibling branches', () => {
     )
   })
 })
+
+describe('working context', () => {
+  const working = {
+    workingPath:
+      '/Users/dev/Library/Application Support/persona-router/worktrees/my-app/buddy-a3f9',
+    repoPath: '/Users/dev/code/my-app',
+    branch: 'persona/buddy-a3f9'
+  }
+
+  it('is absent when the session runs in its own repo', () => {
+    expect(composeInstructions(spec(persona([]), []))).not.toContain('Where you are working')
+  })
+
+  it('names the working directory, the repo and the branch', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      workingContext: working
+    })
+
+    expect(composed).toContain(working.workingPath)
+    expect(composed).toContain(working.repoPath)
+    expect(composed).toContain(working.branch)
+  })
+
+  // Not decoration. A worktree session is granted write access to the repo's
+  // `.git/worktrees/<name>` so git can lock its index, and a model asked to
+  // create a file with a bare relative name resolved it against *that*
+  // directory — observed live on two concurrent writers, both refused. Saying
+  // where the work goes is what removed the ambiguity.
+  it('tells the session to keep out of .git', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      workingContext: working
+    })
+
+    expect(composed).toMatch(/never write inside `\.git`/i)
+  })
+
+  // Ahead of the volatile blocks and behind the persona, so the cached prefix
+  // keeps growing rather than being invalidated by a colleague's summary.
+  it('comes before the group context', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      workingContext: working,
+      groupContext: [
+        {
+          id: 'gm1',
+          groupId: 'g1',
+          timestamp: 1_700_000_000_000,
+          type: 'system_summary',
+          content: 'a colleague decided something',
+          category: 'decision',
+          durable: true
+        }
+      ]
+    })
+
+    expect(composed.indexOf(working.branch)).toBeLessThan(
+      composed.indexOf('a colleague decided something')
+    )
+  })
+})
