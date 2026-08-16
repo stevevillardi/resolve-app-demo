@@ -48,7 +48,15 @@ describe('contract shape', () => {
         'contacts.list',
         'contacts.get',
         'contacts.create',
-        'groups.list'
+        'groups.list',
+        // Phase 6
+        'messages.list',
+        'messages.previews',
+        'messages.send',
+        'messages.cancel',
+        'runs.list',
+        'usage.list',
+        'models.listForBackend'
       ])
     )
   })

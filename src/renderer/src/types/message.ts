@@ -9,8 +9,17 @@ import type { PersistedMessage } from '../../../shared/domain'
 
 export type MessageBubbleStatus = 'sent' | 'streaming' | 'error'
 
+/**
+ * Kinds are AgentErrorKind (src/shared/agent.ts) exactly, so a failure assigns
+ * straight across with no translation table.
+ *
+ * `auth` and `unknown` were missing until Phase 6 wired real turns up, and
+ * their absence was worse than it looks: `unknown` is what
+ * classifyErrorMessage() returns by default, so the one kind that could not be
+ * rendered was the common case rather than an edge one.
+ */
 export interface MessageBubbleError {
-  kind: 'rate_limit' | 'sandbox_denied' | 'network'
+  kind: 'rate_limit' | 'sandbox_denied' | 'network' | 'auth' | 'unknown'
   message: string
 }
 

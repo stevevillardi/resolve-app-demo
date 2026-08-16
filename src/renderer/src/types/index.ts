@@ -19,6 +19,8 @@ export type {
   Contact,
   Group,
   GroupMessage,
+  /** The stored five fields. `Message` below adds the in-flight pair. */
+  PersistedMessage,
   Routine,
   UsageEvent,
   SkillDraft,

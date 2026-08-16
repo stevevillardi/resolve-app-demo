@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +11,18 @@ interface ComposerProps {
   leadingAction?: ReactNode
   /** Shown under the field — e.g. which persona and sandbox will handle this. */
   hint?: ReactNode
+  /**
+   * A turn is running: the send button becomes a stop button.
+   *
+   * Typing stays enabled on purpose — composing the next message while the
+   * current one runs is normal, and only *sending* has to wait.
+   */
+  busy?: boolean
+  onStop?: () => void
+  /** Blocks sending outright — another persona holds this repo (§15D). */
+  disabled?: boolean
+  /** Why sending is blocked. Replaces the hint while set. */
+  notice?: ReactNode
 }
 
 const MAX_HEIGHT = 168
@@ -21,7 +33,11 @@ export function Composer({
   onValueChange,
   value: controlledValue,
   leadingAction,
-  hint
+  hint,
+  busy = false,
+  onStop,
+  disabled = false,
+  notice
 }: ComposerProps): React.JSX.Element {
   const [internalValue, setInternalValue] = useState('')
   const isControlled = controlledValue !== undefined
@@ -45,7 +61,7 @@ export function Composer({
   }
 
   const handleSend = (): void => {
-    if (!value.trim()) return
+    if (!value.trim() || disabled || busy) return
     onSend?.(value.trim())
     if (!isControlled) setInternalValue('')
     onValueChange?.('')
@@ -76,19 +92,36 @@ export function Composer({
           rows={1}
           className="placeholder:text-muted-foreground min-h-8 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-sm leading-relaxed outline-none"
         />
-        <Button
-          size="icon-sm"
-          onClick={handleSend}
-          disabled={!value.trim()}
-          aria-label="Send message"
-          className="rounded-full"
-        >
-          <ArrowUp className="size-4" />
-        </Button>
+        {busy ? (
+          <Button
+            size="icon-sm"
+            variant="secondary"
+            onClick={onStop}
+            aria-label="Stop generating"
+            className="rounded-full"
+          >
+            <Square className="size-3 fill-current" />
+          </Button>
+        ) : (
+          <Button
+            size="icon-sm"
+            onClick={handleSend}
+            disabled={!value.trim() || disabled}
+            aria-label="Send message"
+            className="rounded-full"
+          >
+            <ArrowUp className="size-4" />
+          </Button>
+        )}
       </div>
-      {hint && (
-        <div className="text-muted-foreground mt-1.5 flex items-center gap-1.5 px-1 text-[11px]">
-          {hint}
+      {(notice ?? hint) && (
+        <div
+          className={cn(
+            'mt-1.5 flex items-center gap-1.5 px-1 text-[11px]',
+            notice ? 'text-destructive' : 'text-muted-foreground'
+          )}
+        >
+          {notice ?? hint}
         </div>
       )}
     </div>

@@ -3,10 +3,13 @@ import {
   contactDraftSchema,
   contactSchema,
   groupSchema,
+  messageSchema,
+  personaBackendSchema,
   personaTemplateDraftSchema,
   personaTemplateSchema,
   skillDraftSchema,
-  skillSchema
+  skillSchema,
+  usageEventSchema
 } from './domain'
 
 /**
@@ -71,6 +74,24 @@ const authStatusSchema = z.object({
 })
 
 const apiKeyInputSchema = z.object({ apiKey: z.string().min(1) })
+
+/**
+ * One in-flight turn, as the UI needs to see it (Phase 6).
+ *
+ * `contactName` rather than just an id because its whole job is to be shown in
+ * a sentence — "Refactor Buddy is already working in this repo" — and the
+ * renderer would otherwise have to join back to the contact list to say so.
+ */
+const activeRunSchema = z.object({
+  runId: z.string(),
+  contactId: z.string(),
+  contactName: z.string(),
+  /** What is locked. Equal to the contact's repoPath until worktrees land. */
+  workingPath: z.string(),
+  /** `shared` runs cannot write, so any number of them may overlap. */
+  mode: z.enum(['shared', 'exclusive']),
+  startedAt: z.number()
+})
 
 export const ipcContract = {
   ping: {
@@ -199,6 +220,55 @@ export const ipcContract = {
     output: z.array(groupSchema)
   },
 
+  // --- Messaging (Phase 6, blueprint §16 Journey 1) -----------------------
+  // `send` returns as soon as the turn is running, not when it finishes: the
+  // reply arrives on the push channel (src/shared/agent.ts), keyed by the runId
+  // returned here. A turn can take minutes, which is far too long to hold an
+  // invoke open.
+  'messages.list': {
+    input: z.object({ contactId: z.string() }),
+    output: z.array(messageSchema)
+  },
+  /** Latest message per contact — ConversationList's preview line. */
+  'messages.previews': {
+    input: z.void(),
+    output: z.array(messageSchema)
+  },
+  /** Rejects when another persona holds the repo; the error names it. */
+  'messages.send': {
+    input: z.object({ contactId: z.string(), content: z.string().min(1) }),
+    output: z.object({ runId: z.string(), userMessage: messageSchema })
+  },
+  /** False when the run already finished — a stop that arrives too late. */
+  'messages.cancel': {
+    input: z.object({ runId: z.string() }),
+    output: z.object({ cancelled: z.boolean() })
+  },
+
+  /**
+   * Everything running right now, across every repo. The renderer needs the
+   * whole set rather than its own contact's: a turn on a *sibling* contact is
+   * what disables this thread's composer (blueprint §15D).
+   */
+  'runs.list': {
+    input: z.void(),
+    output: z.array(activeRunSchema)
+  },
+
+  'usage.list': {
+    input: z.object({ contactId: z.string().optional() }),
+    output: z.array(usageEventSchema)
+  },
+
+  /**
+   * Hardcoded per backend and dated — neither SDK can be asked what an account
+   * may use, so this is a menu rather than a guarantee (see adapters/models.ts).
+   */
+  'models.listForBackend': {
+    input: z.object({ backend: personaBackendSchema }),
+    output: z.array(z.string())
+  },
+
   /** Opens a verification URL in the user's real browser. Host-allowlisted in main. */
   'shell.openExternal': {
     input: z.object({ url: z.string().url() }),
@@ -216,3 +286,4 @@ export type ClaudeAuthStatus = z.infer<typeof claudeStatusSchema>
 export type CodexAuthStatus = z.infer<typeof codexStatusSchema>
 export type GitHubAuthStatus = z.infer<typeof githubStatusSchema>
 export type AuthStatus = z.infer<typeof authStatusSchema>
+export type ActiveRun = z.infer<typeof activeRunSchema>

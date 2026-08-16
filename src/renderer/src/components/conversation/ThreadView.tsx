@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react'
+import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
@@ -11,32 +11,68 @@ import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
 import { MessageBubble } from './MessageBubble'
 import { Composer } from './Composer'
+import { useContacts } from '@/hooks/useConversations'
+import { usePersonas } from '@/hooks/usePersonas'
+import {
+  useActiveRuns,
+  useAgentStream,
+  useCancelRun,
+  useMessages,
+  useSendMessage
+} from '@/hooks/useMessages'
+import { useUsageEvents } from '@/hooks/useUsage'
+import { useRunStore } from '@/store/useRunStore'
+import { streamText } from '@/lib/stream'
 import { usageForContact } from '@/lib/usage'
 import { isSameDay } from '@/lib/format'
-// Still mock-fed: real messages and usage events need a live session, so
-// this view is rewritten in Phase 6 (docs/plan/06-core-messaging.md).
-import { contacts, messages, personaTemplates, usageEvents } from '@/mocks'
 
 interface ThreadViewProps {
   contactId: string
 }
 
 export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
-  const contact = useMemo(() => contacts.find((c) => c.id === contactId), [contactId])
-  const persona = useMemo(
-    () => personaTemplates.find((p) => p.id === contact?.personaTemplateId),
-    [contact]
+  const { data: contacts = [] } = useContacts()
+  const { data: personas = [] } = usePersonas()
+  const { data: thread = [] } = useMessages(contactId)
+  const { data: usageEvents = [] } = useUsageEvents(contactId)
+  const { data: runs = [] } = useActiveRuns()
+
+  const contact = contacts.find((candidate) => candidate.id === contactId)
+  const persona = personas.find((candidate) => candidate.id === contact?.personaTemplateId)
+
+  const turn = useRunStore((state) => state.byContact[contactId])
+  useAgentStream(contactId)
+
+  const { send, error: sendError, reset } = useSendMessage(contactId)
+  const { cancel } = useCancelRun()
+
+  const usage = useMemo(() => usageForContact(usageEvents, contactId), [usageEvents, contactId])
+
+  // A turn on *another* contact bound to the same repo is what blocks this one
+  // (blueprint §15D), so the check is by working path, not by contact.
+  const blocker = runs.find(
+    (run) => run.contactId !== contactId && run.workingPath === contact?.repoPath
   )
-  const thread = useMemo(
-    () =>
-      messages.filter((m) => m.contactId === contactId).sort((a, b) => a.timestamp - b.timestamp),
-    [contactId]
-  )
-  const usage = useMemo(() => usageForContact(usageEvents, contactId), [contactId])
+
+  const contentRef = useRef<HTMLDivElement>(null)
+  const streamed = turn ? streamText(turn.stream) : ''
+
+  // Follow the reply as it arrives. Keyed on the streamed text rather than just
+  // the message count, so it also tracks a bubble growing in place.
+  //
+  // Anchored on the content and walked up to the viewport: ScrollArea is a Base
+  // UI Root whose props type doesn't promise to carry a ref through to the
+  // scrolling element, and the viewport is the thing that actually scrolls.
+  useEffect(() => {
+    const viewport = contentRef.current?.closest('[data-slot="scroll-area-viewport"]')
+    if (viewport) viewport.scrollTop = viewport.scrollHeight
+  }, [thread.length, streamed])
 
   if (!contact || !persona) {
     return <EmptyState icon={MessageSquare} title="Conversation not found" />
   }
+
+  const isRunning = Boolean(turn && !turn.stream.finished)
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
@@ -54,8 +90,8 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
       />
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
-          {thread.length === 0 ? (
+        <div ref={contentRef} className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4">
+          {thread.length === 0 && !turn ? (
             <EmptyState
               icon={MessageSquare}
               title="No messages yet"
@@ -72,19 +108,56 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                     role={message.role}
                     content={message.content}
                     timestamp={message.timestamp}
-                    status={message.status}
-                    error={message.error}
                     backend={persona.backend}
                   />
                 </Fragment>
               )
             })
           )}
+
+          {/*
+            The live bubble. It shows while a turn runs and disappears once the
+            identical row has been refetched — useAgentStream clears the store
+            only after invalidation resolves, so the text never blinks out and
+            back in.
+          */}
+          {turn && !turn.stream.error && (
+            <MessageBubble
+              role="assistant"
+              content={streamed}
+              status="streaming"
+              backend={persona.backend}
+              activity={turn.stream.activity}
+            />
+          )}
+
+          {turn?.stream.error && (
+            <MessageBubble
+              role="assistant"
+              content={streamed}
+              status="error"
+              error={turn.stream.error}
+              backend={persona.backend}
+            />
+          )}
         </div>
       </ScrollArea>
 
       <Composer
         placeholder={`Message ${persona.name}…`}
+        onSend={(value) => {
+          reset()
+          send(value)
+        }}
+        busy={isRunning}
+        onStop={() => turn && cancel(turn.runId)}
+        disabled={Boolean(blocker)}
+        notice={
+          sendError ??
+          (blocker
+            ? `${blocker.contactName} is working in this repo. Wait for it to finish, or stop it from that conversation.`
+            : undefined)
+        }
         hint={
           // Scope lives beside the send button rather than buried in the
           // header: what this persona is allowed to do is exactly what you
