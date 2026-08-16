@@ -1,4 +1,5 @@
 import { runRoutineTurn } from './messaging'
+import { openPullRequest, pullRequestState } from './pull-requests'
 import { getRoutine, listEnabledRoutines, listRoutines, recordRunOutcome } from './routines'
 import type { TurnOutcome } from './turn-origin'
 
@@ -169,15 +170,67 @@ export function fireRoutine(routineId: string): RoutineFire {
   }
 
   inFlight.add(routineId)
-  const completed = turn.completed.then((outcome) => {
+  const completed = turn.completed.then(async (outcome) => {
     inFlight.delete(routineId)
     const result = resultOf(outcome)
+
+    // Recorded before the pull request is attempted, and again afterwards if
+    // there is anything to add. GitHub is a network call with no deadline of
+    // its own; holding the run's own bookkeeping behind it would leave a fire
+    // that plainly happened looking like it never did.
     recordRunOutcome(routineId, result.summary)
     onChange?.()
+
+    const pr = await raisePullRequest(routine.contactId, result)
+    if (pr) {
+      recordRunOutcome(routineId, `${result.summary} ${pr}`.trim())
+      onChange?.()
+    }
+
     return result
   })
 
   return { runId: turn.runId, completed }
+}
+
+/**
+ * The pull request at the end of a routine run (blueprint §16 Journey 3).
+ *
+ * Blueprint §9 says a remote action is "an explicit action... not an automatic
+ * side effect", and this looks like the exception. It isn't: the explicit act is
+ * setting up the routine — choosing a persona with `open_pr`, writing the
+ * prompt, enabling the schedule — rather than a click per fire. Nobody is
+ * watching a 3am run, so requiring a click there would mean the work simply sits
+ * on a branch nobody knows about, which is the failure this whole phase exists
+ * to prevent. What stays true is the bound: a PR, never a push to the default
+ * branch, and never a merge.
+ *
+ * Runs after the lock is released and after the summariser has settled, so the
+ * body can quote the persona's own account of what it did.
+ *
+ * Every failure is folded into the run's summary rather than raised. A routine
+ * that did its work and could not open a pull request has still done its work —
+ * failing the run would misreport that, and there is nobody at the screen to
+ * tell either way. The refusals are legible on purpose: "left 2 uncommitted
+ * changes", "has a read_only GitHub scope".
+ */
+async function raisePullRequest(
+  contactId: string,
+  result: RoutineRunResult
+): Promise<string | null> {
+  if (result.status !== 'completed') return null
+
+  try {
+    const { available } = await pullRequestState(contactId)
+    // Not an error worth reporting: most Contacts have no pull-request path at
+    // all, and a routine on one is the normal case rather than a misconfiguration.
+    if (!available) return null
+
+    const pr = await openPullRequest(contactId)
+    return pr.action === 'created' ? `Opened PR #${pr.number}.` : `Commented on PR #${pr.number}.`
+  } catch (error) {
+    return `Could not open a pull request: ${messageOf(error)}`
+  }
 }
 
 /**

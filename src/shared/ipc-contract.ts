@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   contactDraftSchema,
   contactSchema,
+  githubScopeSchema,
   groupMessageSchema,
   groupSchema,
   messageSchema,
@@ -132,7 +133,32 @@ export const branchSummarySchema = z.object({
   contactId: z.string().nullable(),
   contactName: z.string().nullable(),
   files: z.array(z.string()),
-  hasWorktree: z.boolean()
+  hasWorktree: z.boolean(),
+  /**
+   * The GitHub authority of the persona behind this branch, so the panel knows
+   * whether to offer a pull request. Null when the Contact is gone — an orphan
+   * branch has no persona to authorise anything, and can only be merged or
+   * discarded.
+   */
+  githubScope: githubScopeSchema.nullable()
+})
+
+/** An open pull request, as GitHub reports it. Never stored — see pull-requests.ts. */
+export const prRefSchema = z.object({
+  number: z.number(),
+  url: z.string(),
+  title: z.string()
+})
+
+export const prStateSchema = z.object({
+  /** Whether this Contact has a pull-request path at all. False hides the action. */
+  available: z.boolean(),
+  pr: prRefSchema.nullable()
+})
+
+export const prResultSchema = prRefSchema.extend({
+  /** `commented` when the branch already had a pull request open. */
+  action: z.enum(['created', 'commented'])
 })
 
 export const mergeTargetSchema = z.object({
@@ -143,6 +169,9 @@ export const mergeTargetSchema = z.object({
 
 export type BranchSummary = z.infer<typeof branchSummarySchema>
 export type MergeTarget = z.infer<typeof mergeTargetSchema>
+export type PrRef = z.infer<typeof prRefSchema>
+export type PrState = z.infer<typeof prStateSchema>
+export type PrResult = z.infer<typeof prResultSchema>
 
 export const ipcContract = {
   ping: {
@@ -201,6 +230,24 @@ export const ipcContract = {
   'github.disconnect': {
     input: z.void(),
     output: githubStatusSchema
+  },
+
+  // --- Remote actions (Phase 9, blueprint §9.2) ------------------------------
+  // Keyed by Contact rather than by branch, because the permission being
+  // checked belongs to a persona: an orphan branch has nobody to authorise it.
+
+  /** Whether to offer the action, and the pull request it already has. Read-only. */
+  'github.pullRequestState': {
+    input: z.object({ contactId: z.string() }),
+    output: prStateSchema
+  },
+  /**
+   * Pushes the Contact's branch and opens a pull request — or comments on the
+   * one already open. Refuses a `read_only` persona here, not only in the UI.
+   */
+  'github.openPullRequest': {
+    input: z.object({ contactId: z.string() }),
+    output: prResultSchema
   },
 
   // --- Data layer (Phase 4, blueprint §4 + §12) ---------------------------

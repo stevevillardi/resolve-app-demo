@@ -251,6 +251,25 @@ describe('working context', () => {
     expect(composed).toMatch(/never write inside `\.git`/i)
   })
 
+  /**
+   * The other half of the same mistake, found by Phase 9's Journey 3 check: a
+   * routine asked for `src/<file>.ts`, a directory that existed in neither
+   * checkout, and the model created it in the *repository* — the other path
+   * this block names. Naming a path is not the same as saying what may be done
+   * with it, so the block says it.
+   */
+  it('says the repository itself is out of bounds, not merely that it exists', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      workingContext: working
+    })
+
+    expect(composed).toMatch(
+      /different checkout of the same repository and writing to it is refused/i
+    )
+    expect(composed).toMatch(/including new files whose directory does not exist yet/i)
+  })
+
   // Ahead of the volatile blocks and behind the persona, so the cached prefix
   // keeps growing rather than being invalidated by a colleague's summary.
   it('comes before the group context', () => {

@@ -32,14 +32,22 @@ export function composeInstructions(spec: SessionSpec): string {
 
   // Where the session works, stated outright when that is not the repo itself.
   //
-  // This is not decoration. A session in a worktree is granted write access to
-  // the repository's `.git/worktrees/<name>` directory, because that is where
-  // git puts the index a commit has to lock — and a model asked to create a
-  // file with a bare relative name will sometimes resolve it against *that*
-  // directory instead of its own working tree. Observed live on two concurrent
-  // writers, both of which tried to create their new file inside the git admin
-  // directory and were refused. Naming the working directory removes the
-  // ambiguity that invites it.
+  // This is not decoration, and it has been wrong twice.
+  //
+  // A session in a worktree is granted write access to the repository's
+  // `.git/worktrees/<name>` directory, because that is where git puts the index
+  // a commit has to lock — and a model asked to create a file with a bare
+  // relative name will sometimes resolve it against *that* directory instead of
+  // its own working tree. Observed live on two concurrent writers in Phase 12,
+  // both refused. Naming the working directory removed that ambiguity.
+  //
+  // Phase 9's Journey 3 check then found the other half of the same mistake: a
+  // routine asked for `src/<file>.ts`, a path whose directory existed in
+  // neither checkout, and the model created it in the **repository** — the
+  // other path this very block names. A missing parent directory sends a model
+  // looking for the canonical copy of the project, and this block was handing
+  // it one without saying it was out of bounds. Hence the explicit refusal
+  // sentence: naming a path is not the same as saying what may be done with it.
   if (spec.workingContext) {
     sections.push(renderWorkingContext(spec.workingContext))
   }
@@ -113,7 +121,11 @@ function renderWorkingContext(context: NonNullable<SessionSpec['workingContext']
     WORKING_CONTEXT_HEADING,
     `Your working directory is \`${context.workingPath}\`, and it is a linked git ` +
       `worktree of the repository at \`${context.repoPath}\`, checked out on branch ` +
-      `\`${context.branch}\`. Create and edit files under your working directory. ` +
+      `\`${context.branch}\`. Create and edit every file under your working directory, ` +
+      'using paths relative to it — including new files whose directory does not exist ' +
+      'yet, which you should create there. `' +
+      context.repoPath +
+      '` is a different checkout of the same repository and writing to it is refused. ' +
       'Everything you commit stays on your branch, where no other session can see it ' +
       'on disk. Never write inside `.git` — it is writable only so that git itself can ' +
       'record your commits.'
