@@ -1,5 +1,7 @@
 import { adapterFor, type AdapterConfig, type AgentAdapter } from '../adapters'
+import { GITHUB_MCP_TOKEN_ENV } from '../adapters/github-mcp-tools'
 import { resolveCodexBinary } from './codex-auth'
+import { getGitHubToken } from './github-auth'
 import { getSecret, secretsPathForDenyList } from './secrets'
 import type { PersonaBackend } from '../../shared/domain'
 
@@ -28,11 +30,25 @@ import type { PersonaBackend } from '../../shared/domain'
 function backendEnv(): NodeJS.ProcessEnv {
   const anthropic = getSecret('anthropic_api_key') ?? import.meta.env.MAIN_VITE_ANTHROPIC_API_KEY
   const openai = getSecret('openai_api_key') ?? import.meta.env.MAIN_VITE_OPENAI_API_KEY
+  // Codex's MCP configuration has no header option — it takes
+  // `mcp_servers.<id>.bearer_token_env_var` and reads that variable out of the
+  // subprocess environment. Claude sends the same token as an Authorization
+  // header instead. Two doors to one destination, and this is the one that
+  // needs the environment, so it belongs here: this function is already the
+  // only place a secret meets a subprocess.
+  //
+  // Set whenever an account is connected rather than per persona. Whether a
+  // session can reach GitHub is decided by whether capabilitiesFor() hands it
+  // the server at all; a session with no server configured has nothing that
+  // would read this, and a persona is never given a shell that could echo it —
+  // `secrets.ts` is already in denyReadPaths below for the same reason.
+  const github = getGitHubToken()
 
   return {
     ...process.env,
     ...(anthropic ? { ANTHROPIC_API_KEY: anthropic } : {}),
-    ...(openai ? { OPENAI_API_KEY: openai } : {})
+    ...(openai ? { OPENAI_API_KEY: openai } : {}),
+    ...(github ? { [GITHUB_MCP_TOKEN_ENV]: github } : {})
   }
 }
 

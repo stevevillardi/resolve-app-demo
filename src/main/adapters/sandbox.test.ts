@@ -2,13 +2,25 @@ import { describe, expect, it } from 'vitest'
 import { CLAUDE_CAPABILITIES } from './claude'
 import { CODEX_CAPABILITIES } from './codex'
 import {
+  GITHUB_MCP_ALL_TOOLS,
+  GITHUB_MCP_READ_TOOLS,
+  GITHUB_MCP_READONLY_URL,
+  GITHUB_MCP_URL,
+  GITHUB_MCP_WRITE_TOOLS
+} from './github-mcp-tools'
+import {
   claudeSandboxOptions,
   codexSandboxMode,
+  evaluateMcpToolUse,
   evaluateToolUse,
+  githubMcpDenyList,
+  githubMcpDisallowedTools,
+  githubMcpEndpoint,
   isInsideRepo,
   isReadOnlyCommand,
   osSandboxSupported
 } from './sandbox'
+import type { GithubScope, SandboxLevel } from '../../shared/domain'
 
 /**
  * This is the file making a security claim, so it is the one asserted rather
@@ -331,5 +343,221 @@ describe('the Claude OS sandbox', () => {
     expect(CLAUDE_CAPABILITIES.sandboxEnforcement).toBe(supported ? 'os' : 'policy')
     // Codex's CLI sandboxes itself wherever it runs.
     expect(CODEX_CAPABILITIES.sandboxEnforcement).toBe('os')
+  })
+})
+
+/**
+ * The GitHub axis. The whole reason this is a separate table from
+ * evaluateToolUse is that the two must not be able to influence each other, so
+ * most of what follows is asserting an absence of coupling.
+ */
+describe('the GitHub MCP gate', () => {
+  const SCOPES: GithubScope[] = ['read_only', 'open_pr', 'full_access']
+
+  it('sends read_only to the endpoint that serves no write tool at all', () => {
+    expect(githubMcpEndpoint('read_only')).toBe(GITHUB_MCP_READONLY_URL)
+    expect(githubMcpEndpoint('open_pr')).toBe(GITHUB_MCP_URL)
+    expect(githubMcpEndpoint('full_access')).toBe(GITHUB_MCP_URL)
+  })
+
+  it('is a complete transcription of the server — 27 read + 17 write = 44', () => {
+    // The deny table is derived from the difference between these two lists, so
+    // a partial transcription is a hole rather than a smaller feature.
+    expect(GITHUB_MCP_READ_TOOLS).toHaveLength(27)
+    expect(GITHUB_MCP_WRITE_TOOLS).toHaveLength(17)
+    expect(new Set(GITHUB_MCP_ALL_TOOLS).size).toBe(44)
+  })
+
+  it('denies every write tool at read_only, endpoint notwithstanding', () => {
+    expect(githubMcpDenyList('read_only')).toEqual([...GITHUB_MCP_WRITE_TOOLS])
+  })
+
+  it('denies nothing at full_access, which is what that level means', () => {
+    expect(githubMcpDenyList('full_access')).toEqual([])
+  })
+
+  it('lets open_pr propose and never merge', () => {
+    const denied = githubMcpDenyList('open_pr')
+    // The explicit line from blueprint §16.
+    expect(denied).toContain('merge_pull_request')
+    // A branch and a PR are the whole point of the level.
+    expect(denied).not.toContain('create_branch')
+    expect(denied).not.toContain('create_pull_request')
+    expect(denied).not.toContain('add_issue_comment')
+  })
+
+  it('stops open_pr writing file content around git', () => {
+    // These four write to a ref over the REST API: no commit, no branch, no
+    // sandbox, no diff. A persona denied Edit on disk could rewrite main with
+    // them, which is the hole this case exists to keep shut.
+    const denied = githubMcpDenyList('open_pr')
+    for (const tool of ['push_files', 'create_or_update_file', 'delete_file']) {
+      expect(denied, tool).toContain(tool)
+    }
+    // And acting outside the repo it was bound to.
+    expect(denied).toContain('create_repository')
+    expect(denied).toContain('fork_repository')
+  })
+
+  it('never denies a tool that is not a write tool', () => {
+    for (const scope of SCOPES) {
+      for (const tool of githubMcpDenyList(scope)) {
+        expect(GITHUB_MCP_WRITE_TOOLS, `${scope}/${tool}`).toContain(tool)
+      }
+    }
+  })
+
+  it('is monotonic — a looser scope never denies more than a stricter one', () => {
+    // The property that makes the three levels a ladder rather than three
+    // unrelated tables. Checked mechanically so a hand-edit that breaks the
+    // ordering fails here rather than in production.
+    const readOnly = new Set(githubMcpDenyList('read_only'))
+    const openPr = new Set(githubMcpDenyList('open_pr'))
+    const full = new Set(githubMcpDenyList('full_access'))
+
+    for (const tool of openPr) expect(readOnly, tool).toContain(tool)
+    for (const tool of full) expect(openPr, tool).toContain(tool)
+    expect(openPr.size).toBeLessThan(readOnly.size)
+  })
+
+  /**
+   * What each scope can actually reach, once both layers have had their say:
+   * the tools the endpoint serves, minus the tools denied by name. This is the
+   * only number that describes the feature — either layer read on its own
+   * overstates or understates it.
+   */
+  function reachableWrites(scope: GithubScope): string[] {
+    const served: readonly string[] =
+      githubMcpEndpoint(scope) === GITHUB_MCP_READONLY_URL
+        ? GITHUB_MCP_READ_TOOLS
+        : GITHUB_MCP_ALL_TOOLS
+    const denied = new Set(githubMcpDenyList(scope))
+    return GITHUB_MCP_WRITE_TOOLS.filter((tool) => served.includes(tool) && !denied.has(tool))
+  }
+
+  it('leaves read_only unable to reach a single write tool, by either layer', () => {
+    expect(reachableWrites('read_only')).toEqual([])
+  })
+
+  it('leaves open_pr exactly the eleven tools that propose rather than impose', () => {
+    expect(reachableWrites('open_pr')).toEqual([
+      'add_comment_to_pending_review',
+      'add_issue_comment',
+      'add_reply_to_pull_request_comment',
+      'create_branch',
+      'create_pull_request',
+      'issue_write',
+      'pull_request_review_write',
+      'request_copilot_review',
+      'sub_issue_write',
+      'update_pull_request',
+      'update_pull_request_branch'
+    ])
+  })
+
+  it('leaves full_access everything, which is what it promises', () => {
+    expect(reachableWrites('full_access')).toEqual([...GITHUB_MCP_WRITE_TOOLS])
+  })
+
+  it('never reaches a tool the endpoint does not serve', () => {
+    // The layers agree by construction, and this is the statement of it: a
+    // scope's reachable set is always a subset of what its endpoint serves, so
+    // no deny-list edit can create the illusion of access that is not there.
+    for (const scope of SCOPES) {
+      const served =
+        githubMcpEndpoint(scope) === GITHUB_MCP_READONLY_URL
+          ? GITHUB_MCP_READ_TOOLS
+          : GITHUB_MCP_ALL_TOOLS
+      for (const tool of reachableWrites(scope)) {
+        expect(served, `${scope}/${tool}`).toContain(tool)
+      }
+    }
+  })
+
+  it('qualifies the same table for disallowedTools, so the layers cannot drift', () => {
+    expect(githubMcpDisallowedTools('open_pr')).toEqual(
+      githubMcpDenyList('open_pr').map((tool) => `mcp__github__${tool}`)
+    )
+  })
+})
+
+describe('evaluateMcpToolUse', () => {
+  it('accepts the qualified name the SDK actually passes', () => {
+    const denied = evaluateMcpToolUse('read_only', 'mcp__github__add_issue_comment')
+    expect(denied.allowed).toBe(false)
+    // Named in the reason so the model can say what it could not do, rather
+    // than reporting an empty result as though it had looked.
+    expect(denied.reason).toContain('add_issue_comment')
+  })
+
+  it('accepts a bare name too', () => {
+    expect(evaluateMcpToolUse('read_only', 'add_issue_comment').allowed).toBe(false)
+  })
+
+  it('allows reads at every scope', () => {
+    for (const scope of ['read_only', 'open_pr', 'full_access'] as GithubScope[]) {
+      expect(evaluateMcpToolUse(scope, 'mcp__github__list_issues').allowed, scope).toBe(true)
+    }
+  })
+
+  it('leaves the other axis alone', () => {
+    // Bash and Edit arrive through the same canUseTool callback. This gate must
+    // pass them through untouched or it would be deciding filesystem policy.
+    expect(evaluateMcpToolUse('read_only', 'Bash').allowed).toBe(true)
+    expect(evaluateMcpToolUse('read_only', 'Edit').allowed).toBe(true)
+  })
+
+  it('says something different at open_pr than at read_only', () => {
+    const readOnly = evaluateMcpToolUse('read_only', 'mcp__github__merge_pull_request')
+    const openPr = evaluateMcpToolUse('open_pr', 'mcp__github__merge_pull_request')
+    expect(readOnly.allowed).toBe(false)
+    expect(openPr.allowed).toBe(false)
+    expect(openPr.reason).not.toBe(readOnly.reason)
+    // The open_pr wording tells the model what it *can* do instead.
+    expect(openPr.reason).toContain('Propose')
+  })
+})
+
+describe('the two axes are independent', () => {
+  /**
+   * The finding this phase was built around. `sandbox: full_access` sets
+   * `permissionMode: 'bypassPermissions'`, under which the SDK stops consulting
+   * canUseTool entirely — so a GitHub decision keyed off the sandbox level
+   * would hand every full-disk persona merge rights nobody granted it.
+   *
+   * These cases assert the axes never read each other. The name blacklist is
+   * what makes that survivable at runtime: `disallowedTools` was measured to
+   * hold under bypassPermissions, which is why githubMcpDisallowedTools()
+   * exists at all.
+   */
+  it('keeps GitHub narrow for a persona with full disk access', () => {
+    expect(claudeSandboxOptions('full_access', REPO).permissionMode).toBe('bypassPermissions')
+    // Same persona, read_only on GitHub: still all 17.
+    expect(githubMcpDenyList('read_only')).toHaveLength(17)
+    expect(githubMcpDisallowedTools('read_only')).toHaveLength(17)
+  })
+
+  it('keeps the disk narrow for a persona with full GitHub access', () => {
+    expect(githubMcpDenyList('full_access')).toEqual([])
+    const decision = evaluateToolUse('read_only', 'Write', { file_path: `${REPO}/a.ts` }, REPO)
+    expect(decision.allowed).toBe(false)
+  })
+
+  it('resolves all nine sandbox/scope combinations without either reading the other', () => {
+    const levels: SandboxLevel[] = ['read_only', 'workspace_write', 'full_access']
+    const scopes: GithubScope[] = ['read_only', 'open_pr', 'full_access']
+    const expected = {
+      read_only: 17,
+      open_pr: 6,
+      full_access: 0
+    }
+
+    for (const level of levels) {
+      for (const scope of scopes) {
+        // The deny list depends on the scope and on nothing else. If a future
+        // edit threads `level` into it, this fails for eight of the nine.
+        expect(githubMcpDenyList(scope), `${level}/${scope}`).toHaveLength(expected[scope])
+      }
+    }
   })
 })

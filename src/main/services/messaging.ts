@@ -5,6 +5,7 @@ import { toMessage } from '../db/mappers'
 import { messages } from '../db/schema'
 import { adapterForBackend } from './adapter-host'
 import { emitAgentEvent, emitRunsChanged } from './agent-events'
+import { capabilitiesFor } from './capabilities'
 import { summarizeTurn } from './compaction'
 import { getContact, setBackendSessionId } from './contacts'
 import { contextForRepo, groupForRepo, insertGroupMessage } from './group-messages'
@@ -294,10 +295,28 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
     })
     runs.set(runId, { controller, release, contactId, origin, groupId, settle: settle! })
 
+    // What this Contact may reach beyond its own working directory: MCP
+    // servers narrowed to the persona's githubScope, plus whatever the
+    // repository itself has been trusted to say. Resolved per turn like the
+    // group context, so revoking trust or disconnecting GitHub takes effect on
+    // the next message rather than the next restart.
+    const capabilities = capabilitiesFor(contact, persona)
+
     const spec = {
       persona,
       repoPath: workingPath,
       skills: skillsForPersona(persona),
+      repoSkills: capabilities.nativeSkillNames,
+      injectedSkills: capabilities.injectedSkills,
+      mcpServers: capabilities.mcpServers,
+      ...(capabilities.repoInstructions
+        ? {
+            repoInstructions: {
+              fileName: capabilities.repoInstructions.fileName,
+              content: capabilities.repoInstructions.content
+            }
+          }
+        : {}),
       // Blueprint §5: what the rest of the fleet has decided on this repo.
       // Resolved fresh per turn rather than per session, so a summary written
       // by a colleague between two of this contact's turns is visible on the

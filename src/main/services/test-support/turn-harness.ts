@@ -25,6 +25,16 @@ export interface CreatedSession {
   skillNames: string[]
   groupContext: { content: string }[]
   usageBaseline: AgentUsage | null
+  /**
+   * What the session was given beyond its own working directory. Captured so
+   * the turn loop's *wiring* can be asserted — that capabilitiesFor() is
+   * actually consulted per turn — separately from capabilities.test.ts, which
+   * asserts what that function decides.
+   */
+  mcpServerIds: string[]
+  repoSkills: string[]
+  injectedSkillNames: string[]
+  repoInstructions: string | null
 }
 
 interface SpecLike {
@@ -32,6 +42,10 @@ interface SpecLike {
   skills: { name: string }[]
   groupContext?: { content: string }[]
   usageBaseline?: AgentUsage | null
+  mcpServers?: { id: string }[]
+  repoSkills?: string[]
+  injectedSkills?: { name: string }[]
+  repoInstructions?: { content: string }
 }
 
 export interface TurnHarness {
@@ -92,7 +106,11 @@ export function createTurnHarness(): TurnHarness {
       ...(spec.model !== undefined && { model: spec.model }),
       skillNames: spec.skills.map((skill) => skill.name),
       groupContext: spec.groupContext ?? [],
-      usageBaseline: spec.usageBaseline ?? null
+      usageBaseline: spec.usageBaseline ?? null,
+      mcpServerIds: (spec.mcpServers ?? []).map((server) => server.id),
+      repoSkills: spec.repoSkills ?? [],
+      injectedSkillNames: (spec.injectedSkills ?? []).map((skill) => skill.name),
+      repoInstructions: spec.repoInstructions?.content ?? null
     })
   }
 

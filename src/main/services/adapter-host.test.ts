@@ -19,7 +19,11 @@ vi.mock('electron', () => ({
 }))
 vi.mock('./codex-auth', () => ({ resolveCodexBinary: () => '/usr/local/bin/codex' }))
 
+const githubToken = { value: 'gho_test' as string | null }
+vi.mock('./github-auth', () => ({ getGitHubToken: () => githubToken.value }))
+
 const { adapterConfig } = await import('./adapter-host')
+const { GITHUB_MCP_TOKEN_ENV } = await import('../adapters/github-mcp-tools')
 
 describe('adapterConfig', () => {
   it("keeps agents out of the app's own secret store", () => {
@@ -36,5 +40,24 @@ describe('adapterConfig', () => {
     const config = adapterConfig()
     expect(config.codexBinaryPath).toBe('/usr/local/bin/codex')
     expect(config.env?.PATH).toBe(process.env.PATH)
+  })
+
+  it('carries the GitHub token Codex has no other way to receive', () => {
+    // Codex's MCP config takes `bearer_token_env_var` and nothing else — no
+    // header option exists — so this variable is the only door. Claude sends
+    // the same token as an Authorization header and never reads it.
+    expect(adapterConfig().env?.[GITHUB_MCP_TOKEN_ENV]).toBe('gho_test')
+  })
+
+  it('leaves the variable unset rather than empty when no account is connected', () => {
+    // Same reasoning as ANTHROPIC_API_KEY above: an empty value reads as "a
+    // token was provided and it is invalid", which is a worse failure than
+    // none at all.
+    githubToken.value = null
+    try {
+      expect(GITHUB_MCP_TOKEN_ENV in (adapterConfig().env ?? {})).toBe(false)
+    } finally {
+      githubToken.value = 'gho_test'
+    }
   })
 })

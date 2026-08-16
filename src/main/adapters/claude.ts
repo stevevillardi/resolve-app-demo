@@ -2,6 +2,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentCapabilities, AgentErrorKind, AgentEvent, AgentUsage } from '../../shared/agent'
 import { composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
+import { GITHUB_MCP_ALL_TOOLS, qualifiedGithubToolName } from './github-mcp-tools'
 import { claudeSandboxOptions, evaluateToolUse, osSandboxSupported } from './sandbox'
 import type {
   AdapterConfig,
@@ -443,6 +444,14 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
  * A summariser reads the prompt it was given and nothing else. Named
  * explicitly rather than derived from the sandbox level so that widening
  * `sandbox.ts` later cannot quietly hand the summariser filesystem access.
+ *
+ * The MCP names are here for exactly that reason. The summariser is never
+ * passed `mcpServers`, so today no `mcp__*` tool exists in its session at all —
+ * but this was a list of bare tool names that no qualified MCP name could ever
+ * have matched, which would have made it look like a guard covering a case it
+ * did not cover. It runs after every single turn; an MCP handshake per turn is
+ * a cost nobody asked for, and a summariser that could comment on an issue is
+ * a capability nobody granted.
  */
 const SUMMARY_DISALLOWED_TOOLS = [
   'Bash',
@@ -453,7 +462,8 @@ const SUMMARY_DISALLOWED_TOOLS = [
   'Read',
   'WebFetch',
   'WebSearch',
-  'Write'
+  'Write',
+  ...GITHUB_MCP_ALL_TOOLS.map(qualifiedGithubToolName)
 ]
 
 /**

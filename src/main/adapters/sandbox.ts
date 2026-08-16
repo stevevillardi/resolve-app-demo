@@ -1,7 +1,14 @@
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import { existsSync, realpathSync } from 'fs'
 import { isAbsolute, relative, resolve } from 'path'
-import type { SandboxLevel } from '../../shared/domain'
+import type { GithubScope, SandboxLevel } from '../../shared/domain'
+import {
+  bareGithubToolName,
+  GITHUB_MCP_READONLY_URL,
+  GITHUB_MCP_URL,
+  GITHUB_MCP_WRITE_TOOLS,
+  qualifiedGithubToolName
+} from './github-mcp-tools'
 
 /**
  * Sandbox enforcement (blueprint §4's `sandbox` axis).
@@ -285,6 +292,87 @@ export function evaluateToolUse(
   }
 
   return ALLOWED
+}
+
+// --- The GitHub axis --------------------------------------------------------
+
+/**
+ * `githubScope` enforcement for MCP tool calls — blueprint §4's *other* axis.
+ *
+ * Deliberately not folded into evaluateToolUse(), which opens with
+ * `if (level === 'full_access') return ALLOWED`. Keying a GitHub decision off
+ * the filesystem level would mean a persona granted full disk access silently
+ * acquired merge rights it was never given, and the two axes are independent by
+ * construction or they are not independent at all.
+ *
+ * Two layers again, for the same reason the file's header describes:
+ *
+ *   1. **The endpoint, enforced by GitHub.** `read_only` gets `/mcp/readonly`,
+ *      which does not serve a single write tool. Nothing we do client-side can
+ *      weaken that.
+ *   2. **A name blacklist**, because layer 1 covers only the scope→URL mapping
+ *      and `sandbox: full_access` sets `permissionMode: 'bypassPermissions'`,
+ *      under which `canUseTool` is not consulted at all. `disallowedTools` was
+ *      measured to survive it; it is the only gate here that does.
+ *
+ * Both layers read the same table below, so they cannot drift apart.
+ */
+
+/** Written on a branch, reviewable as a diff, revertible. `open_pr` keeps these. */
+const OPEN_PR_DENIED = new Set([
+  // Blueprint §16 is explicit: propose, do not merge.
+  'merge_pull_request',
+  // These four write file content straight to a ref over the REST API. No
+  // commit the user made, no branch the sandbox fenced, no diff anybody could
+  // review — a persona denied Edit on disk could rewrite main through them.
+  'push_files',
+  'create_or_update_file',
+  'delete_file',
+  // Creating a repository, or a fork, is acting outside the one repo this
+  // Contact was bound to. `open_pr` means "propose a change to *this*".
+  'create_repository',
+  'fork_repository'
+])
+
+/** Which endpoint this scope talks to. GitHub does the enforcing. */
+export function githubMcpEndpoint(scope: GithubScope): string {
+  return scope === 'read_only' ? GITHUB_MCP_READONLY_URL : GITHUB_MCP_URL
+}
+
+/**
+ * Bare tool names this scope must never call, in the order the inventory lists
+ * them so the output is stable enough to assert on.
+ *
+ * `read_only` denies every write tool even though its endpoint serves none of
+ * them: belt and braces costs nothing and means a future change to the endpoint
+ * mapping cannot quietly open a door.
+ */
+export function githubMcpDenyList(scope: GithubScope): string[] {
+  if (scope === 'full_access') return []
+  if (scope === 'read_only') return [...GITHUB_MCP_WRITE_TOOLS]
+  return GITHUB_MCP_WRITE_TOOLS.filter((tool) => OPEN_PR_DENIED.has(tool))
+}
+
+/** The same table as `disallowedTools`, in the qualified form both take. */
+export function githubMcpDisallowedTools(scope: GithubScope): string[] {
+  return githubMcpDenyList(scope).map(qualifiedGithubToolName)
+}
+
+/**
+ * The in-process half, called first in the adapter's `canUseTool`. Accepts
+ * either the qualified name the SDK passes (`mcp__github__merge_pull_request`)
+ * or a bare one, and returns ALLOWED for anything that is not this server's —
+ * a Bash call arrives through the same callback and belongs to the other axis.
+ */
+export function evaluateMcpToolUse(scope: GithubScope, toolName: string): SandboxDecision {
+  const bare = bareGithubToolName(toolName) ?? toolName
+  if (!githubMcpDenyList(scope).includes(bare)) return ALLOWED
+
+  return deny(
+    scope === 'read_only'
+      ? `This persona has read-only GitHub access, so it cannot use ${bare}.`
+      : `This persona can open pull requests but not ${bare}. Propose the change instead.`
+  )
 }
 
 // --- Backend option translation ---------------------------------------------
