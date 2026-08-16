@@ -71,9 +71,40 @@ export const contacts = sqliteTable(
     personaTemplateId: text('persona_template_id')
       .notNull()
       .references(() => personaTemplates.id, { onDelete: 'restrict' }),
+    /**
+     * The canonical repo. Keeps that meaning even once the session runs
+     * somewhere else, so blueprint §4's "one Group per repo" and the
+     * groups_repo_path_unique index below are untouched by worktrees.
+     */
     repoPath: text('repo_path').notNull(),
     displayName: text('display_name').notNull(),
-    backendSessionId: text('backend_session_id')
+    backendSessionId: text('backend_session_id'),
+    /**
+     * Where this Contact actually works; null means the repo itself.
+     *
+     * Written when the Contact is created, before the directory exists — the
+     * path is derived deterministically and the worktree is only materialised
+     * on the first writing turn. startTurn() is synchronous and has to know the
+     * lock key before it can acquire, so it cannot wait on a `git worktree add`;
+     * storing the planned path up front keeps workingPathFor() pure and the lock
+     * key stable from the very first turn.
+     */
+    worktreePath: text('worktree_path'),
+    /** The branch its worktree is on. Null whenever worktree_path is. */
+    branch: text('branch'),
+    /**
+     * Where the session runs, chosen per Contact at bind time (§4) — the same
+     * persona may want isolation on one repo and not another.
+     *
+     * Null reads as `shared`, which is what every row written before this column
+     * existed means. Note this decides *where* the session runs, not whether it
+     * locks: the lock mode still comes from the persona's sandbox level, except
+     * for `exclusive`, which forces a lock even on a reader.
+     *
+     * As with usage_events.source below, the enum is a Drizzle/Zod assertion
+     * rather than a DB CHECK, so a fourth mode later needs no migration.
+     */
+    isolation: text('isolation', { enum: ['shared', 'worktree', 'exclusive'] })
   },
   (table) => [index('contacts_repo_path_idx').on(table.repoPath)]
 )
@@ -98,7 +129,7 @@ export const groupMessages = sqliteTable(
       .references(() => groups.id, { onDelete: 'cascade' }),
     timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
     type: text('type', {
-      enum: ['system_summary', 'user_mention', 'agent_reply', 'routine_run']
+      enum: ['system_summary', 'user_mention', 'agent_reply', 'routine_run', 'branch_request']
     }).notNull(),
     // Nullable because a `user_mention` comes from the user, not a contact.
     // set null rather than cascade: the group's history should survive one of

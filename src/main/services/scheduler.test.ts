@@ -217,7 +217,7 @@ describe('contention with a writer already holding the repo', () => {
 
     expect(result.status).toBe('skipped')
     const routine = getRoutine('routine-1')
-    expect(routine?.lastRunSummary).toMatch(/Refactor Buddy is already working in this repo/)
+    expect(routine?.lastRunSummary).toMatch(/Refactor Buddy is already working here/)
     // Recorded as an attempt: otherwise the list says "Never run" for a routine
     // that has been skipping nightly for a week.
     expect(routine?.lastRunAt).not.toBeNull()

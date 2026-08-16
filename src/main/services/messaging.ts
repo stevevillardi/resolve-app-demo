@@ -20,8 +20,10 @@ import {
 import { skillsForPersona } from './skills'
 import type { TurnOrigin, TurnOutcome } from './turn-origin'
 import { baselineFor, recordUsage } from './usage-events'
+import { ensureWorktree, siblingBranchesFor } from './worktrees'
+import type { SessionSpec } from '../adapters/types'
 import type { AgentEvent } from '../../shared/agent'
-import type { GroupMessage, PersistedMessage } from '../../shared/domain'
+import type { Contact, GroupMessage, PersistedMessage } from '../../shared/domain'
 
 /**
  * Sending a message to a Contact and streaming the reply back (blueprint §16
@@ -233,7 +235,7 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
   if (!persona) throw new Error(`Contact "${contact.displayName}" has no persona template.`)
 
   const workingPath = workingPathFor(contact)
-  const mode = lockModeFor(persona)
+  const mode = lockModeFor(persona, contact.isolation)
   const runId = randomUUID()
 
   const release = acquire({
@@ -246,11 +248,14 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
   })
 
   if (!release) {
+    // "Here" rather than "in this repo": since Phase 12 a refusal means the two
+    // share a working directory, which is now a narrower thing than sharing a
+    // repo — two Contacts in their own worktrees never reach this at all.
     const holder = blockingHolder(workingPath, mode)
     throw new Error(
       holder
-        ? `${holder.contactName} is already working in this repo. Wait for it to finish, or stop it from that conversation.`
-        : 'This repo is busy.'
+        ? `${holder.contactName} is already working here. Wait for it to finish, or stop it from that conversation.`
+        : 'This working copy is busy.'
     )
   }
 
@@ -298,6 +303,24 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
       // by a colleague between two of this contact's turns is visible on the
       // next one instead of at the next restart.
       groupContext: contextForRepo(contact.repoPath),
+      // Blueprint §6 stops being literally true once a writer has its own
+      // checkout — its changes are on a branch nobody else has on disk. The
+      // object store is still shared, so they remain readable; this is how the
+      // session finds out there is anything to read. Resolved per turn like the
+      // group context, so a branch created between two turns is visible on the
+      // next one.
+      siblingBranches: siblingBranchesFor(contact),
+      // Only when it is not the repo: a Contact working in its own repo needs
+      // no explanation of where it is.
+      ...(contact.worktreePath && contact.branch
+        ? {
+            workingContext: {
+              workingPath: contact.worktreePath,
+              repoPath: contact.repoPath,
+              branch: contact.branch
+            }
+          }
+        : {}),
       // What this session has already been billed for. Codex reports usage
       // cumulatively across a thread, so without this every turn after the
       // first over-reports — see baselineFor(). Claude ignores it.
@@ -312,7 +335,7 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
 
     // Deliberately not awaited — this is the point where the call becomes a
     // stream. Errors cannot escape runTurn(), so there is no catch on it.
-    void runTurn(runId, adapter, session, content)
+    void runTurn(runId, adapter, session, content, contact, spec)
     emitRunsChanged()
 
     return { runId, userMessage, groupMessage, completed }
@@ -331,7 +354,9 @@ async function runTurn(
   runId: string,
   adapter: Adapter,
   session: Session,
-  prompt: string
+  prompt: string,
+  contact: Contact,
+  spec: SessionSpec
 ): Promise<void> {
   const run = runs.get(runId)
   if (!run) return
@@ -349,6 +374,12 @@ async function runTurn(
   let failure: string | null = null
 
   try {
+    // The first thing the turn does, because it decides where the turn runs.
+    // Creating the worktree is deferred to here rather than done at bind time so
+    // an unused Contact costs no checkout — and it cannot happen any earlier
+    // than this, because startTurn() is synchronous and git is not.
+    spec.writablePaths = await ensureWorktree(contact)
+
     for await (const event of adapter.run(session, prompt, run.controller.signal)) {
       if (event.type === 'error') failure = event.message
       if (event.type === 'done') {

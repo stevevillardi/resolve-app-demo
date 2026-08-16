@@ -48,29 +48,69 @@ beforeEach(() => {
   seq = 0
 })
 
+const WORKTREE = '/Users/dev/Library/Application Support/persona-router/worktrees/my-app/buddy-a3f9'
+
+function contact(overrides: Partial<Contact> = {}): Contact {
+  return {
+    id: 'c1',
+    personaTemplateId: 'p1',
+    repoPath: REPO,
+    displayName: 'Code Reviewer · my-app',
+    backendSessionId: null,
+    worktreePath: null,
+    branch: null,
+    isolation: null,
+    ...overrides
+  }
+}
+
 describe('workingPathFor', () => {
-  // Today's answer, and the seam the worktree phase changes. Pinned so that
-  // change is a deliberate edit to a failing test rather than a silent one.
-  it('is the contact repo path', () => {
-    const contact: Contact = {
-      id: 'c1',
-      personaTemplateId: 'p1',
-      repoPath: REPO,
-      displayName: 'Code Reviewer · my-app',
-      backendSessionId: null
-    }
-    expect(workingPathFor(contact)).toBe(REPO)
+  it('is the repo path when the contact has no worktree', () => {
+    expect(workingPathFor(contact())).toBe(REPO)
+  })
+
+  // The seam Phase 12 changed. Two writing personas stop contending because
+  // this stops returning the same string for both of them — not because the
+  // lock got more permissive.
+  it('is the worktree path when the contact has one', () => {
+    expect(workingPathFor(contact({ worktreePath: WORKTREE }))).toBe(WORKTREE)
+  })
+
+  it('gives two worktree contacts on one repo different keys', () => {
+    const a = contact({ id: 'a', worktreePath: `${WORKTREE}-a` })
+    const b = contact({ id: 'b', worktreePath: `${WORKTREE}-b` })
+
+    expect(workingPathFor(a)).not.toBe(workingPathFor(b))
   })
 })
 
 describe('lockModeFor', () => {
   it('makes read_only personas shared', () => {
-    expect(lockModeFor(persona('read_only'))).toBe('shared')
+    expect(lockModeFor(persona('read_only'), null)).toBe('shared')
   })
 
   it('makes anything that can write exclusive', () => {
-    expect(lockModeFor(persona('workspace_write'))).toBe('exclusive')
-    expect(lockModeFor(persona('full_access'))).toBe('exclusive')
+    expect(lockModeFor(persona('workspace_write'), null)).toBe('exclusive')
+    expect(lockModeFor(persona('full_access'), null)).toBe('exclusive')
+  })
+
+  // Isolation says *where*, sandbox says whether it locks. A writer that opted
+  // out of worktrees is still a writer, and must not have been quietly unlocked
+  // by this phase.
+  it('still locks a writer left in the main tree', () => {
+    expect(lockModeFor(persona('workspace_write'), 'shared')).toBe('exclusive')
+    expect(lockModeFor(persona('workspace_write'), 'worktree')).toBe('exclusive')
+  })
+
+  it('leaves a reader shared under every isolation but exclusive', () => {
+    expect(lockModeFor(persona('read_only'), 'shared')).toBe('shared')
+    expect(lockModeFor(persona('read_only'), 'worktree')).toBe('shared')
+  })
+
+  // The escape hatch: `exclusive` exists to demand the main tree to itself, so
+  // it has to outrank the read_only rule that never refuses anyone.
+  it('makes exclusive isolation lock even a reader', () => {
+    expect(lockModeFor(persona('read_only'), 'exclusive')).toBe('exclusive')
   })
 })
 

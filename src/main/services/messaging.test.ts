@@ -385,14 +385,20 @@ describe('the concurrency lock', () => {
 })
 
 describe('cancelRun', () => {
-  it('passes an abort signal to the adapter', () => {
+  // The adapter is reached a microtask after the send rather than during it:
+  // since Phase 12 a turn resolves its working directory first, and that means
+  // running git. The lock and the run entry are still taken synchronously, so
+  // nothing user-visible waits — only the stream itself starts a tick later.
+  it('passes an abort signal to the adapter', async () => {
     sendMessage('contact-a', 'go')
+    await settle()
     expect(harness.lastSignal).not.toBeNull()
   })
 
-  it('aborts the signal', () => {
+  it('aborts the signal', async () => {
     harness.gate = holdOpen()
     const { runId } = sendMessage('contact-a', 'go')
+    await settle()
 
     expect(cancelRun(runId)).toBe(true)
     expect(harness.lastSignal?.aborted).toBe(true)

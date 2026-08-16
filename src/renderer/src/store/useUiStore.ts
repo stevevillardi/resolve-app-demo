@@ -6,10 +6,13 @@ export type { ThemePreference }
 
 /** Which workspace the shell is showing. Each one is master-detail: the
  *  resizable list panel on the left, its detail view on the right. */
-export type Section = 'chats' | 'personas' | 'skills' | 'routines' | 'usage'
+export type Section = 'chats' | 'personas' | 'skills' | 'routines' | 'usage' | 'branches'
 
 export type ConversationSelection =
   { kind: 'contact'; id: string } | { kind: 'group'; id: string } | null
+
+/** Which branch the Branches panel has open, if any. */
+export type BranchSelection = { repoPath: string; branch: string } | null
 
 /** What the usage dashboard is scoped to. */
 export type UsageScope = { kind: 'all' } | { kind: 'persona'; id: string }
@@ -41,6 +44,13 @@ interface UiState {
 
   selectedRoutineId: string | null
   setSelectedRoutineId: (id: string | null) => void
+
+  /**
+   * Keyed by repo as well as name, because branch names are only unique within
+   * a repository — two repos can each have a `persona/refactor-buddy-a3f9`.
+   */
+  selectedBranch: BranchSelection
+  setSelectedBranch: (selection: BranchSelection) => void
 
   usageScope: UsageScope
   setUsageScope: (scope: UsageScope) => void
@@ -76,6 +86,9 @@ export const useUiStore = create<UiState>()(
 
       selectedRoutineId: null,
       setSelectedRoutineId: (selectedRoutineId) => set({ selectedRoutineId }),
+
+      selectedBranch: null,
+      setSelectedBranch: (selectedBranch) => set({ selectedBranch }),
 
       usageScope: { kind: 'all' },
       setUsageScope: (usageScope) => set({ usageScope }),

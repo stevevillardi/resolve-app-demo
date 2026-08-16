@@ -176,7 +176,8 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
     const sandbox = claudeSandboxOptions(
       spec.persona.sandbox,
       spec.repoPath,
-      config.denyReadPaths ?? []
+      config.denyReadPaths ?? [],
+      spec.writablePaths ?? []
     )
     const abort = signal ? abortControllerFor(signal) : null
 
@@ -327,7 +328,11 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
               yield {
                 type: 'error',
                 kind: 'sandbox_denied',
-                message: `Blocked ${denial.tool_name}: this persona's sandbox does not allow it.`
+                // The target is named because without it the message is not
+                // actionable by anyone — the user cannot tell a persona that
+                // reached outside its repo from one whose own working directory
+                // was not granted, and those want opposite fixes.
+                message: `Blocked ${denial.tool_name}: this persona's sandbox does not allow it.${deniedTarget(denial.tool_input)}`
               }
             }
 
@@ -459,6 +464,21 @@ const SUMMARY_DISALLOWED_TOOLS = [
  * fires would accumulate one dead controller per turn on any signal that never
  * aborts, which is the common case.
  */
+/**
+ * The path or command a denied tool call was aiming at, if it named one.
+ *
+ * Best-effort by design: the SDK hands back the raw tool input, and tools name
+ * their target differently. Anything unrecognised yields nothing rather than a
+ * guess, because a wrong path in this message is worse than no path.
+ */
+function deniedTarget(input: Record<string, unknown>): string {
+  for (const field of ['file_path', 'path', 'notebook_path', 'command']) {
+    const value = input[field]
+    if (typeof value === 'string' && value.trim() !== '') return ` Refused: ${value}`
+  }
+  return ''
+}
+
 function abortControllerFor(signal: AbortSignal): {
   controller: AbortController
   dispose: () => void

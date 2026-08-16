@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GroupMessage, PersonaTemplate, Skill } from '../../shared/domain'
 import { composeInstructions, orderSkills } from './context'
-import type { SessionSpec } from './types'
+import type { SessionSpec, SiblingBranch } from './types'
 
 function skill(id: string, name: string, content: string): Skill {
   return { id, name, description: '', content }
@@ -150,5 +150,128 @@ describe('group context injection', () => {
       entry({ id: 'b', content: 'newer' })
     ])
     expect(composed.indexOf('older')).toBeLessThan(composed.indexOf('newer'))
+  })
+})
+
+describe('sibling branches', () => {
+  function withSiblings(siblingBranches: SiblingBranch[]): string {
+    return composeInstructions({ ...spec(persona([]), []), siblingBranches })
+  }
+
+  const buddy: SiblingBranch = {
+    branch: 'persona/refactor-buddy-a3f9',
+    contactName: 'Refactor Buddy · my-app',
+    headSha: '9c2a05c1df58ab5960bd708f63c3e98f273e8335'
+  }
+
+  it('is absent when nothing else is in flight', () => {
+    expect(composeInstructions(spec(persona([]), []))).not.toContain('other branches')
+  })
+
+  it('names the branch and whose it is', () => {
+    const composed = withSiblings([buddy])
+    expect(composed).toContain('persona/refactor-buddy-a3f9')
+    expect(composed).toContain('Refactor Buddy · my-app')
+  })
+
+  it('abbreviates the head rather than printing forty characters', () => {
+    expect(withSiblings([buddy])).toContain('9c2a05c')
+    expect(withSiblings([buddy])).not.toContain(buddy.headSha)
+  })
+
+  it('omits the head annotation when the ref could not be read', () => {
+    expect(withSiblings([{ ...buddy, headSha: null }])).toContain('persona/refactor-buddy-a3f9')
+  })
+
+  // This block exists to rescue blueprint §6, whose "filesystem state is free"
+  // stops being true the moment a writer has its own checkout. The rescue is
+  // that the object store is still shared — so the block has to say that the
+  // work is readable without merging, or the model has no reason to look.
+  it('says the work is readable without merging anything', () => {
+    const composed = withSiblings([buddy])
+    expect(composed).toMatch(/without merging/i)
+    expect(composed).toContain('git show <branch>:<path>')
+    expect(composed).toContain('git diff <base>...<branch>')
+  })
+
+  it('tells the persona not to merge or check them out itself', () => {
+    // Layer 3 is human by design: integrating somebody else's branch is a
+    // decision, and a persona that merges on its own has made it for them.
+    expect(withSiblings([buddy])).toMatch(/do not merge or check out/i)
+  })
+
+  // The stable prefix is what keeps prompt caching working; a volatile block in
+  // front of the skills would invalidate the cache every time a colleague ran.
+  it('comes after the persona and its skills', () => {
+    const composed = composeInstructions({
+      ...spec(persona(['s1']), [skill('s1', 'Checklist', 'Be thorough.')]),
+      siblingBranches: [buddy]
+    })
+
+    expect(composed.indexOf('Be thorough.')).toBeLessThan(
+      composed.indexOf('persona/refactor-buddy')
+    )
+  })
+})
+
+describe('working context', () => {
+  const working = {
+    workingPath:
+      '/Users/dev/Library/Application Support/persona-router/worktrees/my-app/buddy-a3f9',
+    repoPath: '/Users/dev/code/my-app',
+    branch: 'persona/buddy-a3f9'
+  }
+
+  it('is absent when the session runs in its own repo', () => {
+    expect(composeInstructions(spec(persona([]), []))).not.toContain('Where you are working')
+  })
+
+  it('names the working directory, the repo and the branch', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      workingContext: working
+    })
+
+    expect(composed).toContain(working.workingPath)
+    expect(composed).toContain(working.repoPath)
+    expect(composed).toContain(working.branch)
+  })
+
+  // Not decoration. A worktree session is granted write access to the repo's
+  // `.git/worktrees/<name>` so git can lock its index, and a model asked to
+  // create a file with a bare relative name resolved it against *that*
+  // directory — observed live on two concurrent writers, both refused. Saying
+  // where the work goes is what removed the ambiguity.
+  it('tells the session to keep out of .git', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      workingContext: working
+    })
+
+    expect(composed).toMatch(/never write inside `\.git`/i)
+  })
+
+  // Ahead of the volatile blocks and behind the persona, so the cached prefix
+  // keeps growing rather than being invalidated by a colleague's summary.
+  it('comes before the group context', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      workingContext: working,
+      groupContext: [
+        {
+          id: 'gm1',
+          groupId: 'g1',
+          timestamp: 1_700_000_000_000,
+          type: 'system_summary',
+          content: 'a colleague decided something',
+          category: 'decision',
+          durable: true
+        }
+      ]
+    })
+
+    expect(composed.indexOf(working.branch)).toBeLessThan(
+      composed.indexOf('a colleague decided something')
+    )
   })
 })

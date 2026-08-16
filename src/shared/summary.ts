@@ -28,6 +28,12 @@ import { systemSummaryCategorySchema } from './domain'
  * one schema still serves both; a `branch` that is genuinely absent comes back
  * as `null` and is normalised away by summarySchema below.
  *
+ * **The rule applies to nested objects too.** `needs` carries its own `required`
+ * listing both of its keys and its own `additionalProperties: false`; without
+ * them strict mode rejects every summary, not merely the rare one that fills it
+ * in. Verified the same way on both backends after adding it — each returned
+ * `needs: null` and parsed cleanly.
+ *
  * The `category` descriptions are load-bearing prose, not documentation: they
  * are the only instruction the model gets about where the line falls, and
  * `durable` is derived from the answer. An earlier wording defined `routine` as
@@ -63,9 +69,31 @@ export const SUMMARY_JSON_SCHEMA: Record<string, unknown> = {
       description:
         'The git branch the work landed on, if the session created or switched to one. ' +
         'Null when the work happened on whatever branch was already checked out.'
+    },
+    needs: {
+      type: ['object', 'null'],
+      description:
+        'Set this only if you could not finish because you needed changes that exist ' +
+        'on another agent’s branch and are not in your working tree. Null otherwise — ' +
+        'reading another branch does not count, since you can do that yourself with ' +
+        'git show and git diff. This asks a human to merge it for you.',
+      properties: {
+        branch: {
+          type: 'string',
+          description: 'The branch whose changes you need in your own working tree.'
+        },
+        reason: {
+          type: 'string',
+          description:
+            'One sentence on what you were blocked from doing, for the human deciding ' +
+            'whether to merge it.'
+        }
+      },
+      required: ['branch', 'reason'],
+      additionalProperties: false
     }
   },
-  required: ['summary', 'category', 'branch'],
+  required: ['summary', 'category', 'branch', 'needs'],
   additionalProperties: false
 }
 
@@ -78,7 +106,20 @@ export const SUMMARY_JSON_SCHEMA: Record<string, unknown> = {
 export const summarySchema = z.object({
   summary: z.string().min(1),
   category: systemSummaryCategorySchema,
-  branch: z.string().nullable().optional()
+  branch: z.string().nullable().optional(),
+  /**
+   * A request for a human to merge somebody else's branch into this session's
+   * tree — the one thing in docs/plan/12-worktree-isolation.md's three layers
+   * that a persona cannot do for itself, and should not.
+   *
+   * Nested `additionalProperties: false` and its own `required` above, because
+   * strict mode applies to sub-objects too and would otherwise 400 on every
+   * summary rather than only on the rare turn that sets this.
+   */
+  needs: z
+    .object({ branch: z.string().min(1), reason: z.string().min(1) })
+    .nullable()
+    .optional()
 })
 
 export type Summary = z.infer<typeof summarySchema>

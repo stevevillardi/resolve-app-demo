@@ -17,6 +17,7 @@ import { UsageScopeList } from '@/components/usage/UsageScopeList'
 import { useCreatePersona } from '@/hooks/usePersonas'
 import { useCreateSkill } from '@/hooks/useSkills'
 import { useContacts } from '@/hooks/useConversations'
+import { BranchList } from '@/components/branches/BranchList'
 import { useCreateRoutine } from '@/hooks/useRoutines'
 import { useUiStore, type Section } from '@/store/useUiStore'
 import type { PersonaTemplateDraft, SkillDraft } from '@/types'
@@ -32,7 +33,9 @@ const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLab
   personas: { title: 'Personas', searchPlaceholder: 'Search personas', newLabel: 'New persona' },
   skills: { title: 'Skills', searchPlaceholder: 'Search skills', newLabel: 'New skill' },
   routines: { title: 'Routines', searchPlaceholder: 'Search routines', newLabel: 'New routine' },
-  usage: { title: 'Usage' }
+  usage: { title: 'Usage' },
+  // No "+": a branch is produced by a persona doing work, never made here.
+  branches: { title: 'Branches', searchPlaceholder: 'Search branches' }
 }
 
 /** What a brand-new persona starts as — the safest scope on both axes (§4). */
@@ -173,6 +176,7 @@ export function ListPanel(): React.JSX.Element {
           {section === 'skills' && <SkillList query={query} />}
           {section === 'routines' && <RoutineList query={query} />}
           {section === 'usage' && <UsageScopeList />}
+          {section === 'branches' && <BranchList query={query} />}
         </div>
       </ScrollArea>
     </div>

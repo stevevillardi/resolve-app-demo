@@ -12,6 +12,11 @@ import type { AppDatabase } from '../db/create'
 let db: AppDatabase
 
 vi.mock('../db', () => ({ initDb: () => db }))
+// createContact plans a writer's worktree path, which is rooted in the profile
+// directory — the only thing this test needs Electron for.
+vi.mock('electron', () => ({
+  app: { getPath: () => '/Users/dev/Library/Application Support/persona-router' }
+}))
 
 const { createContact, getContact, listContacts } = await import('./contacts')
 const { ensureGroupForRepo, listGroups } = await import('./groups')
@@ -78,6 +83,92 @@ describe('create', () => {
         displayName: 'Orphan'
       })
     ).toThrow()
+  })
+})
+
+describe('isolation', () => {
+  function writerPersona(id: string): void {
+    db.insert(personaTemplates)
+      .values({
+        id,
+        name: 'Refactor Buddy',
+        avatarColor: '#c2410c',
+        backend: 'claude',
+        systemPrompt: '',
+        skillIds: [],
+        sandbox: 'workspace_write',
+        githubScope: 'open_pr'
+      })
+      .run()
+  }
+
+  it('leaves a reader in the main tree with no worktree', () => {
+    const contact = createContact(draft('~/code/app', 'Code Reviewer · app'))
+
+    expect(contact.isolation).toBe('shared')
+    expect(contact.worktreePath).toBeNull()
+    expect(contact.branch).toBeNull()
+  })
+
+  // The path is planned at create time precisely so workingPathFor() is a pure
+  // function of the row from the very first turn — startTurn() is synchronous
+  // and cannot wait on a `git worktree add`.
+  it('plans a writer a worktree path and branch before either exists', () => {
+    writerPersona('persona-writer')
+
+    const contact = createContact({
+      personaTemplateId: 'persona-writer',
+      repoPath: '~/code/app',
+      displayName: 'Refactor Buddy · app'
+    })
+
+    expect(contact.isolation).toBe('worktree')
+    expect(contact.worktreePath).toContain('/worktrees/app/refactor-buddy-')
+    expect(contact.branch).toMatch(/^persona\/refactor-buddy-/)
+  })
+
+  it('persists the planned path rather than recomputing it on read', () => {
+    writerPersona('persona-writer')
+    const contact = createContact({
+      personaTemplateId: 'persona-writer',
+      repoPath: '~/code/app',
+      displayName: 'Refactor Buddy · app'
+    })
+
+    expect(getContact(contact.id)?.worktreePath).toBe(contact.worktreePath)
+  })
+
+  it('honours an explicit choice over the default', () => {
+    writerPersona('persona-writer')
+
+    const contact = createContact({
+      personaTemplateId: 'persona-writer',
+      repoPath: '~/code/app',
+      displayName: 'Refactor Buddy · app',
+      isolation: 'exclusive'
+    })
+
+    expect(contact.isolation).toBe('exclusive')
+    // `exclusive` runs in the main tree on purpose — it is the mode for work a
+    // worktree cannot serve, like needing uncommitted files or node_modules.
+    expect(contact.worktreePath).toBeNull()
+  })
+
+  it('gives two writers on one repo different working paths', () => {
+    writerPersona('persona-writer')
+    const a = createContact({
+      personaTemplateId: 'persona-writer',
+      repoPath: '~/code/app',
+      displayName: 'Refactor Buddy · app'
+    })
+    const b = createContact({
+      personaTemplateId: 'persona-writer',
+      repoPath: '~/code/app',
+      displayName: 'Refactor Buddy 2 · app'
+    })
+
+    expect(a.worktreePath).not.toBe(b.worktreePath)
+    expect(a.branch).not.toBe(b.branch)
   })
 })
 

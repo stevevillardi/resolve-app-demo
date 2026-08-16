@@ -109,12 +109,40 @@ const activeRunSchema = z.object({
   runId: z.string(),
   contactId: z.string(),
   contactName: z.string(),
-  /** What is locked. Equal to the contact's repoPath until worktrees land. */
+  /** What is locked: the contact's worktree if it has one, else its repo. */
   workingPath: z.string(),
   /** `shared` runs cannot write, so any number of them may overlap. */
   mode: z.enum(['shared', 'exclusive']),
   startedAt: z.number()
 })
+
+/**
+ * A branch that exists in the repo but is checked out nowhere the user can see.
+ *
+ * Sourced from git rather than from the contacts table: a branch outlives the
+ * Contact that made it, so `contactId` and `contactName` are null for the ones
+ * whose owner has been deleted — which are exactly the ones most at risk of
+ * being forgotten.
+ */
+export const branchSummarySchema = z.object({
+  repoPath: z.string(),
+  branch: z.string(),
+  headSha: z.string(),
+  committedAt: z.number(),
+  contactId: z.string().nullable(),
+  contactName: z.string().nullable(),
+  files: z.array(z.string()),
+  hasWorktree: z.boolean()
+})
+
+export const mergeTargetSchema = z.object({
+  path: z.string(),
+  label: z.string(),
+  dirty: z.boolean()
+})
+
+export type BranchSummary = z.infer<typeof branchSummarySchema>
+export type MergeTarget = z.infer<typeof mergeTargetSchema>
 
 export const ipcContract = {
   ping: {
@@ -280,8 +308,6 @@ export const ipcContract = {
     output: z.object({ runId: z.string().nullable(), skipped: z.string().nullable() })
   },
 
-  // Read + create only. Sessions, messages, and the UI that calls create are
-  // Phase 6; these exist so personas and groups have real relationships now.
   'contacts.list': {
     input: z.void(),
     output: z.array(contactSchema)
@@ -293,6 +319,19 @@ export const ipcContract = {
   'contacts.create': {
     input: contactDraftSchema,
     output: contactSchema
+  },
+  /**
+   * Delete exists because a Contact now owns something outside the database —
+   * its worktree — and nothing else can clean that up.
+   *
+   * `discardUncommitted` defaults to false, so the first attempt refuses when
+   * the worktree has unsaved changes and the caller has to decide. Committed
+   * work is never at risk: the branch survives, and the Branches panel is where
+   * it gets dealt with.
+   */
+  'contacts.delete': {
+    input: z.object({ id: z.string(), discardUncommitted: z.boolean().optional() }),
+    output: z.object({ deleted: z.boolean() })
   },
 
   /** No create: a group is implied by its repo, never made directly (§4). */
@@ -401,6 +440,37 @@ export const ipcContract = {
   'repos.clone': {
     input: z.object({ fullName: z.string(), cloneUrl: z.string() }),
     output: boundRepoSchema.nullable()
+  },
+
+  // --- Branches (Phase 12, docs/plan/12-worktree-isolation.md) ---------------
+  // Layers 1 and 2 of that phase are automatic; this is layer 3, the part with
+  // a human in it. Nothing here merges without an explicit call.
+
+  'branches.list': {
+    input: z.void(),
+    output: z.array(branchSummarySchema)
+  },
+  /** Every working copy the branch could be merged into, and whether it is clean. */
+  'branches.targets': {
+    input: z.object({ repoPath: z.string() }),
+    output: z.array(mergeTargetSchema)
+  },
+  /**
+   * A true dry run — `git merge-tree` merges in the object store, so no working
+   * copy is touched and nothing needs aborting afterwards.
+   */
+  'branches.preview': {
+    input: z.object({ repoPath: z.string(), targetPath: z.string(), branch: z.string() }),
+    output: z.object({ clean: z.boolean(), conflicts: z.array(z.string()) })
+  },
+  'branches.merge': {
+    input: z.object({ targetPath: z.string(), branch: z.string() }),
+    output: z.object({ merged: z.boolean() })
+  },
+  /** Refuses unmerged work unless `force`, which the confirm dialog supplies. */
+  'branches.discard': {
+    input: z.object({ repoPath: z.string(), branch: z.string(), force: z.boolean().optional() }),
+    output: z.object({ deleted: z.boolean() })
   },
 
   /** Opens a verification URL in the user's real browser. Host-allowlisted in main. */

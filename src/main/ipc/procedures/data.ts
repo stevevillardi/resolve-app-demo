@@ -1,5 +1,5 @@
 import { registerProcedure } from '../registerProcedure'
-import { createContact, getContact, listContacts } from '../../services/contacts'
+import { createContact, deleteContact, getContact, listContacts } from '../../services/contacts'
 import { listGroups } from '../../services/groups'
 import {
   createPersonaTemplate,
@@ -39,5 +39,8 @@ registerProcedure('personas.delete', ({ id }) => {
 registerProcedure('contacts.list', () => listContacts())
 registerProcedure('contacts.get', ({ id }) => getContact(id))
 registerProcedure('contacts.create', (draft) => createContact(draft))
+registerProcedure('contacts.delete', async ({ id, discardUncommitted }) => ({
+  deleted: await deleteContact(id, discardUncommitted ?? false)
+}))
 
 registerProcedure('groups.list', () => listGroups())

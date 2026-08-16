@@ -264,6 +264,34 @@ describe('the Claude OS sandbox', () => {
     expect(sandbox?.filesystem?.allowWrite).toEqual([REPO])
   })
 
+  // A worktree's .git is a file pointing back into the main repo, so a commit
+  // writes outside the working directory. Without these paths the session cannot
+  // even `git add` — verified against a real sandbox, not inferred.
+  const GIT_PATHS = [
+    `${REPO}/.git/worktrees/buddy`,
+    `${REPO}/.git/objects`,
+    `${REPO}/.git/refs`,
+    `${REPO}/.git/logs`
+  ]
+
+  it.runIf(supported)('adds the git directories a worktree session must write', () => {
+    const { sandbox } = claudeSandboxOptions('workspace_write', REPO, [], GIT_PATHS)
+    expect(sandbox?.filesystem?.allowWrite).toEqual([REPO, ...GIT_PATHS])
+  })
+
+  // The grant is for writing, and a reader does none. Passing it through here
+  // would hand a read_only persona write access to the repo's git directory,
+  // which is a far larger hole than the one it was meant to close.
+  it.runIf(supported)('grants a reader nothing, whatever it is handed', () => {
+    const { sandbox } = claudeSandboxOptions('read_only', REPO, [], GIT_PATHS)
+    expect(sandbox?.filesystem?.allowWrite).toEqual([])
+  })
+
+  it.runIf(supported)('grants nothing extra when the session is in its repo', () => {
+    const { sandbox } = claudeSandboxOptions('workspace_write', REPO, [], [])
+    expect(sandbox?.filesystem?.allowWrite).toEqual([REPO])
+  })
+
   it.runIf(supported)('fails loudly rather than running unconfined', () => {
     // A boundary that silently isn't there is worse than one that won't start.
     expect(claudeSandboxOptions('read_only', REPO).sandbox?.failIfUnavailable).toBe(true)

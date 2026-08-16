@@ -8,6 +8,7 @@ import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
 import { MessageBubble } from './MessageBubble'
 import { JournalNotice } from './JournalNotice'
+import { BranchRequestNotice } from './BranchRequestNotice'
 import { RoutineRunNotice } from './RoutineRunNotice'
 import { MentionPicker } from './MentionPicker'
 import { Composer } from './Composer'
@@ -19,6 +20,7 @@ import { usePersonas } from '@/hooks/usePersonas'
 import { useAgentStreams, useGroupMessages, useMentionInGroup } from '@/hooks/useGroupMessages'
 import { useCancelRun } from '@/hooks/useMessages'
 import { useRunStore } from '@/store/useRunStore'
+import { useUiStore } from '@/store/useUiStore'
 import type { Contact, GroupMessage, PersonaTemplate } from '@/types'
 
 interface GroupThreadViewProps {
@@ -26,7 +28,7 @@ interface GroupThreadViewProps {
 }
 
 /**
- * The four GroupMessage types are told apart by *shape*, not hue:
+ * The GroupMessage types are told apart by *shape*, not hue:
  *
  *   agent_reply    → an inbound bubble with a sender header (the only bubble
  *                    an agent produces here)
@@ -34,16 +36,20 @@ interface GroupThreadViewProps {
  *                    message, so rendering it as anything else was wrong
  *   system_summary → a centred hairline record (JournalNotice)
  *   routine_run    → a timeline log row (RoutineRunNotice)
+ *   branch_request → the same log rhythm but a heavier rule and a control, the
+ *                    only row here that asks the user for something
  *
- * Greyscale the screenshot and all four are still distinguishable. That is the
+ * Greyscale the screenshot and they are all still distinguishable. That is the
  * test the previous four-tinted-boxes version failed.
  */
 function GroupEntry({
   message,
-  personaFor
+  personaFor,
+  onReviewBranch
 }: {
   message: GroupMessage
   personaFor: (contactId: string | undefined) => PersonaTemplate | undefined
+  onReviewBranch?: (branch: string) => void
 }): React.JSX.Element {
   const authorPersona = personaFor(message.contactId)
 
@@ -64,6 +70,16 @@ function GroupEntry({
           content={message.content}
           authorName={authorPersona?.name}
           timestamp={message.timestamp}
+        />
+      )
+    case 'branch_request':
+      return (
+        <BranchRequestNotice
+          content={message.content}
+          branch={message.branch ?? ''}
+          authorName={authorPersona?.name}
+          timestamp={message.timestamp}
+          onReview={onReviewBranch}
         />
       )
     case 'user_mention':
@@ -121,6 +137,17 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
 
   const runsByContact = useRunStore((state) => state.byContact)
   const { mention, error: mentionError, reset } = useMentionInGroup(groupId)
+
+  // A branch request is the one row here that asks the user for something, and
+  // the Branches panel is where the answer lives — so the button navigates
+  // rather than trying to inline a merge into the thread.
+  const setSection = useUiStore((state) => state.setSection)
+  const setSelectedBranch = useUiStore((state) => state.setSelectedBranch)
+  const reviewBranch = (branch: string): void => {
+    if (!group) return
+    setSelectedBranch({ repoPath: group.repoPath, branch })
+    setSection('branches')
+  }
   const { cancel } = useCancelRun()
 
   // The one member currently mid-turn, if any. Single-target mentions mean at
@@ -221,7 +248,11 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               return (
                 <Fragment key={message.id}>
                   {newDay && <DaySeparator timestamp={message.timestamp} />}
-                  <GroupEntry message={message} personaFor={personaFor} />
+                  <GroupEntry
+                    message={message}
+                    personaFor={personaFor}
+                    onReviewBranch={reviewBranch}
+                  />
                 </Fragment>
               )
             })

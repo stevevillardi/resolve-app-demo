@@ -98,6 +98,18 @@ describe('migrating a populated database', () => {
     // 0006. A pre-existing row carries no session, which is exactly why
     // baselineFor() excludes it — see services/usage-events.ts.
     expect(usage.session_id).toBeNull()
+
+    // 0007. A contact that predates worktrees keeps working in the repo itself:
+    // workingPathFor() reads `worktree_path ?? repo_path`, and isolationOf()
+    // reads a null mode as `shared`. Neither is a guess — they are the only
+    // answers that leave an upgraded profile behaving exactly as it did.
+    const contact = upgraded.get(
+      `SELECT repo_path, worktree_path, branch, isolation FROM contacts WHERE id = 'c1'` as never
+    ) as Record<string, unknown>
+    expect(contact.repo_path).toBe('/Users/dev/my-app')
+    expect(contact.worktree_path).toBeNull()
+    expect(contact.branch).toBeNull()
+    expect(contact.isolation).toBeNull()
   })
 
   it('is idempotent — a second launch applies nothing and loses nothing', () => {

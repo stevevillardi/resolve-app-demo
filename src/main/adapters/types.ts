@@ -12,6 +12,20 @@ import type { GroupMessage, PersonaBackend, PersonaTemplate, Skill } from '../..
  */
 
 /**
+ * One other Contact's branch, as this session is told about it.
+ *
+ * Declared here rather than in the service that resolves it for the same reason
+ * SessionSpec is: this is the shape the adapters agree on, and nothing under
+ * src/main/adapters/ may import a service.
+ */
+export interface SiblingBranch {
+  branch: string
+  /** Whose it is, so the model can attribute the work in its own summary. */
+  contactName: string
+  headSha: string | null
+}
+
+/**
  * Everything an adapter needs to start or resume a session.
  *
  * Deviates from blueprint §3's literal `createSession(persona, repoPath)`:
@@ -20,8 +34,42 @@ import type { GroupMessage, PersonaBackend, PersonaTemplate, Skill } from '../..
  */
 export interface SessionSpec {
   persona: PersonaTemplate
-  /** Absolute path to the repo the session works in. Becomes the cwd. */
+  /**
+   * Absolute path to the directory the session works in. Becomes the cwd.
+   *
+   * Named for the repo because that is what it was until Phase 12; since then it
+   * is the *working* path, which for an isolated Contact is its worktree rather
+   * than the repo itself. Everything downstream — the cwd, the write boundary,
+   * isInsideRepo()'s fence — wants the working path, so the name is the only
+   * thing that stayed behind.
+   */
   repoPath: string
+  /**
+   * Directories outside `repoPath` that a writing session must still be able to
+   * write to. Empty unless the session runs in a `git worktree`.
+   *
+   * A worktree's `.git` is a file pointing back into the main repo, so a commit
+   * writes outside the working directory and a sandbox fenced to the cwd fails
+   * at `git add`. Resolved by the caller with gitWritePathsFor(), for the same
+   * reason `skills` is: it means running git, and nothing here may.
+   */
+  writablePaths?: string[]
+  /**
+   * Branches other Contacts on this repo are working on, which are checked out
+   * nowhere this session can see.
+   *
+   * Resolved by the caller, like `skills` and `groupContext`. Injected rather
+   * than left to be discovered because a persona cannot find this out: `git
+   * branch` and `git worktree` are denied at read_only on purpose.
+   */
+  siblingBranches?: SiblingBranch[]
+  /**
+   * Set only when the session runs somewhere other than its repository, so the
+   * prompt can say where that is. See the comment in composeInstructions: a
+   * worktree session can write to the repo's git admin directory, and a model
+   * given a bare relative filename will sometimes resolve it against that.
+   */
+  workingContext?: { workingPath: string; repoPath: string; branch: string }
   /** Already resolved from persona.skillIds by the caller (blueprint §5). */
   skills: Skill[]
   /**

@@ -132,6 +132,13 @@ export function contextForRepo(
           // `system_summary` alone would make every routine invisible to its
           // colleagues, which is the same failure as a real change filed as
           // `routine` and dropped from context.
+          //
+          // `branch_request` is deliberately NOT here. It is addressed to the
+          // human — only a person can merge — and injecting it would read to
+          // every other persona as a task, which is exactly the failure the
+          // group-context preamble was written to prevent. It also carries no
+          // `durable` value, so it would never match either query anyway; the
+          // filter says so explicitly rather than relying on that.
           inArray(groupMessages.type, ['system_summary', 'routine_run']),
           eq(groupMessages.durable, durable)
         )

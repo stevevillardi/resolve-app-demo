@@ -74,7 +74,14 @@ export function toContact(row: ContactRow): Contact {
     personaTemplateId: row.personaTemplateId,
     repoPath: row.repoPath,
     displayName: row.displayName,
-    backendSessionId: row.backendSessionId
+    backendSessionId: row.backendSessionId,
+    // Passed straight through rather than run through optional(): for all three
+    // of these null is a meaning, not an absence. workingPathFor() reads
+    // `worktreePath ?? repoPath`, which only says what it looks like it says if
+    // the key is always present.
+    worktreePath: row.worktreePath,
+    branch: row.branch,
+    isolation: row.isolation
   }
 }
 

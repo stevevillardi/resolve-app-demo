@@ -5,6 +5,7 @@ import { PersonaDetailPanel } from '@/components/persona/PersonaDetailPanel'
 import { SkillLibraryView } from '@/components/persona/SkillLibraryView'
 import { RoutineEditor } from '@/components/routines/RoutineEditor'
 import { UsageDashboard } from '@/components/usage/UsageDashboard'
+import { BranchDetail } from '@/components/branches/BranchDetail'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { useUiStore } from '@/store/useUiStore'
@@ -19,6 +20,7 @@ export function WorkspaceView(): React.JSX.Element {
   if (section === 'skills') return <SkillLibraryView />
   if (section === 'routines') return <RoutineEditor />
   if (section === 'usage') return <UsageDashboard />
+  if (section === 'branches') return <BranchDetail />
 
   if (selected?.kind === 'contact') return <ThreadView contactId={selected.id} />
   if (selected?.kind === 'group') return <GroupThreadView groupId={selected.id} />

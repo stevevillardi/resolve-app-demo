@@ -33,6 +33,10 @@ export function NavRail(): React.JSX.Element {
             <SidebarMenuItem key={item.section}>
               <SidebarMenuButton
                 tooltip={item.label}
+                // Collapsed, the label span is hidden and the button is an icon
+                // with no accessible name at all — so a screen reader announces
+                // six unlabelled buttons, and so does Playwright.
+                aria-label={item.label}
                 isActive={section === item.section}
                 onClick={() => setSection(item.section)}
                 className="h-10 gap-2.5 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center"

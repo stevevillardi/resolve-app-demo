@@ -21,7 +21,13 @@ export const groupMessageTypeSchema = z.enum([
   'system_summary',
   'user_mention',
   'agent_reply',
-  'routine_run'
+  'routine_run',
+  /**
+   * A persona asking for somebody else's branch to be merged into its tree —
+   * the one step of docs/plan/12-worktree-isolation.md that a human has to
+   * take. `branch` carries what it wants, `content` carries why.
+   */
+  'branch_request'
 ])
 export const systemSummaryCategorySchema = z.enum(['decision', 'tradeoff', 'routine'])
 export const usageSourceSchema = z.enum(['message', 'routine', 'mention', 'summary'])
@@ -59,13 +65,57 @@ export const personaTemplateSchema = z.object({
   githubScope: githubScopeSchema
 })
 
+/**
+ * Where a Contact's session runs (docs/plan/12-worktree-isolation.md §4).
+ *
+ * Chosen per Contact rather than per persona, because the same persona may want
+ * isolation on one repo and not on another. This picks the *location*; the lock
+ * mode still comes from the persona's sandbox level — except for `exclusive`,
+ * which is the escape hatch that locks the main tree even for a reader.
+ */
+export const isolationSchema = z.enum(['shared', 'worktree', 'exclusive'])
+
+/**
+ * What a new Contact gets when nobody says otherwise.
+ *
+ * Lives here rather than in main because the bind flow has to show the same
+ * answer the service would have chosen — two copies of this rule would drift
+ * into a picker that pre-selects one thing and a database that stores another.
+ *
+ * Readers stay in the main tree: they are never refused by the run lock anyway,
+ * and the main tree is the only place uncommitted work is visible, which is
+ * usually the thing a reviewer was asked to look at. Writers are the ones that
+ * contend, so writers are the ones that get isolated.
+ */
+export function defaultIsolation(sandbox: SandboxLevel): Isolation {
+  return sandbox === 'read_only' ? 'shared' : 'worktree'
+}
+
+/** Null reads as `shared` — that is what every pre-0007 row means. */
+export function isolationOf(isolation: Isolation | null): Isolation {
+  return isolation ?? 'shared'
+}
+
 export const contactSchema = z.object({
   id: z.string(),
   personaTemplateId: z.string(),
+  /** The canonical repo, whatever directory the session actually runs in. */
   repoPath: z.string(),
   displayName: z.string(),
   /** Resume key for the backend session; null until the first turn runs. */
-  backendSessionId: z.string().nullable()
+  backendSessionId: z.string().nullable(),
+  /**
+   * Where this Contact works; null means the repo itself.
+   *
+   * Set when the Contact is created and before the directory exists — see the
+   * column comment in src/main/db/schema.ts for why the path is planned up
+   * front rather than at first use.
+   */
+  worktreePath: z.string().nullable(),
+  /** The branch that worktree is on. Null whenever worktreePath is. */
+  branch: z.string().nullable(),
+  /** Null reads as `shared` — that is what every pre-0007 row means. */
+  isolation: isolationSchema.nullable()
 })
 
 export const groupSchema = z.object({
@@ -86,13 +136,16 @@ export const groupMessageSchema = z.object({
   /** `system_summary` only — durable entries are always re-injected (§6). */
   durable: z.boolean().optional(),
   /**
-   * `system_summary` only — the branch the work landed on, when there was one.
+   * The branch this row is about.
    *
-   * Unset until worktrees land (docs/plan/12-worktree-isolation.md): with one
-   * shared checkout there is usually no branch worth naming. It exists now
-   * because these rows are already injected into every session on the repo,
-   * which makes them the channel by which a writer's invisible branch becomes
-   * known.
+   * On a summary it is where the work landed, which is how a writer's otherwise
+   * invisible branch becomes known to every later session on the repo — these
+   * rows are already injected into each one. On a `branch_request` it is the
+   * branch being asked for instead.
+   *
+   * Still absent whenever a Contact works in the main tree, which is the common
+   * case for readers: there is no branch worth naming when the changes are
+   * simply on disk.
    */
   branch: z.string().optional()
 })
@@ -160,7 +213,19 @@ export const usageEventSchema = z.object({
 
 export const skillDraftSchema = skillSchema.omit({ id: true })
 export const personaTemplateDraftSchema = personaTemplateSchema.omit({ id: true })
-export const contactDraftSchema = contactSchema.omit({ id: true, backendSessionId: true })
+/**
+ * `worktreePath` and `branch` are omitted alongside the ids because main derives
+ * them from the repo and persona — a renderer-supplied working path would be a
+ * way to point a session at any directory on disk, which is the one thing the
+ * sandbox levels exist to prevent. `isolation` stays, because it is the choice
+ * the bind flow actually asks the user to make.
+ */
+export const contactDraftSchema = contactSchema
+  .omit({ id: true, backendSessionId: true, worktreePath: true, branch: true, isolation: true })
+  // Optional rather than nullable: an absent isolation means "decide for me",
+  // and main picks from the persona's sandbox level. Null is only ever a stored
+  // value, meaning a row written before the column existed.
+  .extend({ isolation: isolationSchema.optional() })
 /**
  * `timestamp` is omitted alongside `id` because main mints it too — a
  * renderer-supplied time would let a clock skew reorder the thread.
@@ -193,6 +258,7 @@ export type GroupMessageType = z.infer<typeof groupMessageTypeSchema>
 export type SystemSummaryCategory = z.infer<typeof systemSummaryCategorySchema>
 export type UsageSource = z.infer<typeof usageSourceSchema>
 export type CostSource = z.infer<typeof costSourceSchema>
+export type Isolation = z.infer<typeof isolationSchema>
 
 export type Skill = z.infer<typeof skillSchema>
 export type PersonaTemplate = z.infer<typeof personaTemplateSchema>

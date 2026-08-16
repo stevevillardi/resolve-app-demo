@@ -370,11 +370,19 @@ export interface ClaudeSandboxOptions {
  * @param denyReadPaths extra paths to keep out of the agent's reach entirely.
  *   Injected because this layer may not import electron and so cannot resolve
  *   the app's own userData directory (see AdapterConfig.denyReadPaths).
+ * @param writablePaths directories outside the repo that must still be writable.
+ *   Empty for a Contact working in its repo. For one working in a `git
+ *   worktree` it carries the parts of the main repo's git directory that a
+ *   commit touches: a worktree's `.git` is a *file* pointing back into the main
+ *   repo, so `allowWrite: [repoPath]` alone fails at `git add`. Resolved by
+ *   gitWritePathsFor() rather than assembled here — this layer may not run git
+ *   any more than it may import electron.
  */
 export function claudeSandboxOptions(
   level: SandboxLevel,
   repoPath: string,
-  denyReadPaths: string[] = []
+  denyReadPaths: string[] = [],
+  writablePaths: string[] = []
 ): ClaudeSandboxOptions {
   const filesystem = (allowWrite: string[]): ClaudeOsSandbox['filesystem'] => ({
     allowWrite,
@@ -405,7 +413,7 @@ export function claudeSandboxOptions(
       return {
         permissionMode: 'acceptEdits',
         disallowedTools: [],
-        ...osSandbox([repoPath])
+        ...osSandbox([repoPath, ...writablePaths])
       }
     case 'full_access':
       // No OS sandbox by definition — this is the level whose whole point is
