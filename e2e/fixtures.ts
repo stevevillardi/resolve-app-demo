@@ -1,5 +1,7 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { existsSync, mkdtempSync, rmSync } from 'fs'
+// node:sqlite rather than better-sqlite3 — see readProfileDb below.
+import { DatabaseSync } from 'node:sqlite'
 import { join, resolve } from 'path'
 import { tmpdir } from 'os'
 
@@ -93,4 +95,59 @@ export interface AuthStatus {
   github: { connected: boolean; configured: boolean; login?: string }
   onboardingCompleted: boolean
   secretStorageAvailable: boolean
+}
+
+// --- Observing the app with no window on screen (Phase 8) --------------------
+// Routines have to keep firing once the window is closed, which every fixture
+// above is unable to watch: `invoke` needs a renderer to reach the bridge, and
+// `app.close()` ends the whole process rather than just the window.
+
+/** Closes the window the way the traffic light does — main hides it instead. */
+export async function closeWindow(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows().forEach((window) => window.close())
+  })
+}
+
+/** Destroys the window outright, bypassing the close handler: genuinely zero windows. */
+export async function destroyWindow(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows().forEach((window) => window.destroy())
+  })
+}
+
+export function windowCount(app: ElectronApplication): Promise<number> {
+  return app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
+}
+
+export function anyWindowVisible(app: ElectronApplication): Promise<boolean> {
+  return app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().some((window) => window.isVisible())
+  )
+}
+
+/**
+ * Reads the live profile database from the test process.
+ *
+ * `node:sqlite` rather than better-sqlite3 on purpose: `postinstall` rebuilds
+ * better-sqlite3 against Electron's ABI, so loading it under plain Node is a
+ * coincidence of prebuild selection rather than something to depend on. The DB
+ * is in WAL mode (see db/create.ts), so a second-process reader sees committed
+ * writes immediately.
+ *
+ * This is the honest observation surface for "did it fire with no window": the
+ * acceptance check is about durable state, and reaching into main for a test
+ * hook would mean shipping a backdoor to make a test convenient.
+ */
+export function readProfileDb<T = Record<string, unknown>>(
+  profile: string,
+  sql: string,
+  ...params: unknown[]
+): T[] {
+  const db = new DatabaseSync(join(profile, 'userData', 'persona-router.db'), { readOnly: true })
+  try {
+    return db.prepare(sql).all(...(params as never[])) as T[]
+  } finally {
+    db.close()
+  }
 }

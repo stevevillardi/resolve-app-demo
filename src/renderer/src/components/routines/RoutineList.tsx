@@ -3,15 +3,19 @@ import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { EmptyState } from '@/components/common/EmptyState'
 import { formatRelative } from '@/lib/format'
 import { cn } from '@/lib/utils'
-// Still mock-fed: the routines table exists as of Phase 4 but has no CRUD
-// and no scheduler until Phase 8 (docs/plan/08-routines-scheduler.md).
-import { contacts, personaTemplates, routines } from '@/mocks'
+import { useContacts } from '@/hooks/useConversations'
+import { usePersonas } from '@/hooks/usePersonas'
+import { useRoutines } from '@/hooks/useRoutines'
 import { useUiStore } from '@/store/useUiStore'
 
 export function RoutineList({ query }: { query: string }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedRoutineId)
   const setSelectedId = useUiStore((state) => state.setSelectedRoutineId)
   const needle = query.trim().toLowerCase()
+
+  const routines = useRoutines().data ?? []
+  const contacts = useContacts().data ?? []
+  const personaTemplates = usePersonas().data ?? []
 
   const visible = routines.filter(
     (routine) =>
@@ -21,12 +25,21 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
   )
 
   if (visible.length === 0) {
-    return (
+    // Two different nothings: a filter that matched nothing, and a section
+    // nobody has used yet. The second one names the next action.
+    return needle ? (
       <EmptyState
         compact
         icon={Clock}
         title="No routines match"
         description={`Nothing matching “${query.trim()}”.`}
+      />
+    ) : (
+      <EmptyState
+        compact
+        icon={Clock}
+        title="No routines yet"
+        description="A routine wakes a contact on a schedule and posts what it did to the repo group."
       />
     )
   }

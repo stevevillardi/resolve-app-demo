@@ -16,19 +16,22 @@ import { RoutineList } from '@/components/routines/RoutineList'
 import { UsageScopeList } from '@/components/usage/UsageScopeList'
 import { useCreatePersona } from '@/hooks/usePersonas'
 import { useCreateSkill } from '@/hooks/useSkills'
+import { useContacts } from '@/hooks/useConversations'
+import { useCreateRoutine } from '@/hooks/useRoutines'
 import { useUiStore, type Section } from '@/store/useUiStore'
 import type { PersonaTemplateDraft, SkillDraft } from '@/types'
 
 // `newLabel` is only set where the action actually does something — a "+" that
 // visibly does nothing when clicked is worse than no "+" at all. Personas and
 // skills got theirs in Phase 4, when there was finally somewhere to persist
-// them. Routines stay without one until Phase 8: a routine is bound to a
-// contact, and there are no contacts to bind to until Phase 6.
+// them; routines got theirs in Phase 8, when a scheduler finally existed to
+// fire one. Routines still need a Contact to bind to, so the button is present
+// but disabled until there is one — see `canCreate` below.
 const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLabel?: string }> = {
   chats: { title: 'Chats', searchPlaceholder: 'Search conversations', newLabel: 'New contact' },
   personas: { title: 'Personas', searchPlaceholder: 'Search personas', newLabel: 'New persona' },
   skills: { title: 'Skills', searchPlaceholder: 'Search skills', newLabel: 'New skill' },
-  routines: { title: 'Routines', searchPlaceholder: 'Search routines' },
+  routines: { title: 'Routines', searchPlaceholder: 'Search routines', newLabel: 'New routine' },
   usage: { title: 'Usage' }
 }
 
@@ -47,6 +50,16 @@ const NEW_PERSONA: PersonaTemplateDraft = {
 const NEW_SKILL: SkillDraft = { name: 'New skill', description: '', content: '' }
 
 /**
+ * A new routine starts **paused**, with a schedule but no prompt.
+ *
+ * Everything else in this app creates something inert. A routine is the one
+ * thing that would start doing work on its own the moment it exists, and an
+ * empty prompt firing unattended at 09:00 tomorrow is not what anyone meant by
+ * pressing "+".
+ */
+const NEW_ROUTINE_SCHEDULE = '0 9 * * *'
+
+/**
  * The middle pane. Every section is master-detail, so this owns the chrome —
  * title, search, primary action — and only the list body changes. Keeping one
  * header means the window's top edge stays a single unbroken drag strip
@@ -57,17 +70,37 @@ export function ListPanel(): React.JSX.Element {
   const setDialog = useUiStore((state) => state.setDialog)
   const setSelectedPersonaId = useUiStore((state) => state.setSelectedPersonaId)
   const setSelectedSkillId = useUiStore((state) => state.setSelectedSkillId)
+  const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
   const [query, setQuery] = useState('')
   const config = PANEL[section]
 
   const { create: createPersona } = useCreatePersona()
   const { create: createSkill } = useCreateSkill()
+  const { create: createRoutine } = useCreateRoutine()
+  const contacts = useContacts().data ?? []
+
+  // A routine's contact_id is NOT NULL, so there has to be a Contact to bind
+  // to. Disabled-with-a-reason beats a button that throws.
+  const canCreate = section !== 'routines' || contacts.length > 0
 
   // Creating selects the new row, so "+" lands the user in the editor with the
   // cursor somewhere useful rather than adding a row they then have to find.
   const onNew = (): void => {
     if (section === 'personas') return createPersona(NEW_PERSONA, (p) => setSelectedPersonaId(p.id))
     if (section === 'skills') return createSkill(NEW_SKILL, (s) => setSelectedSkillId(s.id))
+    if (section === 'routines') {
+      const contact = contacts[0]
+      if (!contact) return
+      return createRoutine(
+        {
+          contactId: contact.id,
+          schedule: NEW_ROUTINE_SCHEDULE,
+          prompt: '',
+          enabled: false
+        },
+        (routine) => setSelectedRoutineId(routine.id)
+      )
+    }
     setDialog('newContact')
   }
 
@@ -84,6 +117,7 @@ export function ListPanel(): React.JSX.Element {
                     variant="ghost"
                     size="icon-sm"
                     onClick={onNew}
+                    disabled={!canCreate}
                     aria-label={config.newLabel}
                     className="no-drag"
                   >

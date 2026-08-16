@@ -10,10 +10,10 @@ import type { PersonaTemplate, Skill } from '../../shared/domain'
  * These mirror src/renderer/src/mocks/{skills,personaTemplates}.ts by content
  * but can't import them — main must not reach into the renderer. The ids are
  * kept identical on purpose: the surfaces still running on mock data
- * (RoutineList, UsageDashboard, UsageScopeList) join against persona ids, so
- * matching them keeps those screens coherent until Phases 8 and 10 replace
- * their data sources. When the last mock consumer is gone, this file becomes
- * the only copy and the ids stop mattering.
+ * (UsageDashboard, UsageScopeList) join against persona ids, so matching them
+ * keeps those screens coherent until Phase 10 replaces their data source.
+ * Phase 8 took RoutineList off mocks. When the last mock consumer is gone, this
+ * file becomes the only copy and the ids stop mattering.
  */
 
 export const SEED_SKILLS: Skill[] = [
