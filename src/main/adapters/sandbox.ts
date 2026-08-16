@@ -1,3 +1,5 @@
+import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import { existsSync, realpathSync } from 'fs'
 import { isAbsolute, relative, resolve } from 'path'
 import type { SandboxLevel } from '../../shared/domain'
 
@@ -5,29 +7,29 @@ import type { SandboxLevel } from '../../shared/domain'
  * Sandbox enforcement (blueprint §4's `sandbox` axis).
  *
  * Blueprint §3 asks for sandbox levels that are enforced rather than labeled.
+ * There are two layers here, and the order matters:
  *
- * How the Claude side actually composes, verified by probe runs rather than
- * assumed — `canUseTool` is NOT a complete mediator. The SDK's own classifier
- * decides first, and only calls us for tool uses it would otherwise prompt
- * about; commands it considers safe (`echo hello`, `pwd && ls`) run without
- * ever reaching evaluateToolUse. So this file is a *deny layer over the
- * prompt-worthy set*, not the whole policy:
+ *   1. **The OS sandbox does the enforcing.** Both SDKs can confine the
+ *      commands they run at the operating-system level — Codex via its
+ *      `--sandbox` preset, Claude via `Options.sandbox` (claudeSandboxOptions).
+ *      Neither can be talked out of it by a cleverly written command line.
+ *   2. **This file's allowlist is a second layer**, running in-process through
+ *      `canUseTool`. It refuses obvious mutations early, with a message the
+ *      model can act on, and it has tests that cost nothing to run.
  *
- *   1. `disallowedTools` removes the write tools from the model's context
- *      entirely at read_only (claudeSandboxOptions).
- *   2. The SDK auto-allows its own read-only command set.
- *   3. Everything else routes here, and this is where a mutation is refused.
+ * The layering is deliberate and was not always this way. The first cut of
+ * Phase 5 made layer 2 the *only* Claude-side policy, which meant a hand-rolled
+ * shell parser was the entire security boundary — the exact thing the comment
+ * on SHELL_CONTROL says not to hand-roll. A post-phase review found real
+ * escapes through it (`find . -delete`, `sed -ni`, `git -c diff.external=…`),
+ * all now covered in sandbox.test.ts. They are fixed below, but the reason they
+ * stopped being frightening is layer 1, not the patches.
  *
- * Empirically the boundary holds where it matters: `touch` and `rm` both reach
- * step 3 and are denied, with the target file confirmed untouched afterwards.
- * Keeping that decision in pure code is what lets enforcement have tests that
- * cost nothing to run and cannot drift when the SDK changes what a permission
- * mode means.
- *
- * Codex is the other way round: its `--sandbox read-only` preset is enforced
- * by the CLI's own OS-level sandbox, which is stronger than anything this
- * process could impose on a subprocess. There we translate the level and let
- * the runtime enforce it (codexSandboxMode).
+ * What layer 2 is NOT: a complete mediator. Verified by probe runs — the SDK's
+ * own classifier decides first and only calls `canUseTool` for tool uses it
+ * would otherwise prompt about, so commands it considers safe (`echo hello`,
+ * `pwd && ls`) never reach evaluateToolUse at all. Treat it as a deny layer
+ * over the prompt-worthy set.
  */
 
 export interface SandboxDecision {
@@ -87,19 +89,53 @@ const READ_ONLY_COMMANDS = new Set([
  * `git` subcommands that only read. Everything else — commit, checkout, apply,
  * push, clean, reset — is a mutation, and `git` is the one allowed command
  * that can write.
+ *
+ * `branch` and `remote` were here and are not any more: both read in their bare
+ * form and write with a flag (`git branch -D`, `git remote add`), and telling
+ * those apart means implementing each subcommand's own option grammar. At
+ * read_only the cheap answer is the right one.
  */
 const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   'blame',
-  'branch',
   'diff',
   'log',
   'ls-files',
   'ls-tree',
-  'remote',
   'shortlog',
   'show',
   'status'
 ])
+
+/**
+ * Per-command flags that turn an allowlisted reader into a writer or an
+ * executor. Keyed by the head token; matched against the whole argument list.
+ *
+ * `find` is the sharp one. Its write predicates need no shell metacharacter, so
+ * SHELL_CONTROL never sees them — `find . -type f -exec rm {} +` terminates
+ * with `+` rather than `;`, and find does the executing itself.
+ */
+const DENIED_FLAGS_BY_COMMAND: Record<string, Set<string>> = {
+  find: new Set([
+    '-delete',
+    '-exec',
+    '-execdir',
+    '-ok',
+    '-okdir',
+    '-fprint',
+    '-fprint0',
+    '-fprintf',
+    '-fls'
+  ])
+}
+
+/**
+ * git's own global flags that can name a program for git to run, which would
+ * make the subcommand allowlist decide nothing at all: `-c` sets arbitrary
+ * config, and several keys hold command lines git executes (`diff.external`,
+ * `core.pager`, `core.sshCommand`). `--exec-path` repoints the directory git
+ * loads its subcommand binaries from.
+ */
+const DENIED_GIT_GLOBAL_FLAGS = new Set(['-c', '--config-env', '--exec-path'])
 
 /**
  * Shell syntax that chains, redirects, or substitutes — any of which would let
@@ -116,23 +152,35 @@ const SHELL_CONTROL = /[;&|><`\n]|\$\(/
  * (`git -c core.pager=cat status` would otherwise read as `core.pager=cat`).
  * Returns null when no subcommand is found, which the caller treats as a deny.
  */
-const GIT_FLAGS_TAKING_A_VALUE = new Set([
-  '-c',
-  '-C',
-  '--git-dir',
-  '--work-tree',
-  '--namespace',
-  '--exec-path'
-])
+const GIT_FLAGS_TAKING_A_VALUE = new Set(['-C', '--git-dir', '--work-tree', '--namespace'])
 
 function gitSubcommand(tokens: string[]): string | null {
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]
     if (!token.startsWith('-')) return token
+    // `--config-env=x` carries its value inline, so compare on the flag name.
+    if (DENIED_GIT_GLOBAL_FLAGS.has(token.split('=')[0])) return null
     // `--git-dir=x` carries its value inline; `--git-dir x` eats the next token.
     if (GIT_FLAGS_TAKING_A_VALUE.has(token)) index++
   }
   return null
+}
+
+/**
+ * True when any token asks sed to edit in place.
+ *
+ * A prefix test on `-i` is not enough: `--in-place` is the GNU long form, and
+ * short flags cluster, so `-ni` is `-n -i` with an empty suffix. Both were
+ * allowed by the original check.
+ */
+function sedWritesInPlace(tokens: string[]): boolean {
+  return tokens.some((token) => {
+    if (token === '--in-place' || token.startsWith('--in-place=')) return true
+    if (!token.startsWith('-') || token.startsWith('--')) return false
+    // A short cluster ends at the first flag taking a value; -i's optional
+    // suffix runs to the end of the token, so anywhere in the cluster counts.
+    return token.slice(1).includes('i')
+  })
 }
 
 export function isReadOnlyCommand(command: string): boolean {
@@ -142,24 +190,45 @@ export function isReadOnlyCommand(command: string): boolean {
   const [head, ...rest] = trimmed.split(/\s+/)
   if (!READ_ONLY_COMMANDS.has(head)) return false
 
+  const deniedFlags = DENIED_FLAGS_BY_COMMAND[head]
+  if (deniedFlags && rest.some((token) => deniedFlags.has(token.split('=')[0]))) {
+    return false
+  }
+
   if (head === 'git') {
     const subcommand = gitSubcommand(rest)
     // `git` with no subcommand just prints usage; harmless but pointless.
     return subcommand !== null && READ_ONLY_GIT_SUBCOMMANDS.has(subcommand)
   }
 
-  // `sed -i` edits in place — the one flag that turns a reader into a writer.
-  if (head === 'sed' && rest.some((token) => token === '-i' || token.startsWith('-i'))) {
-    return false
-  }
+  if (head === 'sed' && sedWritesInPlace(rest)) return false
 
   return true
 }
 
-/** True when `candidate` resolves to `root` itself or something inside it. */
+/**
+ * True when `candidate` resolves to `root` itself or something inside it.
+ *
+ * Symlinks are resolved where the path already exists, so a link planted inside
+ * the repo cannot point the write somewhere else (`repo/link -> /etc`). A path
+ * that doesn't exist yet is compared lexically, which is correct — it is about
+ * to be created, and its parent chain is what was checked.
+ */
 export function isInsideRepo(root: string, candidate: string): boolean {
-  const rel = relative(resolve(root), resolve(root, candidate))
+  const realRoot = realPathOrSelf(resolve(root))
+  const target = realPathOrSelf(resolve(realRoot, candidate))
+  const rel = relative(realRoot, target)
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+}
+
+function realPathOrSelf(path: string): string {
+  try {
+    return existsSync(path) ? realpathSync(path) : path
+  } catch {
+    // A broken link or an unreadable parent: fall back to the lexical form
+    // rather than letting the check throw and take the whole turn down.
+    return path
+  }
 }
 
 /**
@@ -227,25 +296,98 @@ export function codexSandboxMode(
   }
 }
 
+/**
+ * Platforms where the Claude SDK can actually start an OS sandbox — macOS via
+ * Seatbelt, Linux via bubblewrap. There is no Windows implementation, so on
+ * Windows the level is honestly reported as policy-only rather than being
+ * quietly downgraded.
+ */
+const OS_SANDBOX_PLATFORMS = new Set(['darwin', 'linux'])
+
+export function osSandboxSupported(): boolean {
+  return OS_SANDBOX_PLATFORMS.has(process.platform)
+}
+
+/**
+ * Taken from the SDK rather than hand-declared, so a change to its sandbox
+ * schema is a compile error here instead of an option silently ignored at
+ * runtime. Type-only, so this stays an erased import and the file keeps its
+ * no-runtime-dependencies property.
+ */
+export type ClaudeOsSandbox = NonNullable<Options['sandbox']>
+
 export interface ClaudeSandboxOptions {
   permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions'
   /** Removed from the model's context entirely, per the SDK's own wording. */
   disallowedTools: string[]
   allowDangerouslySkipPermissions?: boolean
+  /** Absent at full_access, and on platforms with no sandbox implementation. */
+  sandbox?: ClaudeOsSandbox
 }
 
 /**
- * The backstop layer. evaluateToolUse() is the authority via canUseTool, but a
- * denied tool that the model can still see is a tool it will keep trying, so
- * `read_only` also strips the write tools from its context outright.
+ * Translates a level into the SDK's options.
+ *
+ * `sandbox` is the layer that does the enforcing (see the file header).
+ * Two choices in it are load-bearing:
+ *
+ * - `failIfUnavailable: true`. If the sandbox cannot start, the turn fails
+ *   loudly instead of running unconfined. A security boundary that silently
+ *   isn't there is worse than one that refuses to start, and the SDK's own
+ *   default for this option flips to true anyway when `enabled` is passed
+ *   explicitly. On platforms with no implementation we don't ask at all, so
+ *   this never fires as a surprise — it only fires when the sandbox was
+ *   supposed to work and didn't.
+ * - `autoAllowBashIfSandboxed: false`. With the OS confining writes it would be
+ *   safe to let every command through, but keeping the in-process allowlist in
+ *   the path means a refused command comes back as a sentence the model can
+ *   act on ("this persona is read-only") rather than an opaque OS error.
+ *
+ * @param repoPath absolute path to the session's repo — the write boundary at
+ *   workspace_write, which is what finally makes that level mean something for
+ *   Bash rather than only for the file tools.
+ * @param denyReadPaths extra paths to keep out of the agent's reach entirely.
+ *   Injected because this layer may not import electron and so cannot resolve
+ *   the app's own userData directory (see AdapterConfig.denyReadPaths).
  */
-export function claudeSandboxOptions(level: SandboxLevel): ClaudeSandboxOptions {
+export function claudeSandboxOptions(
+  level: SandboxLevel,
+  repoPath: string,
+  denyReadPaths: string[] = []
+): ClaudeSandboxOptions {
+  const filesystem = (allowWrite: string[]): ClaudeOsSandbox['filesystem'] => ({
+    allowWrite,
+    ...(denyReadPaths.length > 0 ? { denyRead: denyReadPaths } : {})
+  })
+
+  const osSandbox = (allowWrite: string[]): { sandbox?: ClaudeOsSandbox } =>
+    osSandboxSupported()
+      ? {
+          sandbox: {
+            enabled: true,
+            failIfUnavailable: true,
+            autoAllowBashIfSandboxed: false,
+            filesystem: filesystem(allowWrite)
+          }
+        }
+      : {}
+
   switch (level) {
     case 'read_only':
-      return { permissionMode: 'default', disallowedTools: [...WRITE_TOOLS] }
+      return {
+        permissionMode: 'default',
+        disallowedTools: [...WRITE_TOOLS],
+        ...osSandbox([])
+      }
     case 'workspace_write':
-      return { permissionMode: 'acceptEdits', disallowedTools: [] }
+      return {
+        permissionMode: 'acceptEdits',
+        disallowedTools: [],
+        ...osSandbox([repoPath])
+      }
     case 'full_access':
+      // No OS sandbox by definition — this is the level whose whole point is
+      // that the persona can touch the machine.
       return {
         permissionMode: 'bypassPermissions',
         disallowedTools: [],

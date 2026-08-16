@@ -39,9 +39,15 @@ export const agentUsageSchema = z.object({
 // --- Errors -----------------------------------------------------------------
 
 /**
- * A superset of the renderer's MessageBubbleError['kind']
- * (src/renderer/src/types/message.ts), so Phase 6 maps these onto error
- * bubbles without a translation table.
+ * Kept in step with the renderer's MessageBubbleError['kind']
+ * (src/renderer/src/types/message.ts) so Phase 6 assigns one to the other
+ * directly, with no translation table.
+ *
+ * That claim used to be false in the direction that matters: this enum had
+ * `auth` and `unknown` and the renderer's did not, so the two kinds that could
+ * not be assigned included `unknown` — the default classifyErrorMessage()
+ * returns, i.e. the common case rather than an edge one. The renderer union was
+ * widened to match. Adding a kind here means adding it there too.
  */
 export const agentErrorKindSchema = z.enum([
   'rate_limit',
@@ -64,7 +70,18 @@ export const agentEventSchema = z.discriminatedUnion('type', [
    */
   z.object({ type: z.literal('text_delta'), text: z.string() }),
 
-  /** A complete assistant message. Emitted by both, once the text is final. */
+  /**
+   * A complete assistant message, emitted by both backends once the text is
+   * final.
+   *
+   * IMPORTANT — this OVERLAPS `text_delta`, it does not follow on from it.
+   * Claude emits the deltas for a block and then the same block whole, so a
+   * consumer that appends both renders every reply twice. Pick one per stream:
+   * render `text_delta` while `streamsTextDeltas` is true and treat
+   * `text_message` as a correction, or ignore deltas entirely and take only
+   * whole messages. What gets *persisted* is neither — that is `done.finalText`,
+   * which is the backend's own authoritative final answer.
+   */
   z.object({ type: z.literal('text_message'), text: z.string() }),
 
   /** Reasoning summary, where the backend exposes one. */
@@ -132,7 +149,17 @@ export const agentCapabilitiesSchema = z.object({
   streamsTextDeltas: z.boolean(),
   /** Whether `tool_progress` is emitted between tool_start and tool_end. */
   streamsToolProgress: z.boolean(),
-  costSource: costSourceSchema
+  costSource: costSourceSchema,
+  /**
+   * How a persona's `sandbox` level is actually enforced for this backend.
+   *
+   * `os` — the operating system confines the agent's commands, and no command
+   * line can talk its way out. `policy` — only our in-process allowlist
+   * (src/main/adapters/sandbox.ts) stands in the way, which is a real guard but
+   * a weaker one. The UI should say which the user is getting rather than
+   * showing the same "read-only" chip for both.
+   */
+  sandboxEnforcement: z.enum(['os', 'policy'])
 })
 
 // --- Inferred types ---------------------------------------------------------

@@ -2,7 +2,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentCapabilities, AgentErrorKind, AgentEvent, AgentUsage } from '../../shared/agent'
 import { composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
-import { claudeSandboxOptions, evaluateToolUse } from './sandbox'
+import { claudeSandboxOptions, evaluateToolUse, osSandboxSupported } from './sandbox'
 import type { AdapterConfig, AgentAdapter, AgentSession, SessionSpec } from './types'
 
 /**
@@ -32,7 +32,11 @@ import type { AdapterConfig, AgentAdapter, AgentSession, SessionSpec } from './t
 export const CLAUDE_CAPABILITIES: AgentCapabilities = {
   streamsTextDeltas: true,
   streamsToolProgress: true,
-  costSource: 'sdk'
+  costSource: 'sdk',
+  // Options.sandbox confines commands at the OS level wherever the SDK has an
+  // implementation. Where it doesn't (Windows) we say so rather than implying
+  // a boundary that is only our in-process allowlist.
+  sandboxEnforcement: osSandboxSupported() ? 'os' : 'policy'
 }
 
 // --- Normalization helpers --------------------------------------------------
@@ -142,7 +146,12 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
     signal?: AbortSignal
   ): AsyncIterable<AgentEvent> {
     const { spec } = agentSession
-    const sandbox = claudeSandboxOptions(spec.persona.sandbox)
+    const sandbox = claudeSandboxOptions(
+      spec.persona.sandbox,
+      spec.repoPath,
+      config.denyReadPaths ?? []
+    )
+    const abort = signal ? abortControllerFor(signal) : null
 
     const stream = query({
       prompt,
@@ -158,6 +167,9 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
         ...(sandbox.allowDangerouslySkipPermissions
           ? { allowDangerouslySkipPermissions: true }
           : {}),
+        // The layer that actually enforces the level; canUseTool below is the
+        // second one. See the header of sandbox.ts for why it is this way round.
+        ...(sandbox.sandbox ? { sandbox: sandbox.sandbox } : {}),
         // `env` REPLACES the subprocess environment rather than merging, so
         // process.env has to be spread explicitly (the same trap Phase 3 hit
         // in claude-auth.ts) or the CLI loses PATH and HOME.
@@ -170,14 +182,22 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
         },
         ...(agentSession.sessionId ? { resume: agentSession.sessionId } : {}),
         ...(spec.model ? { model: spec.model } : {}),
-        ...(signal ? { abortController: abortControllerFor(signal) } : {}),
-        stderr: () => {}
+        ...(abort ? { abortController: abort.controller } : {}),
+        // The CLI's stderr is where a spawn failure explains itself, and where
+        // the sandbox reports that it could not start. Discarding it threw away
+        // the one channel that says why — route it to the raw hook instead.
+        stderr: (data: string) => config.onRawEvent?.({ type: 'stderr', data })
       }
     })
 
     let finalText = ''
     let usage: AgentUsage | null = null
     let emittedError = false
+
+    // tool_result blocks don't repeat the tool name, so remember it from the
+    // matching tool_use. Without this every tool_end carried an empty name and
+    // each consumer had to re-derive it by correlating ids.
+    const toolNames = new Map<string, string>()
 
     // A failure can arrive as a thrown error rather than a result message —
     // a missing CLI, a dead network, an expired login. Blueprint §15C wants
@@ -187,6 +207,8 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       yield { type: 'error', kind: classifyErrorMessage(message), message }
+    } finally {
+      abort?.dispose()
     }
 
     yield { type: 'done', finalText, usage }
@@ -229,6 +251,7 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
                 finalText = block.text
                 yield { type: 'text_message', text: block.text }
               } else if (block.type === 'tool_use' && block.id && block.name) {
+                toolNames.set(block.id, block.name)
                 yield {
                   type: 'tool_start',
                   toolCallId: block.id,
@@ -249,9 +272,10 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
               yield {
                 type: 'tool_end',
                 toolCallId: block.tool_use_id,
-                // The result block doesn't repeat the tool name; the consumer
-                // already has it from the matching tool_start.
-                name: '',
+                // The result block doesn't repeat the tool name, so it comes
+                // from the tool_use that opened this id. Empty only if the
+                // start was never seen, which would mean a malformed stream.
+                name: toolNames.get(block.tool_use_id) ?? '',
                 status: block.is_error ? 'failed' : 'completed'
               }
             }
@@ -310,10 +334,23 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
   }
 }
 
-/** The SDK takes an AbortController, callers hand us an AbortSignal. */
-function abortControllerFor(signal: AbortSignal): AbortController {
+/**
+ * The SDK takes an AbortController, callers hand us an AbortSignal.
+ *
+ * `dispose` matters because a caller's signal can outlive one turn — Phase 6
+ * will hold one per conversation. A listener that only unregisters when it
+ * fires would accumulate one dead controller per turn on any signal that never
+ * aborts, which is the common case.
+ */
+function abortControllerFor(signal: AbortSignal): {
+  controller: AbortController
+  dispose: () => void
+} {
   const controller = new AbortController()
+  const forward = (): void => controller.abort()
+
   if (signal.aborted) controller.abort()
-  else signal.addEventListener('abort', () => controller.abort(), { once: true })
-  return controller
+  else signal.addEventListener('abort', forward, { once: true })
+
+  return { controller, dispose: () => signal.removeEventListener('abort', forward) }
 }

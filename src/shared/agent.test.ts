@@ -101,15 +101,30 @@ describe('agentCapabilitiesSchema', () => {
       agentCapabilitiesSchema.safeParse({
         streamsTextDeltas: true,
         streamsToolProgress: true,
-        costSource: 'sdk'
+        costSource: 'sdk',
+        sandboxEnforcement: 'os'
       }).success
     ).toBe(true)
     expect(
       agentCapabilitiesSchema.safeParse({
         streamsTextDeltas: false,
         streamsToolProgress: true,
-        costSource: 'computed'
+        costSource: 'computed',
+        sandboxEnforcement: 'os'
       }).success
     ).toBe(true)
+  })
+
+  it('requires enforcement to be stated, not left to be assumed', () => {
+    // The whole reason this field exists is that "read-only" meant two
+    // different things per backend without anyone saying so. A capabilities
+    // object that omits it must not parse.
+    expect(
+      agentCapabilitiesSchema.safeParse({
+        streamsTextDeltas: true,
+        streamsToolProgress: true,
+        costSource: 'sdk'
+      }).success
+    ).toBe(false)
   })
 })

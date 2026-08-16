@@ -36,7 +36,11 @@ export const CODEX_CAPABILITIES: AgentCapabilities = {
   // The inverse of Claude's shape: live CommandExecutionStatus while a command
   // runs, which is exactly the visibility blueprint §3 credits Codex with.
   streamsToolProgress: true,
-  costSource: 'computed'
+  costSource: 'computed',
+  // The CLI's own `--sandbox` preset is enforced by the OS, on every platform
+  // it runs on. This was already true in Phase 5 — it is only stated now that
+  // the Claude side has an equivalent to be compared against.
+  sandboxEnforcement: 'os'
 }
 
 /**

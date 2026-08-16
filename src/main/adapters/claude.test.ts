@@ -213,6 +213,30 @@ describe('stream normalization', () => {
     expect(events).toContainEqual({ type: 'text_message', text: 'hello' })
   })
 
+  it('emits the same text twice, as deltas AND as a whole message', async () => {
+    // Pinned deliberately, because it is the shape most likely to be misread
+    // downstream: the deltas and the message OVERLAP, they do not concatenate.
+    // A consumer that appends both renders every reply doubled. See the note on
+    // text_message in src/shared/agent.ts.
+    const events = await collect([
+      {
+        type: 'stream_event',
+        event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'hello' } }
+      },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'hello' }] } },
+      { type: 'result', subtype: 'success', result: 'hello' }
+    ])
+
+    const deltas = events.filter((e) => e.type === 'text_delta')
+    const messages = events.filter((e) => e.type === 'text_message')
+    expect(deltas.map((e) => e.text).join('')).toBe('hello')
+    expect(messages.map((e) => e.text).join('')).toBe('hello')
+
+    // And the thing to actually persist is neither of the two streams.
+    const done = events.find((e) => e.type === 'done')
+    expect(done && done.type === 'done' && done.finalText).toBe('hello')
+  })
+
   it('ignores stream events that are not text deltas', async () => {
     const events = await collect([
       { type: 'stream_event', event: { type: 'content_block_start' } },
@@ -243,10 +267,12 @@ describe('stream normalization', () => {
       name: 'Bash',
       detail: 'git diff'
     })
+    // The tool_result block doesn't repeat the name, so it is carried over
+    // from the tool_use — a consumer can render a tool_end on its own.
     expect(events).toContainEqual({
       type: 'tool_end',
       toolCallId: 'tu-1',
-      name: '',
+      name: 'Bash',
       status: 'completed'
     })
   })
@@ -258,6 +284,9 @@ describe('stream normalization', () => {
         message: { content: [{ type: 'tool_result', tool_use_id: 'tu-1', is_error: true }] }
       }
     ])
+    // No tool_use preceded this one, so there is no name to carry over. Empty
+    // rather than invented — a malformed stream shouldn't produce a plausible
+    // tool name the UI would then display as fact.
     expect(events).toContainEqual({
       type: 'tool_end',
       toolCallId: 'tu-1',

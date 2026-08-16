@@ -81,10 +81,11 @@ export function computeCodexCost(model: string, usage: Usage): number | null {
   // free" instead of "we don't know what this cost".
   if (!price) return null
 
+  // CACHED_TOKENS_ARE_SUBSET is a constant, so this subtraction is not
+  // conditional on it — the constant records *why* the subtraction is here.
+  // Writing it as a ternary implied a runtime switch that never existed.
   const cached = usage.cached_input_tokens ?? 0
-  const uncachedInput = CACHED_TOKENS_ARE_SUBSET
-    ? Math.max(0, usage.input_tokens - cached)
-    : usage.input_tokens
+  const uncachedInput = Math.max(0, usage.input_tokens - cached)
 
   return (
     (uncachedInput * price.input) / 1_000_000 +

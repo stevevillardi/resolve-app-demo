@@ -63,6 +63,17 @@ export interface AdapterConfig {
   /** Extra environment for the backend subprocess. Merged, never replacing. */
   env?: NodeJS.ProcessEnv
   /**
+   * Absolute paths the agent must never read, passed to the OS sandbox's
+   * `filesystem.denyRead`. Injected for the same reason as codexBinaryPath:
+   * the obvious entry is the app's own `userData/secrets` directory (see
+   * src/main/services/secrets.ts) and resolving that needs `electron`.
+   *
+   * Deliberately NOT defaulted to the backends' own credential files — the
+   * CLIs authenticate with those, and denying them would break the session
+   * rather than harden it.
+   */
+  denyReadPaths?: string[]
+  /**
    * Every native SDK message, before normalization. Exists for
    * scripts/probe-adapters.ts --raw, which is how the token-accounting and
    * context-injection questions in blueprint §14 get answered — they need the
