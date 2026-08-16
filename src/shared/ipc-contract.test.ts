@@ -56,7 +56,12 @@ describe('contract shape', () => {
         'messages.cancel',
         'runs.list',
         'usage.list',
-        'models.listForBackend'
+        'models.listForBackend',
+        // Phase 7
+        'groups.getForRepo',
+        'groupMessages.list',
+        'groupMessages.previews',
+        'groups.mention'
       ])
     )
   })

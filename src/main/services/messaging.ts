@@ -5,7 +5,9 @@ import { toMessage } from '../db/mappers'
 import { messages } from '../db/schema'
 import { adapterForBackend } from './adapter-host'
 import { emitAgentEvent, emitRunsChanged } from './agent-events'
+import { summarizeTurn } from './compaction'
 import { getContact, setBackendSessionId } from './contacts'
+import { contextForRepo, insertGroupMessage } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
 import {
   acquire,
@@ -18,7 +20,7 @@ import {
 import { skillsForPersona } from './skills'
 import { recordUsage } from './usage-events'
 import type { AgentEvent } from '../../shared/agent'
-import type { PersistedMessage } from '../../shared/domain'
+import type { GroupMessage, PersistedMessage } from '../../shared/domain'
 
 /**
  * Sending a message to a Contact and streaming the reply back (blueprint §16
@@ -46,10 +48,17 @@ export interface ActiveRun {
   startedAt: number
 }
 
+export interface MentionResult {
+  runId: string
+  groupMessage: GroupMessage
+}
+
 interface Run {
   controller: AbortController
   release: Release
   contactId: string
+  /** Set only for a turn started from a Group thread, so the reply is mirrored. */
+  groupId?: string
 }
 
 const runs = new Map<string, Run>()
@@ -133,6 +142,47 @@ function insertMessage(
  * refusal.
  */
 export function sendMessage(contactId: string, content: string): SendResult {
+  const { runId, userMessage } = startTurn(contactId, content)
+  return { runId, userMessage }
+}
+
+/**
+ * Routes a Group @mention to a Contact's real session (blueprint §8).
+ *
+ * The reason this is thin: an @mention *is* a message to that Contact. It takes
+ * the same lock, resumes the same session, streams on the same runId, and
+ * writes the same `messages` rows — the Group thread and the 1:1 thread are two
+ * views of one conversation, which is what §8's "no duplicated conversation
+ * state" requires and what the acceptance check on divergent copies tests.
+ *
+ * What it adds is the Group's own record of the exchange: a `user_mention` now
+ * and an `agent_reply` when the turn finishes.
+ *
+ * Ordering matches sendMessage exactly — the lock is taken before anything is
+ * written, so a refused mention leaves no row in either table.
+ */
+export function mentionInGroup(groupId: string, contactId: string, content: string): MentionResult {
+  const { runId, groupMessage } = startTurn(contactId, content, groupId)
+  // Non-null by construction: startTurn writes one whenever a groupId is given.
+  return { runId, groupMessage: groupMessage as GroupMessage }
+}
+
+interface StartedTurn {
+  runId: string
+  userMessage: PersistedMessage
+  /** Only when the turn was started from a Group thread. */
+  groupMessage: GroupMessage | null
+}
+
+/**
+ * The body both entry points share: validate, take the lock, persist what the
+ * user typed, start the turn.
+ *
+ * Extracted rather than duplicated because the ordering it encodes is
+ * load-bearing in two directions — the lock before any write, and the release
+ * on every failure path — and a second copy would drift.
+ */
+function startTurn(contactId: string, content: string, groupId?: string): StartedTurn {
   const contact = getContact(contactId)
   if (!contact) throw new Error(`No such contact: ${contactId}`)
 
@@ -167,13 +217,23 @@ export function sendMessage(contactId: string, content: string): SendResult {
   // leaked here would wedge the repo until the app restarts.
   try {
     const userMessage = insertMessage(contactId, 'user', content)
+    // No contactId: a mention comes from the user, not from a persona.
+    const groupMessage = groupId
+      ? insertGroupMessage({ groupId, type: 'user_mention', content })
+      : null
+
     const controller = new AbortController()
-    runs.set(runId, { controller, release, contactId })
+    runs.set(runId, { controller, release, contactId, ...(groupId ? { groupId } : {}) })
 
     const spec = {
       persona,
       repoPath: workingPath,
       skills: skillsForPersona(persona),
+      // Blueprint §5: what the rest of the fleet has decided on this repo.
+      // Resolved fresh per turn rather than per session, so a summary written
+      // by a colleague between two of this contact's turns is visible on the
+      // next one instead of at the next restart.
+      groupContext: contextForRepo(contact.repoPath),
       ...(persona.model ? { model: persona.model } : {})
     }
 
@@ -187,7 +247,7 @@ export function sendMessage(contactId: string, content: string): SendResult {
     void runTurn(runId, adapter, session, content)
     emitRunsChanged()
 
-    return { runId, userMessage }
+    return { runId, userMessage, groupMessage }
   } catch (error) {
     runs.delete(runId)
     release()
@@ -238,7 +298,7 @@ async function runTurn(
       message: error instanceof Error ? error.message : String(error)
     })
   } finally {
-    finish(runId, run.contactId, session, done?.finalText ?? streamed, done)
+    finish(runId, run.contactId, session, prompt, done?.finalText ?? streamed, done, run.groupId)
   }
 }
 
@@ -254,15 +314,30 @@ function finish(
   runId: string,
   contactId: string,
   session: Session,
+  prompt: string,
   finalText: string,
-  done: Extract<AgentEvent, { type: 'done' }> | null
+  done: Extract<AgentEvent, { type: 'done' }> | null,
+  groupId?: string
 ): void {
   try {
     // An aborted turn usually has no final text, but it may have produced
     // billable tokens all the same — so the two are recorded independently
     // rather than one gating the other.
-    if (finalText.trim()) insertMessage(contactId, 'assistant', finalText)
-    if (done?.usage) recordUsage(contactId, 'message', done.usage)
+    if (finalText.trim()) {
+      insertMessage(contactId, 'assistant', finalText)
+
+      // The Group's copy of the same reply (§8). The `messages` row above is
+      // the conversation; this is the Group's record that it happened, and the
+      // two carry identical text on purpose — the 1:1 thread and the Group
+      // thread are two views of one exchange, not two exchanges.
+      if (groupId) {
+        insertGroupMessage({ groupId, type: 'agent_reply', contactId, content: finalText })
+      }
+    }
+    // A mention is spend the user asked for from the Group rather than from a
+    // 1:1 thread; separating them lets the dashboard show what coordination
+    // costs (see usageSourceSchema).
+    if (done?.usage) recordUsage(contactId, groupId ? 'mention' : 'message', done.usage)
 
     // Read after the run, never before: the adapters fill this in mid-stream at
     // `session_started`, and it is what makes the next turn a resume.
@@ -277,6 +352,12 @@ function finish(
     runs.delete(runId)
     emitAgentEvent(runId, done ?? { type: 'done', finalText, usage: null })
     emitRunsChanged()
+
+    // Blueprint §6, and deliberately the last thing to happen: it runs after
+    // the lock is released and after the renderer has been told the turn is
+    // over, so a slow summariser delays nothing the user is waiting on. Not
+    // awaited, and it never rejects — see summarizeTurn's contract.
+    void summarizeTurn(contactId, prompt, finalText)
   }
 }
 

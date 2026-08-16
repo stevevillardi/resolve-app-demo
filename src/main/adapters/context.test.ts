@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PersonaTemplate, Skill } from '../../shared/domain'
+import type { GroupMessage, PersonaTemplate, Skill } from '../../shared/domain'
 import { composeInstructions, orderSkills } from './context'
 import type { SessionSpec } from './types'
 
@@ -79,5 +79,76 @@ describe('composeInstructions', () => {
     const codex: PersonaTemplate = { ...claude, backend: 'codex' }
     const skills = [skill('a', 'S', 'x')]
     expect(composeInstructions(spec(claude, skills))).toBe(composeInstructions(spec(codex, skills)))
+  })
+})
+
+describe('group context injection', () => {
+  function entry(overrides: Partial<GroupMessage> = {}): GroupMessage {
+    return {
+      id: 'gm-1',
+      groupId: 'g1',
+      timestamp: Date.parse('2026-08-15T09:00:00Z'),
+      type: 'system_summary',
+      content: 'Moved the token read into a module-level cache.',
+      category: 'decision',
+      durable: true,
+      ...overrides
+    }
+  }
+
+  function withContext(groupContext: GroupMessage[]): string {
+    return composeInstructions({ ...spec(persona([]), []), groupContext })
+  }
+
+  it('adds nothing at all when the repo has no history', () => {
+    // A fresh repo must not carry an empty heading into every prompt.
+    expect(composeInstructions(spec(persona([]), []))).toBe('You review code.')
+    expect(withContext([])).toBe('You review code.')
+  })
+
+  it('injects the summary text', () => {
+    expect(withContext([entry()])).toContain('Moved the token read into a module-level cache.')
+  })
+
+  it('frames the block as history rather than instructions', () => {
+    // Without this personas act on the entries — a reviewer "carrying out" a
+    // decision another persona already implemented.
+    expect(withContext([entry()])).toContain('not instructions to you')
+  })
+
+  it('comes after the skills, keeping the persona prefix stable', () => {
+    // Prompt caching is a prefix match: a new summary must not invalidate the
+    // persona and its skills.
+    const composed = composeInstructions({
+      ...spec(persona(['a']), [skill('a', 'A', 'ay')]),
+      groupContext: [entry()]
+    })
+    expect(composed.indexOf('## Skills')).toBeLessThan(
+      composed.indexOf('## Recent activity on this repository')
+    )
+  })
+
+  it('names the branch when a summary reported one', () => {
+    // The whole point of carrying branch metadata: work on a branch nobody can
+    // see on disk is invisible without it (docs/plan/12-worktree-isolation.md).
+    expect(withContext([entry({ branch: 'persona/refactor-buddy' })])).toContain(
+      'persona/refactor-buddy'
+    )
+  })
+
+  it('omits the branch clause entirely when there is none', () => {
+    expect(withContext([entry()])).not.toContain('on branch')
+  })
+
+  it('labels a routine entry as a note rather than as a category', () => {
+    expect(withContext([entry({ category: 'routine', durable: false })])).toContain('**note**')
+  })
+
+  it('preserves the order it was given', () => {
+    const composed = withContext([
+      entry({ id: 'a', content: 'older' }),
+      entry({ id: 'b', content: 'newer' })
+    ])
+    expect(composed.indexOf('older')).toBeLessThan(composed.indexOf('newer'))
   })
 })
