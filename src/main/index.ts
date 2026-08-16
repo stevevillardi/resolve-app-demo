@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
+import { seedIfNeeded } from './services/seed'
 
 function createWindow(): void {
   // Create the browser window.
@@ -72,6 +73,9 @@ app.whenReady().then(() => {
   })
 
   initDb()
+  // Before setupIpc, so the renderer's first skills.list can never race an
+  // empty library and render the "no skills" empty state on a fresh install.
+  seedIfNeeded()
   setupIpc()
 
   createWindow()

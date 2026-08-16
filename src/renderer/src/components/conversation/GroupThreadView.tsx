@@ -12,6 +12,8 @@ import { RoutineRunNotice } from './RoutineRunNotice'
 import { MentionPicker } from './MentionPicker'
 import { Composer } from './Composer'
 import { isSameDay, repoName } from '@/lib/format'
+// Still mock-fed: group_messages has no producer until compaction and
+// @mention routing land in Phase 7 (docs/plan/07-group-coordination.md).
 import { contacts, groupMessages, groups, personaTemplates } from '@/mocks'
 import type { Contact, GroupMessage, PersonaTemplate } from '@/types'
 

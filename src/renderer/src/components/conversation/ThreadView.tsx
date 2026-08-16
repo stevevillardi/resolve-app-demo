@@ -13,6 +13,8 @@ import { MessageBubble } from './MessageBubble'
 import { Composer } from './Composer'
 import { usageForContact } from '@/lib/usage'
 import { isSameDay } from '@/lib/format'
+// Still mock-fed: real messages and usage events need a live session, so
+// this view is rewritten in Phase 6 (docs/plan/06-core-messaging.md).
 import { contacts, messages, personaTemplates, usageEvents } from '@/mocks'
 
 interface ThreadViewProps {

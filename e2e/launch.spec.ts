@@ -6,6 +6,7 @@ import {
   destroyProfile,
   invoke,
   launchApp,
+  waitForBridge,
   waitForShell,
   type AuthStatus,
   type LaunchedApp
@@ -95,18 +96,106 @@ test.describe('first run', () => {
 })
 
 test.describe('database', () => {
-  test('creates the SQLite file and applies both migrations', async () => {
+  test('creates the SQLite file and applies every migration', async () => {
     const dbPath = join(profile, 'userData', 'persona-router.db')
     expect(existsSync(dbPath)).toBe(true)
 
     // app_state is queryable, which only holds if 0001 ran.
     const status = await invoke<AuthStatus>(launched.window, 'auth.getStatus')
     expect(status.onboardingCompleted).toBe(false)
+
+    // The Phase 4 tables are queryable, which only holds if 0002 ran.
+    await expect(invoke(launched.window, 'skills.list')).resolves.toBeInstanceOf(Array)
+    await expect(invoke(launched.window, 'personas.list')).resolves.toBeInstanceOf(Array)
+    await expect(invoke(launched.window, 'contacts.list')).resolves.toBeInstanceOf(Array)
+    await expect(invoke(launched.window, 'groups.list')).resolves.toBeInstanceOf(Array)
+  })
+
+  test('seeds the default skills and personas on a fresh profile', async () => {
+    const skills = await invoke<{ id: string }[]>(launched.window, 'skills.list')
+    const personas = await invoke<{ id: string; skillIds: string[] }[]>(
+      launched.window,
+      'personas.list'
+    )
+    expect(skills.length).toBeGreaterThan(0)
+    expect(personas.length).toBeGreaterThan(0)
+
+    // Every attachment resolves — a persona pointing at a skill that wasn't
+    // seeded would render an entry the editor can't show or remove.
+    const ids = new Set(skills.map((skill) => skill.id))
+    for (const persona of personas) {
+      for (const id of persona.skillIds) expect(ids).toContain(id)
+    }
+  })
+
+  test('seeds no contacts or groups — those need a real repo path', async () => {
+    expect(await invoke(launched.window, 'contacts.list')).toEqual([])
+    expect(await invoke(launched.window, 'groups.list')).toEqual([])
+  })
+
+  test('rejects a malformed create at the boundary', async () => {
+    await expect(
+      invoke(launched.window, 'personas.create', { name: 'X', backend: 'cursor' })
+    ).rejects.toThrow()
   })
 
   test('stores no credentials on a profile that never authenticated', () => {
     const secrets = join(profile, 'userData', 'secrets')
     if (existsSync(secrets)) expect(readdirSync(secrets)).toEqual([])
+  })
+})
+
+test.describe('persistence', () => {
+  test('a created skill survives a relaunch, and a deleted seed does not return', async () => {
+    const created = await invoke<{ id: string; name: string }>(launched.window, 'skills.create', {
+      name: 'Survives Relaunch',
+      description: 'Written in one process, read in the next.',
+      content: '# Persisted'
+    })
+
+    // Deleting a seeded skill is the case the seed marker exists to protect:
+    // an "is the table empty" guard would put this one back on next launch.
+    const seeded = (await invoke<{ id: string }[]>(launched.window, 'skills.list')).find(
+      (skill) => skill.id === 'skill-api-design'
+    )
+    expect(seeded).toBeDefined()
+    await invoke(launched.window, 'skills.delete', { id: 'skill-api-design' })
+
+    await launched.app.close()
+    launched = await launchApp(profile)
+    // Bridge, not shell: this profile hasn't onboarded yet, so the app comes
+    // back up on the onboarding screen and there is no sidebar to wait for.
+    await waitForBridge(launched.window)
+
+    const after = await invoke<{ id: string; name: string }[]>(launched.window, 'skills.list')
+    expect(after.find((skill) => skill.id === created.id)?.name).toBe('Survives Relaunch')
+    expect(after.map((skill) => skill.id)).not.toContain('skill-api-design')
+  })
+
+  test('refuses to delete a persona a contact is bound to', async () => {
+    const persona = await invoke<{ id: string }>(launched.window, 'personas.create', {
+      name: 'Bound Persona',
+      avatarColor: '#2a78d6',
+      backend: 'claude',
+      systemPrompt: '',
+      skillIds: [],
+      sandbox: 'read_only',
+      githubScope: 'read_only'
+    })
+
+    await invoke(launched.window, 'contacts.create', {
+      personaTemplateId: persona.id,
+      repoPath: '~/code/e2e-fixture',
+      displayName: 'Bound Persona · e2e-fixture'
+    })
+
+    // The group is created implicitly by the contact (blueprint §4).
+    const groups = await invoke<{ repoPath: string }[]>(launched.window, 'groups.list')
+    expect(groups.map((group) => group.repoPath)).toContain('~/code/e2e-fixture')
+
+    await expect(invoke(launched.window, 'personas.delete', { id: persona.id })).rejects.toThrow(
+      /still bound/
+    )
   })
 })
 

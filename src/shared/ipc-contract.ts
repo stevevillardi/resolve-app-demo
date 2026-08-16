@@ -1,4 +1,13 @@
 import { z } from 'zod'
+import {
+  contactDraftSchema,
+  contactSchema,
+  groupSchema,
+  personaTemplateDraftSchema,
+  personaTemplateSchema,
+  skillDraftSchema,
+  skillSchema
+} from './domain'
 
 /**
  * Single source of truth for main<->renderer IPC. Every procedure has an
@@ -120,6 +129,74 @@ export const ipcContract = {
   'github.disconnect': {
     input: z.void(),
     output: githubStatusSchema
+  },
+
+  // --- Data layer (Phase 4, blueprint §4 + §12) ---------------------------
+  // Entity shapes come from ./domain.ts so main's tables, these procedures,
+  // and the renderer's types can't drift apart. Ids are minted in main, hence
+  // the `Draft` (id-less) inputs on every create.
+  'skills.list': {
+    input: z.void(),
+    output: z.array(skillSchema)
+  },
+  'skills.get': {
+    input: z.object({ id: z.string() }),
+    output: skillSchema.nullable()
+  },
+  'skills.create': {
+    input: skillDraftSchema,
+    output: skillSchema
+  },
+  'skills.update': {
+    input: skillSchema,
+    output: skillSchema
+  },
+  'skills.delete': {
+    input: z.object({ id: z.string() }),
+    output: z.object({ deleted: z.boolean() })
+  },
+
+  'personas.list': {
+    input: z.void(),
+    output: z.array(personaTemplateSchema)
+  },
+  'personas.get': {
+    input: z.object({ id: z.string() }),
+    output: personaTemplateSchema.nullable()
+  },
+  'personas.create': {
+    input: personaTemplateDraftSchema,
+    output: personaTemplateSchema
+  },
+  'personas.update': {
+    input: personaTemplateSchema,
+    output: personaTemplateSchema
+  },
+  /** Rejects while contacts are bound — the error names them. */
+  'personas.delete': {
+    input: z.object({ id: z.string() }),
+    output: z.object({ deleted: z.boolean() })
+  },
+
+  // Read + create only. Sessions, messages, and the UI that calls create are
+  // Phase 6; these exist so personas and groups have real relationships now.
+  'contacts.list': {
+    input: z.void(),
+    output: z.array(contactSchema)
+  },
+  'contacts.get': {
+    input: z.object({ id: z.string() }),
+    output: contactSchema.nullable()
+  },
+  'contacts.create': {
+    input: contactDraftSchema,
+    output: contactSchema
+  },
+
+  /** No create: a group is implied by its repo, never made directly (§4). */
+  'groups.list': {
+    input: z.void(),
+    output: z.array(groupSchema)
   },
 
   /** Opens a verification URL in the user's real browser. Host-allowlisted in main. */

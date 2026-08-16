@@ -15,9 +15,13 @@ import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Github } from '@/components/github/GithubMark'
 import { useAuthStatus } from '@/hooks/useAuth'
+import { usePersonas } from '@/hooks/usePersonas'
 import { useUiStore } from '@/store/useUiStore'
 import { cn } from '@/lib/utils'
-import { mockRepos, personaTemplates } from '@/mocks'
+// Personas are real as of Phase 4. Repos are not: listing them needs the
+// GitHub API and a local clone root, which is Phase 6 along with the Create
+// button below.
+import { mockRepos } from '@/mocks'
 import type { MockRepo } from '@/mocks/repos'
 
 interface NewContactFlowProps {
@@ -61,6 +65,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   // Real API-backed loading/empty/error states land in Phase 6 — this is the
   // shape the repo picker will keep once the data source is swapped.
   const [repoListState] = useState<RepoListState>({ repos: mockRepos })
+  const { data: personaTemplates = [] } = usePersonas()
   const { data: authStatus } = useAuthStatus()
   const githubConnected = Boolean(authStatus?.github.connected)
   const setDialog = useUiStore((state) => state.setDialog)

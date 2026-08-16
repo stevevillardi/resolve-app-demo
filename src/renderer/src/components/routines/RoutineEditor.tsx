@@ -17,6 +17,8 @@ import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { formatRelative } from '@/lib/format'
+// Still mock-fed: the routines table exists as of Phase 4 but has no CRUD
+// and no scheduler until Phase 8 (docs/plan/08-routines-scheduler.md).
 import { contacts, personaTemplates, routines } from '@/mocks'
 import { useUiStore } from '@/store/useUiStore'
 import type { Routine } from '@/types'

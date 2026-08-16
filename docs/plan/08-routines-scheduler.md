@@ -8,6 +8,19 @@
 
 Scheduled/unattended runs, built entirely in-app (not on any vendor's native scheduling, per blueprint §7's explicit warning about Codex's cloud-only/buggy scheduling). Includes the tray/background-residency requirement without which routines can't fire when the window is closed.
 
+## Inherited from Phase 4 — what does and doesn't exist yet
+
+Phase 4 created the **`routines` table only** (`drizzle/0002_add_blueprint_schema.sql`) and stopped there, deliberately. A Routine is bound to a Contact, and no Contact can exist until Phase 6, so routine CRUD would have meant shipping a create flow whose only foreign key had nothing to point at.
+
+So everything below is still to build — none of it was partially done:
+
+- **No IPC procedures.** `src/shared/ipc-contract.ts` has entries for skills, personas, contacts, and groups, but nothing for routines. Add `routines.list|get|create|update|delete` following the same pattern, with the entity schema in `src/shared/domain.ts` (`routineSchema` already exists and matches the table — reuse it, and add a `routineDraftSchema` for the id-less create input).
+- **No service.** Add `src/main/services/routines.ts` alongside `skills.ts` / `persona-templates.ts`, which are the shape to copy.
+- **`RoutineList` and `RoutineEditor` are still on mock data** (`src/renderer/src/mocks/routines.ts`), both marked with a comment pointing here. They are the last two components in the app reading mocked routines.
+- **`ListPanel` has no "+" for the routines section** — Phase 4 added one for personas and skills but left routines out for the reason above. Add `newLabel: 'New routine'` to the `PANEL` map when there's somewhere to persist it.
+- The table's `contact_id` is `ON DELETE CASCADE`, so deleting a Contact already takes its routines with it. Nothing extra to write for that.
+- `enabled` is a Drizzle `boolean`-mode integer and `last_run_at` a `timestamp_ms`; `src/main/db/mappers.ts` already has `toRoutine` handling both conversions.
+
 ## Scope
 
 1. **`Routine` CRUD + `RoutineEditor`**

@@ -8,19 +8,36 @@ import { PersonaList } from '@/components/persona/PersonaList'
 import { SkillList } from '@/components/persona/SkillList'
 import { RoutineList } from '@/components/routines/RoutineList'
 import { UsageScopeList } from '@/components/usage/UsageScopeList'
+import { useCreatePersona } from '@/hooks/usePersonas'
+import { useCreateSkill } from '@/hooks/useSkills'
 import { useUiStore, type Section } from '@/store/useUiStore'
+import type { PersonaTemplateDraft, SkillDraft } from '@/types'
 
-// `newLabel` is only set where the action actually does something. Creating a
-// persona, skill, or routine needs somewhere to persist it, which arrives with
-// the data layer in Phase 4 — a "+" that visibly does nothing when clicked is
-// worse than no "+" at all, so those get one then.
+// `newLabel` is only set where the action actually does something — a "+" that
+// visibly does nothing when clicked is worse than no "+" at all. Personas and
+// skills got theirs in Phase 4, when there was finally somewhere to persist
+// them. Routines stay without one until Phase 8: a routine is bound to a
+// contact, and there are no contacts to bind to until Phase 6.
 const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLabel?: string }> = {
   chats: { title: 'Chats', searchPlaceholder: 'Search conversations', newLabel: 'New contact' },
-  personas: { title: 'Personas', searchPlaceholder: 'Search personas' },
-  skills: { title: 'Skills', searchPlaceholder: 'Search skills' },
+  personas: { title: 'Personas', searchPlaceholder: 'Search personas', newLabel: 'New persona' },
+  skills: { title: 'Skills', searchPlaceholder: 'Search skills', newLabel: 'New skill' },
   routines: { title: 'Routines', searchPlaceholder: 'Search routines' },
   usage: { title: 'Usage' }
 }
+
+/** What a brand-new persona starts as — the safest scope on both axes (§4). */
+const NEW_PERSONA: PersonaTemplateDraft = {
+  name: 'New persona',
+  avatarColor: '#2a78d6',
+  backend: 'claude',
+  systemPrompt: '',
+  skillIds: [],
+  sandbox: 'read_only',
+  githubScope: 'read_only'
+}
+
+const NEW_SKILL: SkillDraft = { name: 'New skill', description: '', content: '' }
 
 /**
  * The middle pane. Every section is master-detail, so this owns the chrome —
@@ -31,10 +48,21 @@ const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLab
 export function ListPanel(): React.JSX.Element {
   const section = useUiStore((state) => state.section)
   const setDialog = useUiStore((state) => state.setDialog)
+  const setSelectedPersonaId = useUiStore((state) => state.setSelectedPersonaId)
+  const setSelectedSkillId = useUiStore((state) => state.setSelectedSkillId)
   const [query, setQuery] = useState('')
   const config = PANEL[section]
 
-  const onNew = (): void => setDialog('newContact')
+  const { create: createPersona } = useCreatePersona()
+  const { create: createSkill } = useCreateSkill()
+
+  // Creating selects the new row, so "+" lands the user in the editor with the
+  // cursor somewhere useful rather than adding a row they then have to find.
+  const onNew = (): void => {
+    if (section === 'personas') return createPersona(NEW_PERSONA, (p) => setSelectedPersonaId(p.id))
+    if (section === 'skills') return createSkill(NEW_SKILL, (s) => setSelectedSkillId(s.id))
+    setDialog('newContact')
+  }
 
   return (
     <div className="bg-card flex h-full min-h-0 flex-col">

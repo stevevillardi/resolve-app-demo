@@ -2,6 +2,8 @@ import { Layers } from 'lucide-react'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { formatCost } from '@/lib/usage'
 import { cn } from '@/lib/utils'
+// Still mock-fed: usage_events is only written once turns actually run, so
+// this list goes live in Phase 10 (docs/plan/10-usage-cost-dashboard.md).
 import { contacts, personaTemplates, usageEvents } from '@/mocks'
 import { useUiStore } from '@/store/useUiStore'
 

@@ -1,22 +1,14 @@
 import { app } from 'electron'
 import { join } from 'path'
-import Database from 'better-sqlite3'
-import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import * as schema from './schema'
+import { createDb, type AppDatabase } from './create'
 
-let db: BetterSQLite3Database<typeof schema> | null = null
+export type { AppDatabase }
 
-export function initDb(): BetterSQLite3Database<typeof schema> {
+let db: AppDatabase | null = null
+
+export function initDb(): AppDatabase {
   if (db) return db
-
-  const dbPath = join(app.getPath('userData'), 'persona-router.db')
-  const sqlite = new Database(dbPath)
-  sqlite.pragma('journal_mode = WAL')
-
-  db = drizzle(sqlite, { schema })
-  migrate(db, { migrationsFolder: getMigrationsFolder() })
-
+  db = createDb(join(app.getPath('userData'), 'persona-router.db'), getMigrationsFolder())
   return db
 }
 

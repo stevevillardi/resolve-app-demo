@@ -33,9 +33,67 @@ describe('contract shape', () => {
         'github.getDeviceFlowState',
         'github.cancelDeviceFlow',
         'github.disconnect',
-        'shell.openExternal'
+        'shell.openExternal',
+        // Phase 4
+        'skills.list',
+        'skills.get',
+        'skills.create',
+        'skills.update',
+        'skills.delete',
+        'personas.list',
+        'personas.get',
+        'personas.create',
+        'personas.update',
+        'personas.delete',
+        'contacts.list',
+        'contacts.get',
+        'contacts.create',
+        'groups.list'
       ])
     )
+  })
+})
+
+describe('data-layer procedures', () => {
+  it('rejects a create that supplies its own id', () => {
+    // Ids are minted in main; the draft schemas are what enforce that at the
+    // boundary rather than leaving it to each handler to remember.
+    const withId = { id: 'attacker-chosen', name: 'Style', description: '', content: '' }
+    const parsed = ipcContract['skills.create'].input.parse(withId)
+    expect('id' in parsed).toBe(false)
+  })
+
+  it('requires an id on update', () => {
+    expect(() =>
+      ipcContract['skills.update'].input.parse({ name: 'Style', description: '', content: '' })
+    ).toThrow()
+  })
+
+  it('allows get to answer null for a missing row', () => {
+    expect(() => ipcContract['skills.get'].output.parse(null)).not.toThrow()
+    expect(() => ipcContract['personas.get'].output.parse(null)).not.toThrow()
+    expect(() => ipcContract['contacts.get'].output.parse(null)).not.toThrow()
+  })
+
+  it('rejects a persona list containing an invalid backend', () => {
+    expect(() =>
+      ipcContract['personas.list'].output.parse([
+        {
+          id: 'p1',
+          name: 'X',
+          avatarColor: '#000',
+          backend: 'cursor',
+          systemPrompt: '',
+          skillIds: [],
+          sandbox: 'read_only',
+          githubScope: 'read_only'
+        }
+      ])
+    ).toThrow()
+  })
+
+  it('has no groups.create — a group is implied by its repo', () => {
+    expect(Object.keys(ipcContract)).not.toContain('groups.create')
   })
 })
 

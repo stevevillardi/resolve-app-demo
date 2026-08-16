@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Users2 } from 'lucide-react'
+import { Check, Trash2, Users2 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,12 +10,20 @@ import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
-import { UsageBadge } from '@/components/usage/UsageBadge'
-import { usageForContacts } from '@/lib/usage'
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { cn } from '@/lib/utils'
-import { contacts, personaTemplates, skills as allSkills, usageEvents } from '@/mocks'
+import { useContacts } from '@/hooks/useConversations'
+import { useDeletePersona, usePersonas, useUpdatePersona } from '@/hooks/usePersonas'
+import { useSkills } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
-import type { GithubScope, PersonaBackend, PersonaTemplate, SandboxLevel } from '@/types'
+import type {
+  Contact,
+  GithubScope,
+  PersonaBackend,
+  PersonaTemplate,
+  SandboxLevel,
+  Skill
+} from '@/types'
 
 const BACKEND_OPTIONS: { value: PersonaBackend; label: string }[] = [
   { value: 'claude', label: 'Claude' },
@@ -54,7 +62,15 @@ function Field({
   )
 }
 
-function PersonaForm({ persona }: { persona: PersonaTemplate }): React.JSX.Element {
+function PersonaForm({
+  persona,
+  allSkills,
+  boundContacts
+}: {
+  persona: PersonaTemplate
+  allSkills: Skill[]
+  boundContacts: Contact[]
+}): React.JSX.Element {
   const [name, setName] = useState(persona.name)
   const [avatarColor, setAvatarColor] = useState(persona.avatarColor)
   const [backend, setBackend] = useState<PersonaBackend>(persona.backend)
@@ -62,6 +78,11 @@ function PersonaForm({ persona }: { persona: PersonaTemplate }): React.JSX.Eleme
   const [sandbox, setSandbox] = useState<SandboxLevel>(persona.sandbox)
   const [githubScope, setGithubScope] = useState<GithubScope>(persona.githubScope)
   const [skillIds, setSkillIds] = useState<string[]>(persona.skillIds)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const setSelectedId = useUiStore((state) => state.setSelectedPersonaId)
+
+  const { save, isPending: saving, error: saveError } = useUpdatePersona()
+  const { remove, isPending: deleting, error: deleteError, reset } = useDeletePersona()
 
   const toggleSkill = (skillId: string): void => {
     setSkillIds((prev) =>
@@ -69,11 +90,17 @@ function PersonaForm({ persona }: { persona: PersonaTemplate }): React.JSX.Eleme
     )
   }
 
-  const boundContacts = contacts.filter((c) => c.personaTemplateId === persona.id)
-  const usage = usageForContacts(
-    usageEvents,
-    boundContacts.map((c) => c.id)
-  )
+  const edited: PersonaTemplate = {
+    ...persona,
+    name,
+    avatarColor,
+    backend,
+    systemPrompt,
+    sandbox,
+    githubScope,
+    skillIds
+  }
+  const dirty = JSON.stringify(edited) !== JSON.stringify(persona)
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
@@ -84,13 +111,33 @@ function PersonaForm({ persona }: { persona: PersonaTemplate }): React.JSX.Eleme
         </h1>
         <div className="no-drag flex shrink-0 items-center gap-1.5">
           <BackendBadge backend={backend} />
-          <UsageBadge summary={usage} />
-          <Button size="sm">Save</Button>
+          {/* The UsageBadge that lived here read mock usage events. Real ones
+              don't exist until a turn actually runs (Phase 6), and fabricated
+              spend next to a real persona is worse than none. */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Delete persona"
+            disabled={deleting}
+            onClick={() => {
+              reset()
+              setConfirmingDelete(true)
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+          <Button size="sm" disabled={!dirty || saving} onClick={() => save(edited)}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
         </div>
       </header>
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto flex max-w-2xl flex-col gap-6 p-5">
+          {(saveError ?? deleteError) && (
+            <p className="text-destructive text-xs">{saveError ?? deleteError}</p>
+          )}
+
           <section className="flex flex-col gap-4">
             <div className="flex items-end gap-3">
               <div className="flex flex-1 flex-col gap-1.5">
@@ -234,12 +281,30 @@ function PersonaForm({ persona }: { persona: PersonaTemplate }): React.JSX.Eleme
           </section>
         </div>
       </ScrollArea>
+
+      <ConfirmDeleteDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title={`Delete “${persona.name}”?`}
+        // Main refuses outright while contacts are bound, so this branch is a
+        // heads-up rather than the real gate — the authoritative check and its
+        // message come back from the service.
+        description={
+          boundContacts.length === 0
+            ? 'This removes the persona and its instructions. Skills it attaches are untouched.'
+            : `${boundContacts.length} contact${boundContacts.length === 1 ? ' is' : 's are'} still bound to it, so this will be refused.`
+        }
+        onConfirm={() => remove(persona.id, () => setSelectedId(null))}
+      />
     </div>
   )
 }
 
 export function PersonaDetailPanel(): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedPersonaId)
+  const { data: personaTemplates = [] } = usePersonas()
+  const { data: allSkills = [] } = useSkills()
+  const { data: contacts = [] } = useContacts()
   const persona = personaTemplates.find((p) => p.id === selectedId)
 
   if (!persona) {
@@ -258,5 +323,12 @@ export function PersonaDetailPanel(): React.JSX.Element {
   // Keyed on the persona id so switching selection remounts the form. The
   // previous revision initialised state from props once and never re-synced,
   // so editing one persona then opening another showed the first one's values.
-  return <PersonaForm key={persona.id} persona={persona} />
+  return (
+    <PersonaForm
+      key={persona.id}
+      persona={persona}
+      allSkills={allSkills}
+      boundContacts={contacts.filter((c) => c.personaTemplateId === persona.id)}
+    />
+  )
 }

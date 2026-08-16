@@ -8,6 +8,14 @@
 
 Wire everything built so far into the first real end-to-end loop: create a Contact bound to a real repo, send it a message, watch a real streamed response respecting its sandbox. This phase is where blueprint §16 Journey 1 becomes real. It's explicitly called out as "the foundational loop... if this doesn't work, nothing else matters" — treat it as the phase to get most polished before moving on.
 
+## Inherited from Phase 4 — what already exists
+
+- **`contacts.create` / `contacts.list` / `contacts.get` and `groups.list` are live IPC procedures.** `createContact` already auto-creates the repo's Group in the same transaction, so blueprint §4's "one Group per repo" is handled — item 1's last bullet is done. The `groups.repo_path` unique index enforces it at the schema level too.
+- **`ConversationList` already reads real contacts and groups.** What it doesn't have is the per-row `preview`, `timestamp`, and `UsageBadge`: those come from `messages` and `usage_events`, which stay empty until this phase writes to them. The rows currently render a literal "No messages yet" / "No activity yet" — replace those with real values rather than rewiring the component.
+- **`NewContactFlow`'s persona picker reads real personas.** The repo picker is still `src/renderer/src/mocks/repos.ts` and the Create button is still a no-op — both are this phase's.
+- **`messages` has no `status` or `error` column, on purpose.** Blueprint §12 lists five fields; `streaming` and `error` describe an in-flight turn, not a stored fact, so they live in `src/renderer/src/types/message.ts` as a renderer-only extension of `PersistedMessage`. Keep them there — a message loaded from disk is by definition finished.
+- `src/main/db/mappers.ts` has `toMessage` and `toUsageEvent` ready; `messageSchema` and `usageEventSchema` are in `src/shared/domain.ts`.
+
 ## Scope
 
 1. **`NewContactFlow` goes live**

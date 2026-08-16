@@ -7,7 +7,12 @@ import { appState } from '../db/schema'
  * nothing written through here is encrypted, and that's deliberate: it should
  * stay safe to `sqlite3 persona-router.db "select * from app_state"`.
  */
-export type AppStateKey = 'onboarding_completed' | 'github_account_login' | 'github_scopes'
+export type AppStateKey =
+  | 'onboarding_completed'
+  | 'github_account_login'
+  | 'github_scopes'
+  /** Set once the first-run defaults have been inserted. See services/seed.ts. */
+  | 'seed_version'
 
 export function getAppState(key: AppStateKey): string | null {
   const row = initDb().select().from(appState).where(eq(appState.key, key)).get()
