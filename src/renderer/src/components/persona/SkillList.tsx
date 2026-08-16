@@ -1,12 +1,15 @@
 import { BookOpen } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { cn } from '@/lib/utils'
-import { personaTemplates, skills } from '@/mocks'
+import { usePersonas } from '@/hooks/usePersonas'
+import { useSkills } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
 
 export function SkillList({ query }: { query: string }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedSkillId)
   const setSelectedId = useUiStore((state) => state.setSelectedSkillId)
+  const { data: skills = [], isPending } = useSkills()
+  const { data: personaTemplates = [] } = usePersonas()
   const needle = query.trim().toLowerCase()
 
   const visible = skills.filter(
@@ -16,13 +19,24 @@ export function SkillList({ query }: { query: string }): React.JSX.Element {
       skill.description.toLowerCase().includes(needle)
   )
 
+  if (isPending) {
+    return <EmptyState compact loading title="Loading skills…" />
+  }
+
   if (visible.length === 0) {
-    return (
+    return needle ? (
       <EmptyState
         compact
         icon={BookOpen}
         title="No skills match"
         description={`Nothing matching “${query.trim()}”.`}
+      />
+    ) : (
+      <EmptyState
+        compact
+        icon={BookOpen}
+        title="No skills yet"
+        description="A skill is reusable instruction text any persona can attach. Add one to get started."
       />
     )
   }

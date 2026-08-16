@@ -7,15 +7,31 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { EmptyState } from '@/components/common/EmptyState'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
-import { personaTemplates, skills } from '@/mocks'
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
+import { usePersonas } from '@/hooks/usePersonas'
+import { useDeleteSkill, useSkills, useUpdateSkill } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
-import type { Skill } from '@/types'
+import type { PersonaTemplate, Skill } from '@/types'
 
-function SkillForm({ skill }: { skill: Skill }): React.JSX.Element {
+function SkillForm({
+  skill,
+  personaTemplates
+}: {
+  skill: Skill
+  personaTemplates: PersonaTemplate[]
+}): React.JSX.Element {
   const [name, setName] = useState(skill.name)
   const [description, setDescription] = useState(skill.description)
   const [content, setContent] = useState(skill.content)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const setSelectedId = useUiStore((state) => state.setSelectedSkillId)
+
+  const { save, isPending: saving, error: saveError } = useUpdateSkill()
+  const { remove, isPending: deleting, error: deleteError } = useDeleteSkill()
+
   const usedBy = personaTemplates.filter((persona) => persona.skillIds.includes(skill.id))
+  const dirty =
+    name !== skill.name || description !== skill.description || content !== skill.content
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
@@ -25,16 +41,32 @@ function SkillForm({ skill }: { skill: Skill }): React.JSX.Element {
           {name || 'Untitled skill'}
         </h1>
         <div className="no-drag flex shrink-0 items-center gap-1.5">
-          <Button variant="destructive" size="sm" className="gap-1.5">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-1.5"
+            disabled={deleting}
+            onClick={() => setConfirmingDelete(true)}
+          >
             <Trash2 className="size-3.5" />
             Delete
           </Button>
-          <Button size="sm">Save</Button>
+          <Button
+            size="sm"
+            disabled={!dirty || saving}
+            onClick={() => save({ ...skill, name, description, content })}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
         </div>
       </header>
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto flex max-w-2xl flex-col gap-5 p-5">
+          {(saveError ?? deleteError) && (
+            <p className="text-destructive text-xs">{saveError ?? deleteError}</p>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="skill-name">Name</Label>
             <Input id="skill-name" value={name} onChange={(event) => setName(event.target.value)} />
@@ -88,12 +120,29 @@ function SkillForm({ skill }: { skill: Skill }): React.JSX.Element {
           </div>
         </div>
       </ScrollArea>
+
+      <ConfirmDeleteDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title={`Delete “${skill.name}”?`}
+        // Naming the affected personas matters more than the count: deleting a
+        // skill doesn't block, it silently detaches, so this is the only place
+        // the consequence is visible before it happens.
+        description={
+          usedBy.length === 0
+            ? 'No persona attaches this skill, so nothing else changes.'
+            : `${usedBy.length === 1 ? 'This persona attaches' : 'These personas attach'} it and will lose those instructions: ${usedBy.map((p) => p.name).join(', ')}.`
+        }
+        onConfirm={() => remove(skill.id, () => setSelectedId(null))}
+      />
     </div>
   )
 }
 
 export function SkillLibraryView(): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedSkillId)
+  const { data: skills = [] } = useSkills()
+  const { data: personaTemplates = [] } = usePersonas()
   const skill = skills.find((s) => s.id === selectedId)
 
   if (!skill) {
@@ -111,5 +160,5 @@ export function SkillLibraryView(): React.JSX.Element {
 
   // Keyed so switching skills resets the form rather than showing the previous
   // one's values — the same stale-state bug the persona editor had.
-  return <SkillForm key={skill.id} skill={skill} />
+  return <SkillForm key={skill.id} skill={skill} personaTemplates={personaTemplates} />
 }

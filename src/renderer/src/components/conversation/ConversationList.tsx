@@ -3,37 +3,21 @@ import { MessagesSquare } from 'lucide-react'
 import { ConversationListItem } from './ConversationListItem'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { EmptyState } from '@/components/common/EmptyState'
+import { Button } from '@/components/ui/button'
+import { useContacts, useGroups } from '@/hooks/useConversations'
+import { usePersonas } from '@/hooks/usePersonas'
 import { useUiStore } from '@/store/useUiStore'
-import { usageForContact } from '@/lib/usage'
-import { previewLine, repoName } from '@/lib/format'
+import { repoName } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { contacts, groups, groupMessages, messages, personaTemplates, usageEvents } from '@/mocks'
 import type { Contact, PersonaTemplate } from '@/types'
 
-function personaFor(personaTemplateId: string): PersonaTemplate | undefined {
-  return personaTemplates.find((persona) => persona.id === personaTemplateId)
-}
-
-function personaName(contact: Contact): string {
-  return personaFor(contact.personaTemplateId)?.name ?? contact.displayName
-}
-
-function lastContactMessage(contactId: string): { preview: string; timestamp?: number } {
-  const thread = messages.filter((message) => message.contactId === contactId)
-  const last = thread[thread.length - 1]
-  if (!last) return { preview: 'No messages yet' }
-  if (last.status === 'error') {
-    return { preview: last.error?.message ?? 'Something went wrong', timestamp: last.timestamp }
-  }
-  return { preview: previewLine(last.content), timestamp: last.timestamp }
-}
-
-function lastGroupMessage(groupId: string): { preview: string; timestamp?: number } {
-  const thread = groupMessages.filter((message) => message.groupId === groupId)
-  const last = thread[thread.length - 1]
-  if (!last) return { preview: 'No activity yet' }
-  return { preview: previewLine(last.content), timestamp: last.timestamp }
-}
+/**
+ * Contacts and groups are real rows as of Phase 4. The per-row preview,
+ * timestamp, and usage badge are not: their producers are the `messages` and
+ * `usage_events` tables, which stay empty until a turn actually runs in
+ * Phase 6. Rather than fill them from mocks — fabricated activity next to real
+ * conversations — the rows say plainly that nothing has happened yet.
+ */
 
 function SectionLabel({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
@@ -49,7 +33,15 @@ function SectionLabel({ children }: { children: React.ReactNode }): React.JSX.El
  * thing a group is for (blueprint §8: it is a merged view and router, not a
  * session of its own).
  */
-function GroupAvatarCluster({ repoPath }: { repoPath: string }): React.JSX.Element {
+function GroupAvatarCluster({
+  repoPath,
+  contacts,
+  personaFor
+}: {
+  repoPath: string
+  contacts: Contact[]
+  personaFor: (id: string) => PersonaTemplate | undefined
+}): React.JSX.Element {
   const members = contacts
     .filter((contact) => contact.repoPath === repoPath)
     .map((contact) => personaFor(contact.personaTemplateId))
@@ -84,7 +76,18 @@ function GroupAvatarCluster({ repoPath }: { repoPath: string }): React.JSX.Eleme
 export function ConversationList({ query }: { query: string }): React.JSX.Element {
   const selected = useUiStore((state) => state.selectedConversation)
   const setSelected = useUiStore((state) => state.setSelectedConversation)
+  const setDialog = useUiStore((state) => state.setDialog)
+  const { data: contacts = [], isPending } = useContacts()
+  const { data: groups = [] } = useGroups()
+  const { data: personaTemplates = [] } = usePersonas()
   const needle = query.trim().toLowerCase()
+
+  const personaFor = useMemo(
+    () =>
+      (id: string): PersonaTemplate | undefined =>
+        personaTemplates.find((persona) => persona.id === id),
+    [personaTemplates]
+  )
 
   const visibleContacts = useMemo(
     () =>
@@ -94,21 +97,37 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
           contact.displayName.toLowerCase().includes(needle) ||
           contact.repoPath.toLowerCase().includes(needle)
       ),
-    [needle]
+    [contacts, needle]
   )
 
   const visibleGroups = useMemo(
     () => groups.filter((group) => !needle || group.repoPath.toLowerCase().includes(needle)),
-    [needle]
+    [groups, needle]
   )
 
+  if (isPending) {
+    return <EmptyState compact loading title="Loading conversations…" />
+  }
+
   if (visibleContacts.length === 0 && visibleGroups.length === 0) {
-    return (
+    return needle ? (
       <EmptyState
         compact
         icon={MessagesSquare}
         title="Nothing matches"
         description={`No contact or repo matching “${query.trim()}”.`}
+      />
+    ) : (
+      <EmptyState
+        compact
+        icon={MessagesSquare}
+        title="No contacts yet"
+        description="A contact is one persona bound to one repo. Create one to start a conversation."
+        action={
+          <Button size="sm" variant="outline" onClick={() => setDialog('newContact')}>
+            New contact
+          </Button>
+        }
       />
     )
   }
@@ -118,15 +137,12 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
       {visibleContacts.length > 0 && <SectionLabel>Contacts</SectionLabel>}
       {visibleContacts.map((contact) => {
         const persona = personaFor(contact.personaTemplateId)
-        const last = lastContactMessage(contact.id)
         return (
           <ConversationListItem
             key={contact.id}
-            name={personaName(contact)}
+            name={persona?.name ?? contact.displayName}
             repoPath={contact.repoPath}
-            preview={last.preview}
-            timestamp={last.timestamp}
-            usage={usageForContact(usageEvents, contact.id)}
+            preview="No messages yet"
             active={selected?.kind === 'contact' && selected.id === contact.id}
             onSelect={() => setSelected({ kind: 'contact', id: contact.id })}
             leading={
@@ -140,21 +156,23 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
       })}
 
       {visibleGroups.length > 0 && <SectionLabel>Repo groups</SectionLabel>}
-      {visibleGroups.map((group) => {
-        const last = lastGroupMessage(group.id)
-        return (
-          <ConversationListItem
-            key={group.id}
-            name={repoName(group.repoPath)}
-            repoPath={group.repoPath}
-            preview={last.preview}
-            timestamp={last.timestamp}
-            active={selected?.kind === 'group' && selected.id === group.id}
-            onSelect={() => setSelected({ kind: 'group', id: group.id })}
-            leading={<GroupAvatarCluster repoPath={group.repoPath} />}
-          />
-        )
-      })}
+      {visibleGroups.map((group) => (
+        <ConversationListItem
+          key={group.id}
+          name={repoName(group.repoPath)}
+          repoPath={group.repoPath}
+          preview="No activity yet"
+          active={selected?.kind === 'group' && selected.id === group.id}
+          onSelect={() => setSelected({ kind: 'group', id: group.id })}
+          leading={
+            <GroupAvatarCluster
+              repoPath={group.repoPath}
+              contacts={contacts}
+              personaFor={personaFor}
+            />
+          }
+        />
+      ))}
     </div>
   )
 }

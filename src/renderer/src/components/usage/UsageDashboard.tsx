@@ -15,6 +15,8 @@ import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { formatCost, formatTokens } from '@/lib/usage'
+// Still mock-fed: usage_events is only written once turns actually run, so
+// this dashboard goes live in Phase 10 (docs/plan/10-usage-cost-dashboard.md).
 import { contacts, personaTemplates, usageEvents } from '@/mocks'
 import { useUiStore } from '@/store/useUiStore'
 import type { PersonaTemplate, UsageEvent } from '@/types'
