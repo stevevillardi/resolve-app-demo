@@ -175,3 +175,98 @@ nine decimal places.
 `app.asar.unpacked`. Note that nothing in `src/main/` imports the adapters yet —
 Phase 6 wires them — so the packaged import path was verified with a temporary
 import and reverted; Phase 6 should confirm it once for real.
+
+---
+
+## Found in review (2026-08-16)
+
+A deliberate review pass after the phase merged, on the theory that a green
+suite proves the tests agree with the code and nothing more. Nothing below was
+caught by a failing check. Fixes landed on `review-post-phase-5`.
+
+### The read_only sandbox did not hold
+
+`evaluateToolUse` was executed directly over a case list rather than inspected.
+Five classes of write walked through it:
+
+| Command | Why |
+|---|---|
+| `find . -delete` | `find` was allowlisted; its write predicates were unchecked |
+| `find . -exec rm {} +` | the `+` form carries no shell metacharacter, so `SHELL_CONTROL` never fired |
+| `sed -ni` / `sed --in-place` | the in-place test was a prefix match on `-i`; `-ni` is a short cluster and `--in-place` is the GNU long form |
+| `git branch -D` / `git remote add` | both were on the read-only subcommand list; both mutate |
+| `git -c diff.external=…` | `gitSubcommand()` skipped `-c`'s value by design, and several config keys name programs git then executes |
+
+`sandbox.test.ts` had a case named "rejects sed -i" that passed the whole time.
+It asserted the happy path of the guard rather than the property the guard
+claims, which is the general lesson worth carrying: a security test that only
+exercises the inputs the implementation was written against tests the
+implementation's self-image.
+
+### The SDK had an OS-level sandbox all along
+
+The more uncomfortable finding. `@anthropic-ai/claude-agent-sdk@0.3.233` exposes
+`Options.sandbox` — `filesystem.allowWrite/denyWrite/denyRead`, credential
+masking, `autoAllowBashIfSandboxed`, `failIfUnavailable` — and Phase 5 never
+wired it up. So a hand-rolled shell parser was the entire Claude-side boundary,
+which is precisely what the comment on `SHELL_CONTROL` says not to hand-roll,
+while the real primitive sat unused two lines from where the options are built.
+
+Phase 5's own notes had the clue and missed it: they recorded that Codex's
+sandbox is OS-enforced and "stronger than anything this process could impose on
+a subprocess," and concluded that Claude was simply different rather than asking
+whether Claude had the same facility.
+
+Now: no writable path at `read_only`, the repo only at `workspace_write`,
+nothing at `full_access`. `failIfUnavailable: true`, so a sandbox that cannot
+start fails the turn instead of silently running unconfined.
+`autoAllowBashIfSandboxed: false`, so our allowlist stays in the path and a
+refusal still reaches the model as a sentence it can act on. The allowlist is
+fixed too, but as the second layer rather than the only one.
+
+`workspace_write` was the level that gained the most. `evaluateToolUse` returned
+ALLOW for *any* Bash command at that level — deliberately, with a comment
+explaining that constraining it would mean parsing shell — so the repo boundary
+was enforced on `Write`/`Edit` and not at all on `rm -rf ~`. The label and the
+enforcement now agree.
+
+`AgentCapabilities` gained `sandboxEnforcement: 'os' | 'policy'`. The same
+persona setting had meant two materially different things depending on backend,
+and nothing in the type system said so.
+
+### Usage could not be persisted as produced
+
+`usage_events` kept tokens and cost only, so `AgentUsage`'s `model`,
+`costSource`, `cacheWriteInputTokens` and `reasoningOutputTokens` had nowhere to
+land. That made the Phase 10 note about aggregating on the recorded model
+impossible to implement — a plan written against a schema that could not support
+it. Migration `0004` adds all four (plus `persona_templates.model`), additive and
+nullable.
+
+### Smaller corrections
+
+- `agent.ts` claimed `AgentErrorKind` was "a superset [of the renderer's error
+  kinds] so Phase 6 maps across without a translation table". A superset is
+  exactly what cannot be assigned, and the two unmappable kinds included
+  `unknown` — the default `classifyErrorMessage` returns. Comment corrected;
+  the renderer widening is Phase 6's.
+- Claude emits `text_delta` **and** the same text again as `text_message`. True
+  since Phase 5, documented nowhere, and a consumer appending both renders every
+  reply twice. Now stated on the schema and pinned by a test.
+- `tool_end` carried `name: ''`; it now carries the name from the matching
+  `tool_use`.
+- `stderr` was discarded with `() => {}` — the one channel that explains a spawn
+  failure or a sandbox that could not start. Routed to `onRawEvent`.
+- The abort listener was never removed on a normal finish, leaking one dead
+  controller per turn on any signal that outlives a single turn.
+- `CACHED_TOKENS_ARE_SUBSET` is a `const true`, so the ternary it guarded had an
+  unreachable branch that read as a runtime switch.
+
+### Still unverified
+
+Three claims this pass could not settle offline, carried into
+[`06-core-messaging-handoff.md`](06-core-messaging-handoff.md) verification
+items 10–13: whether `total_cost_usd` is per-turn or cumulative under `resume`
+(asserted in a comment, never measured across an actual resume); whether the OS
+sandbox actually engages, as opposed to the options being set correctly; and
+what a sandbox that cannot start looks like from the thread.

@@ -63,7 +63,8 @@ describe('personaTemplate', () => {
     // account may use is decided by the vendor, not by this schema.
     expect(() => personaTemplateSchema.parse({ ...PERSONA, model: 'gpt-5.5' })).not.toThrow()
     expect(() => personaTemplateSchema.parse({ ...PERSONA, model: null })).not.toThrow()
-    const { model: _model, ...withoutModel } = PERSONA
+    const withoutModel = { ...PERSONA }
+    delete (withoutModel as { model?: unknown }).model
     expect(() => personaTemplateSchema.parse(withoutModel)).toThrow()
   })
 

@@ -250,9 +250,9 @@ describe('the Claude OS sandbox', () => {
 
   it.runIf(supported)('passes injected deny-read paths through', () => {
     const secrets = '/tmp/userData/secrets'
-    expect(claudeSandboxOptions('read_only', REPO, [secrets]).sandbox?.filesystem?.denyRead).toEqual(
-      [secrets]
-    )
+    expect(
+      claudeSandboxOptions('read_only', REPO, [secrets]).sandbox?.filesystem?.denyRead
+    ).toEqual([secrets])
   })
 
   it('never sandboxes at full_access, which is the point of that level', () => {
