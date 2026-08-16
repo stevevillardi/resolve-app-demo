@@ -91,7 +91,8 @@ export function toGroupMessage(row: GroupMessageRow): GroupMessage {
     content: row.content,
     ...optional('contactId', row.contactId),
     ...optional('category', row.category),
-    ...optional('durable', row.durable)
+    ...optional('durable', row.durable),
+    ...optional('branch', row.branch)
   }
 }
 
@@ -130,6 +131,7 @@ export function toUsageEvent(row: UsageEventRow): UsageEvent {
     ...optional('cacheWriteInputTokens', row.cacheWriteInputTokens),
     ...optional('reasoningOutputTokens', row.reasoningOutputTokens),
     ...optional('model', row.model),
-    ...optional('costSource', row.costSource)
+    ...optional('costSource', row.costSource),
+    ...optional('sessionId', row.sessionId)
   }
 }

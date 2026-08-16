@@ -151,8 +151,62 @@ describe('usageFromResult', () => {
     expect(usage?.outputTokens).toBe(225)
     expect(usage?.cachedInputTokens).toBe(15)
     expect(usage?.cacheWriteInputTokens).toBe(3)
-    // Named after whichever model actually generated the most.
+    // Named after whichever model actually spent the most.
     expect(usage?.model).toBe('main')
+  })
+
+  // Captured verbatim from `npm run probe:adapters -- --backend claude
+  // --model claude-sonnet-5` on a *fresh* session. The SDK makes an internal
+  // haiku call on every session start, and it out-talks the main loop 11
+  // tokens to 5 while costing 0.3% as much. Naming by output tokens put the
+  // whole $0.168 against haiku on the first turn of every Claude session.
+  it('names the model that spent the most, not the one that talked the most', () => {
+    const usage = usageFromResult({
+      total_cost_usd: 0.168123,
+      modelUsage: {
+        'claude-haiku-4-5-20251001': {
+          inputTokens: 521,
+          outputTokens: 11,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          costUSD: 0.000576
+        },
+        'claude-sonnet-5': {
+          inputTokens: 2,
+          outputTokens: 5,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 27911,
+          costUSD: 0.167547
+        }
+      }
+    })
+
+    expect(usage?.model).toBe('claude-sonnet-5')
+    expect(usage?.costUsd).toBe(0.168123)
+    // The totals still cover both — only the attribution changed.
+    expect(usage?.inputTokens).toBe(523)
+    expect(usage?.outputTokens).toBe(16)
+    expect(usage?.cacheWriteInputTokens).toBe(27911)
+  })
+
+  it('falls back to output tokens when no entry reports a cost', () => {
+    const usage = usageFromResult({
+      modelUsage: {
+        quiet: {
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0
+        },
+        loud: {
+          inputTokens: 1,
+          outputTokens: 99,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0
+        }
+      }
+    })
+    expect(usage?.model).toBe('loud')
   })
 
   it('returns null when the result carries no modelUsage at all', () => {
@@ -424,5 +478,97 @@ describe('sandbox wiring', () => {
     // and HOME breaks the CLI outright.
     await collect([])
     expect(query.mock.calls[0][0].options.env.PATH).toBe(process.env.PATH)
+  })
+})
+
+describe('summarize', () => {
+  /**
+   * Captured from a real run: `npm run probe:structured -- --backend claude
+   * --raw`, haiku-4.5, 2026-08-16. Field-for-field as the SDK sent it.
+   */
+  const SCHEMA = { type: 'object', properties: { summary: { type: 'string' } } }
+
+  const SUMMARY = {
+    summary:
+      'Optimized the auth module to cache token reads at the module level with mtime-based invalidation in src/auth.ts, chosen over simpler timer-based caching to avoid serving revoked tokens during the cache interval.',
+    category: 'tradeoff'
+  }
+
+  function summaryResult(overrides: Record<string, unknown> = {}): unknown {
+    return {
+      type: 'result',
+      subtype: 'success',
+      // Note what this actually is: the JSON **as a string**, not the
+      // placeholder an earlier reading of sdk.d.ts:1860-1866 predicted. The
+      // placeholder in that note is the tool_result carrier inside the
+      // transcript ("Structured output provided successfully"), which matters
+      // for forking a session, not for reading its answer.
+      result: JSON.stringify(SUMMARY),
+      structured_output: SUMMARY,
+      total_cost_usd: 0.016992999999999998,
+      modelUsage: modelUsage(),
+      permission_denials: [],
+      stop_reason: 'tool_use',
+      terminal_reason: 'completed',
+      num_turns: 2,
+      ...overrides
+    }
+  }
+
+  async function run(messages: unknown[]): Promise<{ data: unknown; usage: unknown }> {
+    mockStream(messages)
+    const adapter = createClaudeAdapter()
+    return adapter.summarize(adapter.createSession(SPEC), 'summarise this', SCHEMA)
+  }
+
+  it('reads the parsed structured_output, not the JSON string in result', async () => {
+    // Both carry the answer, but `result` is a string: run() maps it to
+    // done.finalText, so a caller reusing that path would persist raw JSON into
+    // the Group as a summary rather than a sentence.
+    const { data } = await run([summaryResult()])
+    expect(data).toEqual(SUMMARY)
+    expect(typeof data).toBe('object')
+  })
+
+  it('passes the schema as a session-level outputFormat', async () => {
+    await run([summaryResult()])
+    expect(query.mock.calls[0][0].options.outputFormat).toEqual({
+      type: 'json_schema',
+      schema: SCHEMA
+    })
+  })
+
+  it('reports usage so a summary turn is billable like any other', async () => {
+    const { usage } = await run([summaryResult()])
+    expect(usage).toMatchObject({ costUsd: 0.016992999999999998, costSource: 'sdk' })
+  })
+
+  it('returns null when the SDK exhausted its structured-output retries', async () => {
+    // error_max_structured_output_retries means the SDK already retried and
+    // gave up. A missing Group entry is the right degradation — the user's
+    // turn was committed long before this ran.
+    const { data } = await run([
+      summaryResult({
+        subtype: 'error_max_structured_output_retries',
+        structured_output: undefined
+      })
+    ])
+    expect(data).toBeNull()
+  })
+
+  it('returns null rather than throwing when the query itself fails', async () => {
+    query.mockImplementation(() => {
+      throw new Error('spawn failed')
+    })
+    const adapter = createClaudeAdapter()
+    await expect(
+      adapter.summarize(adapter.createSession(SPEC), 'summarise', SCHEMA)
+    ).resolves.toEqual({ data: null, usage: null })
+  })
+
+  it('gives the summariser no tools to reach the repo with', async () => {
+    await run([summaryResult()])
+    const { disallowedTools } = query.mock.calls[0][0].options
+    expect(disallowedTools).toEqual(expect.arrayContaining(['Bash', 'Read', 'Write', 'Edit']))
   })
 })

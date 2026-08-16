@@ -1,0 +1,140 @@
+import { randomUUID } from 'crypto'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { initDb } from '../db'
+import { toGroup, toGroupMessage } from '../db/mappers'
+import { groupMessages, groups } from '../db/schema'
+import type { Group, GroupMessage, GroupMessageDraft } from '../../shared/domain'
+
+/**
+ * The Group's message log (blueprint §4, §6, §8).
+ *
+ * This is the layer that makes the app multi-agent rather than three parallel
+ * chats: §6's observation is that filesystem state is shared for free but
+ * *intent* is not, so the reasoning behind a change has to be carried across
+ * Contact boundaries explicitly. These rows are that carrier — written by
+ * compaction, read back into every session that starts on the same repo.
+ */
+
+/**
+ * How much history a new session is told about (blueprint §5).
+ *
+ * §6 says durable entries are "kept indefinitely, always injected", and this
+ * limit does not contradict that so much as put a floor under it: the log is
+ * append-only and a year-old repo would eventually inject more context than a
+ * turn can hold. Fifty is well above where any current repo sits, so in
+ * practice "always" holds while the failure mode stays bounded.
+ *
+ * Blueprint §14 lists retention and re-summarisation as an open question and
+ * defers it past v1. These stay named constants, and contextForRepo() takes
+ * them as parameters, so answering it later is a change of policy rather than
+ * a change of shape.
+ */
+export const DURABLE_CONTEXT_LIMIT = 50
+export const ROUTINE_CONTEXT_LIMIT = 5
+
+/** Chronological, because a thread reads top to bottom. */
+export function listGroupMessages(groupId: string): GroupMessage[] {
+  return initDb()
+    .select()
+    .from(groupMessages)
+    .where(eq(groupMessages.groupId, groupId))
+    .orderBy(asc(groupMessages.timestamp))
+    .all()
+    .map(toGroupMessage)
+}
+
+/**
+ * Id and timestamp are minted here, never accepted from the caller — the same
+ * rule the other draft schemas follow. A renderer-supplied timestamp would let
+ * a clock skew reorder the thread.
+ */
+export function insertGroupMessage(draft: GroupMessageDraft): GroupMessage {
+  const row = {
+    id: randomUUID(),
+    timestamp: Date.now(),
+    ...draft
+  }
+
+  initDb()
+    .insert(groupMessages)
+    .values({ ...row, timestamp: new Date(row.timestamp) })
+    .run()
+
+  return row
+}
+
+/**
+ * The latest message per group, for ConversationList's preview line.
+ *
+ * One query rather than one per group, for the same reason messagePreviews()
+ * is: the list renders every group at once, and the N+1 version would be N
+ * round trips through the IPC boundary on every render of the primary screen.
+ *
+ * The `rowid` tiebreak matters here too — compaction writes a summary in the
+ * same millisecond a fast turn finishes, and ordering by timestamp alone would
+ * make which of the two shows up in the list non-deterministic.
+ */
+export function groupMessagePreviews(): GroupMessage[] {
+  const latest = new Map<string, GroupMessage>()
+  const rows = initDb()
+    .select()
+    .from(groupMessages)
+    .orderBy(desc(groupMessages.timestamp), desc(sql`rowid`))
+    .all()
+
+  for (const row of rows) {
+    if (!latest.has(row.groupId)) latest.set(row.groupId, toGroupMessage(row))
+  }
+  return [...latest.values()]
+}
+
+/** Null rather than throwing: a repo with no contact bound has no group yet. */
+export function groupForRepo(repoPath: string): Group | null {
+  const row = initDb().select().from(groups).where(eq(groups.repoPath, repoPath)).get()
+  return row ? toGroup(row) : null
+}
+
+/**
+ * What a session starting on `repoPath` should be told about its colleagues.
+ *
+ * Two queries rather than one, because the two categories are retained on
+ * different rules (§6): durable entries are the project's running decision log
+ * and are always injected, while routine ones are recency-only — the older
+ * ones stay in SQLite and remain queryable, they just stop being surfaced.
+ * A single `ORDER BY timestamp DESC LIMIT n` would let a burst of routine
+ * chatter push the decisions out, which is exactly the failure this split
+ * exists to prevent.
+ *
+ * Returned chronologically, oldest first, so the injected block reads as a
+ * history rather than a reverse-chronological feed.
+ */
+export function contextForRepo(
+  repoPath: string,
+  durableLimit = DURABLE_CONTEXT_LIMIT,
+  routineLimit = ROUTINE_CONTEXT_LIMIT
+): GroupMessage[] {
+  const group = groupForRepo(repoPath)
+  if (!group) return []
+
+  const db = initDb()
+
+  const recent = (durable: boolean, limit: number): GroupMessage[] =>
+    db
+      .select()
+      .from(groupMessages)
+      .where(
+        and(
+          eq(groupMessages.groupId, group.id),
+          eq(groupMessages.type, 'system_summary'),
+          eq(groupMessages.durable, durable)
+        )
+      )
+      .orderBy(desc(groupMessages.timestamp))
+      .limit(limit)
+      .all()
+      .map(toGroupMessage)
+
+  return [...recent(true, durableLimit), ...recent(false, routineLimit)].sort(
+    (a, b) => a.timestamp - b.timestamp
+  )
+}

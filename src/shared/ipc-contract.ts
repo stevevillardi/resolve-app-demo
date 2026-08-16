@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   contactDraftSchema,
   contactSchema,
+  groupMessageSchema,
   groupSchema,
   messageSchema,
   personaBackendSchema,
@@ -237,6 +238,42 @@ export const ipcContract = {
   'groups.list': {
     input: z.void(),
     output: z.array(groupSchema)
+  },
+  /** Null when nothing is bound to that repo yet, so it has no group. */
+  'groups.getForRepo': {
+    input: z.object({ repoPath: z.string() }),
+    output: groupSchema.nullable()
+  },
+
+  // --- Group coordination (Phase 7, blueprint §6/§8, §16 Journey 2) --------
+  'groupMessages.list': {
+    input: z.object({ groupId: z.string() }),
+    output: z.array(groupMessageSchema)
+  },
+  /** Latest message per group — ConversationList's preview line. */
+  'groupMessages.previews': {
+    input: z.void(),
+    output: z.array(groupMessageSchema)
+  },
+  /**
+   * Routes a Group @mention to one Contact's real session (§8).
+   *
+   * Deliberately the same shape as `messages.send`, because it *is* that call
+   * with two extra rows: the reply streams back on the same push channel under
+   * the returned runId, and lands in the Contact's 1:1 thread as well as the
+   * Group. Single-target only — broadcast is cut in v1 (§13).
+   *
+   * Rejects when the mentioned Contact cannot take the lock, exactly as
+   * `messages.send` does, and writes nothing when it does: a persisted mention
+   * that never gets an answer reads as a lost message rather than a refusal.
+   */
+  'groups.mention': {
+    input: z.object({
+      groupId: z.string(),
+      contactId: z.string(),
+      content: z.string().min(1)
+    }),
+    output: z.object({ runId: z.string(), groupMessage: groupMessageSchema })
   },
 
   // --- Messaging (Phase 6, blueprint §16 Journey 1) -----------------------

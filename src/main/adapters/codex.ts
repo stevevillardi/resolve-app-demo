@@ -4,7 +4,13 @@ import { composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
 import { computeCodexCost } from './pricing'
 import { codexSandboxMode } from './sandbox'
-import type { AdapterConfig, AgentAdapter, AgentSession, SessionSpec } from './types'
+import type {
+  AdapterConfig,
+  AgentAdapter,
+  AgentSession,
+  SessionSpec,
+  StructuredResult
+} from './types'
 
 /**
  * The Codex backend, on @openai/codex-sdk.
@@ -40,7 +46,10 @@ export const CODEX_CAPABILITIES: AgentCapabilities = {
   // The CLI's own `--sandbox` preset is enforced by the OS, on every platform
   // it runs on. This was already true in Phase 5 — it is only stated now that
   // the Claude side has an equivalent to be compared against.
-  sandboxEnforcement: 'os'
+  sandboxEnforcement: 'os',
+  // TurnOptions.outputSchema in 0.147.0. Per-turn rather than per-session,
+  // unlike Claude — see summarize().
+  supportsStructuredOutput: true
 }
 
 /**
@@ -87,15 +96,52 @@ function isToolItem(item: ThreadItem): boolean {
   )
 }
 
-export function usageFromTurn(usage: Usage | null | undefined, model: string): AgentUsage | null {
-  if (!usage) return null
+/**
+ * Codex's `turn.completed` reading minus what the thread has already been
+ * billed for.
+ *
+ * The SDK types every field as usage "during the turn" (`dist/index.d.ts:119`)
+ * and that is simply not what it sends — three one-word replies on one resumed
+ * thread reported 5, 10 and 15 output tokens. See baselineFor() in
+ * services/usage-events.ts for the full measurement.
+ *
+ * Floored at 0 rather than trusted: the first turn after this shipped sees a
+ * baseline summed only from rows that carry a session id, so on a thread that
+ * predates the column the reading can legitimately exceed it. A negative token
+ * count would be a worse lie than a low one.
+ */
+export function deltaFrom(usage: Usage, baseline: AgentUsage | null | undefined): Usage {
+  if (!baseline) return usage
+  const less = (reported: number, billed: number | undefined): number =>
+    Math.max(0, reported - (billed ?? 0))
+
   return {
-    inputTokens: usage.input_tokens,
-    outputTokens: usage.output_tokens,
-    cachedInputTokens: usage.cached_input_tokens,
-    cacheWriteInputTokens: usage.cache_write_input_tokens,
-    reasoningOutputTokens: usage.reasoning_output_tokens,
-    costUsd: computeCodexCost(model, usage),
+    input_tokens: less(usage.input_tokens, baseline.inputTokens),
+    cached_input_tokens: less(usage.cached_input_tokens, baseline.cachedInputTokens),
+    cache_write_input_tokens: less(usage.cache_write_input_tokens, baseline.cacheWriteInputTokens),
+    output_tokens: less(usage.output_tokens, baseline.outputTokens),
+    reasoning_output_tokens: less(usage.reasoning_output_tokens, baseline.reasoningOutputTokens)
+  }
+}
+
+export function usageFromTurn(
+  usage: Usage | null | undefined,
+  model: string,
+  baseline?: AgentUsage | null
+): AgentUsage | null {
+  if (!usage) return null
+
+  // Subtracted before pricing, never after: cost is recomputed from this turn's
+  // own tokens rather than differenced out of two cumulative totals.
+  const turn = deltaFrom(usage, baseline)
+
+  return {
+    inputTokens: turn.input_tokens,
+    outputTokens: turn.output_tokens,
+    cachedInputTokens: turn.cached_input_tokens,
+    cacheWriteInputTokens: turn.cache_write_input_tokens,
+    reasoningOutputTokens: turn.reasoning_output_tokens,
+    costUsd: computeCodexCost(model, turn),
     costSource: 'computed',
     model
   }
@@ -246,7 +292,7 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
         }
 
         case 'turn.completed': {
-          usage = usageFromTurn(event.usage, model)
+          usage = usageFromTurn(event.usage, model, spec.usageBaseline)
           break
         }
 
@@ -270,11 +316,96 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
     }
   }
 
+  /**
+   * One schema-constrained turn (blueprint §6 compaction).
+   *
+   * The mirror image of the Claude side. `outputSchema` is a **per-turn**
+   * TurnOptions field, so no separate session shape is needed — but there is
+   * also no separate field to read the answer out of: the SDK documents
+   * `AgentMessageItem.text` as "either natural-language text or JSON when
+   * structured output is requested", so the JSON arrives exactly where prose
+   * normally would and we parse it ourselves.
+   *
+   * A model that answers with prose anyway therefore surfaces as a parse
+   * failure, which is the same null the Claude adapter returns when its retries
+   * are exhausted. Callers cannot tell the two apart, and should not need to.
+   *
+   * `read-only` sandbox rather than the persona's: a summariser is given its
+   * material in the prompt and has no reason to touch the tree.
+   */
+  async function summarize(
+    agentSession: AgentSession,
+    prompt: string,
+    schema: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<StructuredResult> {
+    const { spec } = agentSession
+    const model = spec.model ?? DEFAULT_CODEX_MODEL
+
+    try {
+      const { Codex } = await import('@openai/codex-sdk')
+
+      const client = new Codex({
+        ...(config.codexBinaryPath ? { codexPathOverride: config.codexBinaryPath } : {}),
+        ...(config.env ? { env: { ...process.env, ...config.env } as Record<string, string> } : {}),
+        config: { developer_instructions: composeInstructions(spec) }
+      })
+
+      const thread = client.startThread({
+        model,
+        sandboxMode: 'read-only',
+        workingDirectory: spec.repoPath
+      })
+
+      const turn = await thread.run(prompt, {
+        outputSchema: schema,
+        ...(signal ? { signal } : {})
+      })
+
+      config.onRawEvent?.(turn)
+
+      return {
+        data: parseJson(turn.finalResponse),
+        // No baseline: startThread() every time, and a summariser thread is
+        // never resumed, so its first turn is also its only one. The cumulative
+        // reading and the per-turn one are the same number here.
+        usage: turn.usage ? usageFromTurn(turn.usage, model) : null
+      }
+    } catch (error) {
+      // Compaction never fails a turn that has already been persisted — but a
+      // swallowed error with no channel out is undiagnosable, so it goes to the
+      // raw hook that `probe:structured --raw` installs.
+      config.onRawEvent?.({ type: 'summarize_error', error: String(error) })
+      return { data: null, usage: null }
+    }
+  }
+
   return {
     backend: 'codex',
     capabilities: CODEX_CAPABILITIES,
     createSession: (spec) => session(spec, null),
     resume: (spec, sessionId) => session(spec, sessionId),
-    run
+    run,
+    summarize
+  }
+}
+
+/**
+ * Null rather than a throw on malformed JSON — see summarize().
+ *
+ * Tolerates a fenced ```json block, because a model asked for JSON in prose
+ * form frequently supplies one and discarding an otherwise-valid summary over
+ * three backticks would be a poor trade.
+ */
+function parseJson(text: string): unknown | null {
+  const unfenced = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+
+  try {
+    return JSON.parse(unfenced)
+  } catch {
+    return null
   }
 }

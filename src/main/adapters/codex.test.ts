@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk'
-import type { AgentEvent } from '../../shared/agent'
+import type { AgentEvent, AgentUsage } from '../../shared/agent'
 import type { PersonaTemplate } from '../../shared/domain'
 import type { SessionSpec } from './types'
+import { SUMMARY_JSON_SCHEMA, summarySchema } from '../../shared/summary'
 
 /**
  * Event shapes here are the ones observed on real `codex exec
@@ -16,6 +17,14 @@ let lastClientOptions: Record<string, unknown> | undefined
 let lastThreadOptions: Record<string, unknown> | undefined
 let lastResumedId: string | undefined
 
+/** Set by the summarize tests; `run()` is the non-streaming turn they use. */
+let turnResult: { finalResponse: string; usage: unknown; items: unknown[] } = {
+  finalResponse: '',
+  usage: null,
+  items: []
+}
+let lastTurnOptions: Record<string, unknown> | undefined
+
 class FakeThread {
   async runStreamed(): Promise<{ events: AsyncGenerator<ThreadEvent> }> {
     return {
@@ -23,6 +32,10 @@ class FakeThread {
         for (const event of events) yield event
       })()
     }
+  }
+  async run(_prompt: string, options: Record<string, unknown>): Promise<typeof turnResult> {
+    lastTurnOptions = options
+    return turnResult
   }
 }
 
@@ -176,6 +189,86 @@ describe('usageFromTurn', () => {
   it('returns null when the turn reported no usage at all', () => {
     expect(usageFromTurn(null, 'gpt-5.5')).toBeNull()
     expect(usageFromTurn(undefined, 'gpt-5.5')).toBeNull()
+  })
+})
+
+/**
+ * Codex reports usage cumulatively across a thread even though its own typings
+ * say "during the turn". These three readings are verbatim from
+ * `npm run probe:adapters -- --backend codex` over one resumed thread, three
+ * single-word replies: output goes 5 → 10 → 15, which no three one-word replies
+ * do. Fabricating them would have missed the bug entirely, so they stay as
+ * captured (rule (e)).
+ */
+describe('usageFromTurn subtracts what the thread was already billed for', () => {
+  const TURN_2 = {
+    input_tokens: 25610,
+    cached_input_tokens: 16128,
+    cache_write_input_tokens: 0,
+    output_tokens: 10,
+    reasoning_output_tokens: 0
+  }
+
+  const BILLED_AFTER_TURN_1: AgentUsage = {
+    inputTokens: 12122,
+    outputTokens: 5,
+    cachedInputTokens: 4480,
+    cacheWriteInputTokens: 0,
+    reasoningOutputTokens: 0,
+    costUsd: 0.0406,
+    costSource: 'computed',
+    model: 'gpt-5.5'
+  }
+
+  it('reports the turn, not the running total', () => {
+    const usage = usageFromTurn(TURN_2, 'gpt-5.5', BILLED_AFTER_TURN_1)
+    expect(usage).toMatchObject({
+      inputTokens: 13488,
+      outputTokens: 5,
+      cachedInputTokens: 11648
+    })
+  })
+
+  it('prices the delta rather than differencing two totals', () => {
+    // The cumulative reading prices at ~$0.0558. Recomputing from the delta is
+    // what keeps the figure honest when a price table changes between turns.
+    const billed = usageFromTurn(TURN_2, 'gpt-5.5', BILLED_AFTER_TURN_1)?.costUsd ?? 0
+    const cumulative = usageFromTurn(TURN_2, 'gpt-5.5')?.costUsd ?? 0
+    expect(billed).toBeLessThan(cumulative)
+    expect(billed).toBeCloseTo(
+      cumulative -
+        (usageFromTurn(
+          {
+            input_tokens: BILLED_AFTER_TURN_1.inputTokens,
+            cached_input_tokens: BILLED_AFTER_TURN_1.cachedInputTokens ?? 0,
+            cache_write_input_tokens: 0,
+            output_tokens: BILLED_AFTER_TURN_1.outputTokens,
+            reasoning_output_tokens: 0
+          },
+          'gpt-5.5'
+        )?.costUsd ?? 0),
+      9
+    )
+  })
+
+  it('reports the reading unchanged when no baseline is known', () => {
+    // A fresh thread, and the state of every row written before session ids
+    // were recorded. Over-reporting once beats inventing a baseline.
+    expect(usageFromTurn(TURN_2, 'gpt-5.5', null)?.inputTokens).toBe(25610)
+    expect(usageFromTurn(TURN_2, 'gpt-5.5')?.inputTokens).toBe(25610)
+  })
+
+  it('floors at zero rather than reporting negative tokens', () => {
+    // Reachable on a thread that predates the session_id column: the baseline
+    // sums only the rows that carry one, so it can undershoot — but a baseline
+    // that *overshoots* a reading must not produce a negative count.
+    const usage = usageFromTurn(TURN_2, 'gpt-5.5', {
+      ...BILLED_AFTER_TURN_1,
+      inputTokens: 999999,
+      outputTokens: 999999
+    })
+    expect(usage?.inputTokens).toBe(0)
+    expect(usage?.outputTokens).toBe(0)
   })
 })
 
@@ -405,5 +498,116 @@ describe('stream normalization', () => {
       { type: 'item.completed', item: { id: 't', type: 'todo_list', items: [] } }
     ])
     expect(collected.filter((e) => e.type === 'error')).toHaveLength(0)
+  })
+})
+
+describe('summarize', () => {
+  /**
+   * Shapes captured from a real run: `npm run probe:structured -- --backend
+   * codex --raw`, gpt-5.4-mini, 2026-08-16.
+   */
+  const SCHEMA = { type: 'object', properties: { summary: { type: 'string' } } }
+
+  async function run(finalResponse: string, usage: unknown = null): Promise<unknown> {
+    turnResult = { finalResponse, usage, items: [] }
+    const adapter = createCodexAdapter()
+    const result = await adapter.summarize(adapter.createSession(SPEC), 'summarise', SCHEMA)
+    return result.data
+  }
+
+  beforeEach(() => {
+    turnResult = { finalResponse: '', usage: null, items: [] }
+    lastTurnOptions = undefined
+  })
+
+  it('parses the JSON out of finalResponse', async () => {
+    // Unlike Claude there is no separate field — the SDK documents this text
+    // as "either natural-language text or JSON when structured output is
+    // requested", so the answer arrives exactly where prose would.
+    expect(await run('{"summary":"Renamed foo to bar.","category":"decision"}')).toEqual({
+      summary: 'Renamed foo to bar.',
+      category: 'decision'
+    })
+  })
+
+  it('passes the schema as a per-turn outputSchema', async () => {
+    await run('{}')
+    expect(lastTurnOptions?.outputSchema).toEqual(SCHEMA)
+  })
+
+  it('tolerates a fenced code block', async () => {
+    // Asked for JSON in prose form, a model frequently fences it. Discarding
+    // an otherwise-valid summary over three backticks would be a poor trade.
+    expect(await run('```json\n{"summary":"ok","category":"routine"}\n```')).toEqual({
+      summary: 'ok',
+      category: 'routine'
+    })
+  })
+
+  it('returns null when the model answered with prose instead', async () => {
+    // Indistinguishable, by design, from Claude exhausting its retries: both
+    // mean "no conforming answer this turn".
+    expect(await run('I renamed foo to bar because the old name was ambiguous.')).toBeNull()
+  })
+
+  it('reports usage so a summary turn is billable like any other', async () => {
+    turnResult = {
+      finalResponse: '{"summary":"ok","category":"routine"}',
+      usage: { input_tokens: 900, cached_input_tokens: 100, output_tokens: 40 },
+      items: []
+    }
+    const adapter = createCodexAdapter()
+    const { usage } = await adapter.summarize(adapter.createSession(SPEC), 'go', SCHEMA)
+    expect(usage).toMatchObject({ outputTokens: 40, costSource: 'computed' })
+  })
+
+  it('runs read-only regardless of what the persona could do', async () => {
+    // Deliberately a workspace_write persona: with the read_only default this
+    // assertion would hold even if summarize() passed the persona's own level
+    // through, which is the thing being ruled out.
+    turnResult = { finalResponse: '{}', usage: null, items: [] }
+    const adapter = createCodexAdapter()
+    const spec: SessionSpec = { ...SPEC, persona: { ...PERSONA, sandbox: 'workspace_write' } }
+    await adapter.summarize(adapter.createSession(spec), 'go', SCHEMA)
+    expect(lastThreadOptions?.sandboxMode).toBe('read-only')
+  })
+})
+
+describe('the summary schema Codex is actually sent', () => {
+  /**
+   * Codex hands `outputSchema` to OpenAI's **strict** structured-output mode,
+   * which is stricter than JSON Schema: every key in `properties` must appear
+   * in `required`, and optionality has to be expressed as a nullable type.
+   *
+   * A schema with an optional `branch` is rejected outright:
+   *
+   *   400 invalid_json_schema — 'required' is required to be supplied and to
+   *   be an array including every key in properties. Missing 'branch'.
+   *
+   * Neither SDK's typings say any of this — both take `Record<string, unknown>`
+   * — so nothing but a live run could have found it, and nothing but a test
+   * will stop the next person "tidying" branch back to optional.
+   */
+  it('lists every property as required', () => {
+    const properties = Object.keys(SUMMARY_JSON_SCHEMA.properties as Record<string, unknown>)
+    expect(SUMMARY_JSON_SCHEMA.required).toEqual(properties)
+  })
+
+  it('expresses an absent branch as a nullable type rather than an omission', () => {
+    const properties = SUMMARY_JSON_SCHEMA.properties as Record<string, { type: unknown }>
+    expect(properties.branch.type).toEqual(['string', 'null'])
+  })
+
+  it('forbids additional properties, as strict mode requires', () => {
+    expect(SUMMARY_JSON_SCHEMA.additionalProperties).toBe(false)
+  })
+
+  it('accepts the null branch both backends send when there is none', () => {
+    // Claude omits the key, Codex sends null. Both mean the same thing, and
+    // compaction stores neither.
+    expect(
+      summarySchema.safeParse({ summary: 'x', category: 'routine', branch: null }).success
+    ).toBe(true)
+    expect(summarySchema.safeParse({ summary: 'x', category: 'routine' }).success).toBe(true)
   })
 })

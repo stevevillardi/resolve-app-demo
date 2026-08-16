@@ -1,0 +1,1 @@
+ALTER TABLE `usage_events` ADD `session_id` text;

@@ -1,9 +1,12 @@
 # Phase 6 — Core Messaging: implementation handoff
 
-**Status:** Implemented on `phase-6-core-messaging`, pending live verification.
-Part A is built and covered by 491 unit tests + 24 E2E; Part B's doc updates are
-applied, including the new [`12-worktree-isolation.md`](12-worktree-isolation.md).
-What remains is running Journey 1 against a real backend — see "Verification".
+**Status:** **Done.** Implemented on `phase-6-core-messaging`; Part B's doc
+updates are applied, including the new
+[`12-worktree-isolation.md`](12-worktree-isolation.md). Closed out live on
+2026-08-16 alongside Phase 7. Of §11's carried-over items, **10, 11 and 13 are
+settled and 12 is not** — see the annotations there. Items 10 and 11 both turned
+out to be defects. The results are recorded under "Found in the Phase 6/7 live
+close-out" in [`00-progress.md`](00-progress.md).
 **Companion doc:** [`06-core-messaging.md`](06-core-messaging.md) — the original
 scope doc. This file is the *implementation* plan derived from it, written after
 a fresh pass over the code. Where the two disagree, this file is newer and says
@@ -324,6 +327,14 @@ under the composer, **not** an error bubble, since no turn ran.
   release the lock, but the subprocess may keep running. Confirm per backend and
   record the result in the phase doc's "Verified live" section.
 
+  ✅ **Settled 2026-08-16 — both backends genuinely stop.** Codex reports "The
+  operation was aborted" and its subprocess is gone immediately; Claude reports
+  "Claude Code process aborted by user" and takes about 2s to tear down. Watched
+  across the process table, not inferred from the event stream, via the new
+  `npm run probe:adapters -- --abort-after <ms>`. Neither reports usage for an
+  aborted turn, so the "log the UsageEvent if `done` still carried usage" branch
+  above never fires in practice.
+
 ## 7. `NewContactFlow` goes live
 
 The persona picker is already real (`usePersonas()`). The repo step is the work.
@@ -510,6 +521,14 @@ discovering them through a wrong number in the dashboard.
     ```
     Compare `done.usage` across the two and record the numbers either way — a
     verified "it is per-turn" is worth as much as finding a bug.
+
+    ✅ **Settled 2026-08-16. Claude is per-turn — and Codex, which nobody
+    thought to ask about, is cumulative.** Three turns on one resumed Claude
+    session cost `$0.2273`, `$0.2268`, `$0.0116`; a cumulative figure cannot go
+    down. The same shape on Codex reported output tokens `5 → 10 → 15` for
+    three one-word replies. Fixed with migration `0006` + `baselineFor()`; full
+    numbers in `00-progress.md`. Both worth having — the "no bug" answer for
+    Claude is what makes the Codex one legible.
 11. **Does the OS sandbox actually engage?** `claudeSandboxOptions` sets
     `Options.sandbox` and unit tests assert the *options*, which is not the same
     as the kernel refusing a write. In a scratch repo with a `read_only`
@@ -517,14 +536,43 @@ discovering them through a wrong number in the dashboard.
     still on disk — not merely that an event said "denied". Do the same at
     `workspace_write` with a target *outside* the repo, which is the case that
     was unenforced before the review.
+
+    ⚠️ **Settled 2026-08-16, and it did not hold.** `read_only` was sound on
+    both backends — Codex refuses with `zsh:1: operation not permitted`, which
+    is Seatbelt rather than politeness, and Claude blocked both a `Write` and a
+    Bash redirect. `workspace_write` was **escapable**: the model reissued a
+    sandbox-denied command with `dangerouslyDisableSandbox` and wrote to
+    `/tmp`, because `sandbox.allowUnsandboxedCommands` defaults to `true` and
+    nothing had turned it off. Fixed at both layers and re-verified. Note the
+    instruction above was right about the method and it still nearly missed:
+    the *first* attempt used a `read_only` persona with the probe's default
+    "do not modify anything" system prompt, and the model declined on policy
+    grounds, which looks exactly like enforcement. Take the restraining prompt
+    off before believing a sandbox test.
 12. **What happens when the sandbox cannot start?** `failIfUnavailable: true`
     means the turn fails rather than running unconfined. Confirm that failure
     reaches the thread as an error bubble instead of a hang — it is the path
     nobody sees until it matters.
+
+    ❌ **Still open.** Forcing the sandbox to fail to start on a machine where
+    it works is the hard part, and nothing found during the close-out did it by
+    accident. The option is set and unit-tested; what is unverified is the
+    error's *path to the UI*. Carry it into Phase 11's failure-state pass,
+    which is already doing that job for every other error kind.
 13. **Migration `0004` against a populated database.** The mapper tests cover a
     freshly migrated `:memory:` db. Copy a real `userData` database from before
     `0004`, launch, and confirm existing personas and usage rows survive with
     the new columns reading back absent rather than guessed.
+
+    ✅ **Settled 2026-08-16, as a permanent test rather than a one-off.**
+    `src/main/db/upgrade.test.ts` builds the "old" database out of the
+    migration files themselves — apply a prefix of `drizzle/`, write rows
+    through it, then apply the whole folder over the top. A checked-in binary
+    fixture would have gone stale at `0005`; this one covers `0006` and
+    everything after it without anyone regenerating anything. Confirms
+    `persona_templates.model`, `usage_events.model` / `cost_source` /
+    `session_id` all read back null on pre-existing rows, that a second launch
+    is a no-op, and that foreign keys are still enforced afterwards.
 
 ---
 

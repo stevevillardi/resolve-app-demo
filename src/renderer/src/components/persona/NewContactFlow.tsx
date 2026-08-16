@@ -21,6 +21,7 @@ import { useCreateContact } from '@/hooks/useConversations'
 import { useChooseDirectory, useCloneRepo, useRepos } from '@/hooks/useRepos'
 import { useUiStore } from '@/store/useUiStore'
 import { repoName } from '@/lib/format'
+import { NON_REPO_NOTE, repoBindingProblem } from '@/lib/repo-binding'
 import { cn } from '@/lib/utils'
 import type { BoundRepo, RepoOption } from '../../../../shared/ipc-contract'
 
@@ -110,6 +111,12 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const chosenLabel = source === 'local' ? localRepo?.path : repo?.fullName
   const hasRepo = source === 'local' ? Boolean(localRepo) : Boolean(repo)
   const busy = cloning || creating
+
+  // Caught at bind time rather than at the first send — see repoBindingProblem.
+  const bindingProblem =
+    source === 'local' && localRepo
+      ? repoBindingProblem(persona?.backend, persona?.name, localRepo.isGitRepo)
+      : null
 
   /** Binds the contact, cloning first when the repo is only on GitHub so far. */
   const handleCreate = (): void => {
@@ -204,12 +211,15 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                   </div>
                 )}
                 {localRepo && !localRepo.isGitRepo && (
-                  // Not a blocker — an agent can read and edit a plain
-                  // directory. But it can never open a PR from one, and that is
-                  // better said now than discovered in Phase 9.
-                  <p className="text-muted-foreground text-xs">
-                    This folder isn&apos;t a git repository, so GitHub actions won&apos;t be
-                    available for this contact.
+                  // On Claude this is a note: an agent can read and edit a
+                  // plain directory, it just has no branch to open a PR from.
+                  // On Codex it is a hard stop.
+                  <p
+                    className={
+                      bindingProblem ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'
+                    }
+                  >
+                    {bindingProblem?.message ?? NON_REPO_NOTE}
                   </p>
                 )}
               </div>
@@ -317,7 +327,10 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               </Button>
             )}
             {step === 'repo' && (
-              <Button disabled={!hasRepo} onClick={() => setStep('confirm')}>
+              <Button
+                disabled={!hasRepo || Boolean(bindingProblem)}
+                onClick={() => setStep('confirm')}
+              >
                 Continue
               </Button>
             )}

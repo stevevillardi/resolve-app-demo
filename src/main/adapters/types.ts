@@ -1,5 +1,5 @@
-import type { AgentCapabilities, AgentEvent } from '../../shared/agent'
-import type { PersonaBackend, PersonaTemplate, Skill } from '../../shared/domain'
+import type { AgentCapabilities, AgentEvent, AgentUsage } from '../../shared/agent'
+import type { GroupMessage, PersonaBackend, PersonaTemplate, Skill } from '../../shared/domain'
 
 /**
  * The AgentAdapter contract (blueprint §3).
@@ -24,6 +24,29 @@ export interface SessionSpec {
   repoPath: string
   /** Already resolved from persona.skillIds by the caller (blueprint §5). */
   skills: Skill[]
+  /**
+   * The repo's recent Group summaries, oldest first — blueprint §5's second
+   * injection source and the mechanism behind §16 Journey 2.
+   *
+   * Resolved by the caller for the same reason `skills` is: selecting them
+   * means querying the database, and nothing under src/main/adapters/ may.
+   * See contextForRepo() in src/main/services/group-messages.ts.
+   */
+  groupContext?: GroupMessage[]
+  /**
+   * Everything this session has already been billed for, so a backend that
+   * reports usage cumulatively can be reduced to one turn's own figure.
+   *
+   * Resolved by the caller for the same reason `skills` and `groupContext` are:
+   * it comes from `usage_events`, and nothing here may query. See baselineFor()
+   * in src/main/services/usage-events.ts, which also records the measurements
+   * that made this necessary.
+   *
+   * Only the Codex adapter reads it — Claude's figures were verified per-turn
+   * under `resume`. Leaving it unset means "no baseline known", which is
+   * correct for a fresh session and merely over-reports once for a resumed one.
+   */
+  usageBaseline?: AgentUsage | null
   /** Overrides the backend's default. Mostly for the probe CLI. */
   model?: string
 }
@@ -82,10 +105,59 @@ export interface AdapterConfig {
   onRawEvent?: (event: unknown) => void
 }
 
+/**
+ * One schema-constrained answer, normalized across two rather different SDKs.
+ *
+ * `data` is `unknown` because neither SDK types it any better — Claude's
+ * `structured_output` and Codex's JSON-bearing `finalResponse` are both opaque.
+ * The caller validates with Zod, which is the only place the shape is actually
+ * known.
+ *
+ * `data` is null rather than a throw when the backend could not produce a
+ * conforming object: Claude retries internally and gives up with
+ * `error_max_structured_output_retries`, and Codex can return prose where JSON
+ * was asked for. Both mean "no answer this time", which is a degradation the
+ * caller should absorb, not an error it should propagate.
+ */
+export interface StructuredResult {
+  data: unknown | null
+  usage: AgentUsage | null
+}
+
 export interface AgentAdapter {
   readonly backend: PersonaBackend
   readonly capabilities: AgentCapabilities
   createSession(spec: SessionSpec): AgentSession
   resume(spec: SessionSpec, sessionId: string): AgentSession
   run(session: AgentSession, prompt: string, signal?: AbortSignal): AsyncIterable<AgentEvent>
+  /**
+   * One turn that answers with JSON matching `schema`, for blueprint §6's
+   * end-of-session compaction.
+   *
+   * Beside run() rather than an option on it, for three reasons that only
+   * showed up on reading the vendored SDKs:
+   *
+   * 1. Claude's `outputFormat` is a **session-level** option, so it cannot be
+   *    switched on for the last turn of a live conversational session. Codex's
+   *    `outputSchema` is per-turn. There is no granularity both share.
+   * 2. The two backends put the answer in different places — Claude on a
+   *    separate `structured_output` field, Codex as a JSON string in the same
+   *    `finalResponse` that would otherwise hold prose. Normalising that is
+   *    exactly the job this layer exists for.
+   * 3. Nothing about it should reach the renderer. It returns a promise rather
+   *    than an event stream so there is no stream to accidentally forward.
+   *
+   * The schema handed in must satisfy **both** backends' validators, which are
+   * not equally permissive — see SUMMARY_JSON_SCHEMA in `src/shared/summary.ts`
+   * for the strict-mode constraint Codex imposes.
+   *
+   * Callers should pass a session built for this purpose, not a persona's own —
+   * see src/main/services/compaction.ts.
+   */
+  summarize(
+    session: AgentSession,
+    prompt: string,
+    schema: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<StructuredResult>
 }

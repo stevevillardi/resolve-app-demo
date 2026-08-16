@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { contacts, personaTemplates, skills, usageEvents } from '../db/schema'
+import {
+  contacts,
+  groupMessages,
+  groups,
+  personaTemplates,
+  skills,
+  usageEvents
+} from '../db/schema'
 import type { AppDatabase } from '../db/create'
 import type { AgentEvent, AgentUsage } from '../../shared/agent'
 import type { SandboxLevel } from '../../shared/domain'
@@ -22,7 +29,13 @@ let throwOnRun: Error | null = null
 /** Blocks the stream so a turn can be observed mid-flight. */
 let gate: { promise: Promise<void>; open: () => void } | null = null
 
-let created: { resumedFrom: string | null; model?: string; skillNames: string[] }[] = []
+let created: {
+  resumedFrom: string | null
+  model?: string
+  skillNames: string[]
+  groupContext: { content: string }[]
+  usageBaseline: AgentUsage | null
+}[] = []
 let sessionIdToReport: string | null = 'session-abc'
 let lastSignal: AbortSignal | null = null
 
@@ -42,6 +55,26 @@ vi.mock('./adapter-host', () => ({
   adapterForBackend: () => fakeAdapter
 }))
 
+/**
+ * Compaction is a real service with its own tests; here it is stubbed so this
+ * file can assert the *wiring* — that a finished turn hands over the prompt and
+ * the reply — without a second scripted backend in the way.
+ */
+const summarized: { contactId: string; prompt: string; reply: string }[] = []
+vi.mock('./compaction', () => ({
+  summarizeTurn: async (contactId: string, prompt: string, reply: string) => {
+    summarized.push({ contactId, prompt, reply })
+    return null
+  }
+}))
+
+interface SpecLike {
+  model?: string
+  skills: { name: string }[]
+  groupContext?: { content: string }[]
+  usageBaseline?: AgentUsage | null
+}
+
 const fakeAdapter = {
   backend: 'claude' as const,
   capabilities: {
@@ -50,19 +83,23 @@ const fakeAdapter = {
     costSource: 'sdk' as const,
     sandboxEnforcement: 'os' as const
   },
-  createSession(spec: { model?: string; skills: { name: string }[] }) {
+  createSession(spec: SpecLike) {
     created.push({
       resumedFrom: null,
       ...(spec.model !== undefined && { model: spec.model }),
-      skillNames: spec.skills.map((skill) => skill.name)
+      skillNames: spec.skills.map((skill) => skill.name),
+      groupContext: spec.groupContext ?? [],
+      usageBaseline: spec.usageBaseline ?? null
     })
     return { backend: 'claude' as const, spec, sessionId: null as string | null }
   },
-  resume(spec: { model?: string; skills: { name: string }[] }, sessionId: string) {
+  resume(spec: SpecLike, sessionId: string) {
     created.push({
       resumedFrom: sessionId,
       ...(spec.model !== undefined && { model: spec.model }),
-      skillNames: spec.skills.map((skill) => skill.name)
+      skillNames: spec.skills.map((skill) => skill.name),
+      groupContext: spec.groupContext ?? [],
+      usageBaseline: spec.usageBaseline ?? null
     })
     return { backend: 'claude' as const, spec, sessionId: sessionId as string | null }
   },
@@ -84,9 +121,10 @@ const fakeAdapter = {
   }
 }
 
-const { cancelRun, listActiveRuns, listMessages, messagePreviews, sendMessage } =
+const { cancelRun, listActiveRuns, listMessages, mentionInGroup, messagePreviews, sendMessage } =
   await import('./messaging')
 const { resetRunLocks } = await import('./run-lock')
+const { listGroupMessages } = await import('./group-messages')
 
 const USAGE: AgentUsage = {
   inputTokens: 120,
@@ -147,6 +185,7 @@ beforeEach(() => {
   lastSignal = null
   emitted.length = 0
   runsChangedCount = 0
+  summarized.length = 0
 
   db.insert(skills)
     .values({ id: 'skill-1', name: 'Review checklist', description: '', content: 'Be thorough.' })
@@ -232,6 +271,37 @@ describe('session resumption', () => {
     await settle()
 
     expect(created[1].resumedFrom).toBe('session-abc')
+  })
+
+  // Codex reports usage cumulatively across a thread (see baselineFor), so a
+  // resumed session has to be told what it has already been billed for or every
+  // turn after the first over-reports. This is the wiring for that; the
+  // subtraction itself is adapters/codex.test.ts.
+  it('stamps each usage row with the session that produced it', async () => {
+    sendMessage('contact-a', 'first')
+    await settle()
+
+    expect(db.select().from(usageEvents).all()[0].sessionId).toBe('session-abc')
+  })
+
+  it('hands a resumed session what it has already been billed for', async () => {
+    sendMessage('contact-a', 'first')
+    await settle()
+    sendMessage('contact-a', 'second')
+    await settle()
+
+    // Nothing to subtract on the first turn of a session.
+    expect(created[0].usageBaseline).toBeNull()
+    expect(created[1].usageBaseline).toMatchObject({ inputTokens: 120, outputTokens: 45 })
+  })
+
+  it('accumulates the baseline across every turn of the session', async () => {
+    for (const prompt of ['first', 'second', 'third']) {
+      sendMessage('contact-a', prompt)
+      await settle()
+    }
+
+    expect(created[2].usageBaseline).toMatchObject({ inputTokens: 240, outputTokens: 90 })
   })
 
   it('leaves the contact alone when the backend reports no session', async () => {
@@ -352,14 +422,30 @@ describe('the concurrency lock', () => {
     expect(() => sendMessage('contact-b', 'go')).not.toThrow()
   })
 
-  // Journey 2's pair. Under blueprint §15D's literal repo-wide lock this fails.
+  // Journey 2's pair, and the acceptance check on an @mentioned reader in
+  // 07-group-coordination.md. Under blueprint §15D's literal repo-wide lock
+  // this fails.
   it('lets a reader run while a writer holds the repo', () => {
     seedPersona('persona-write', 'workspace_write')
     seedContact('contact-w', 'persona-write')
 
     gate = holdOpen()
+    sendMessage('contact-w', 'go')
+    expect(() => sendMessage('contact-a', 'go')).not.toThrow()
+  })
+
+  // And the other direction, which is the same claim read the other way round:
+  // "only writer-vs-writer serializes" (00-progress.md, 07-group-coordination.md).
+  // A reader holding the repo has nothing to serialize against — the worst it
+  // suffers is a mid-write snapshot, which it can already get by starting under
+  // a writer. Refusing here would let one long review block every writer.
+  it('lets a writer run while a reader holds the repo', () => {
+    seedPersona('persona-write', 'workspace_write')
+    seedContact('contact-w', 'persona-write')
+
+    gate = holdOpen()
     sendMessage('contact-a', 'go')
-    expect(() => sendMessage('contact-w', 'go')).toThrow()
+    expect(() => sendMessage('contact-w', 'go')).not.toThrow()
   })
 
   it('refuses a second writer, naming who holds it', () => {
@@ -479,3 +565,179 @@ function holdOpen(): { promise: Promise<void>; open: () => void } {
   })
   return { promise, open }
 }
+
+describe('end-of-turn compaction', () => {
+  it('hands the finished exchange to compaction', async () => {
+    sendMessage('contact-a', 'review the auth module')
+    await settle()
+
+    expect(summarized).toEqual([
+      { contactId: 'contact-a', prompt: 'review the auth module', reply: 'Looks good.' }
+    ])
+  })
+
+  it('summarises after the lock is released, not before', async () => {
+    // A slow summariser must not keep the repo busy: it runs once the turn is
+    // over in every sense the rest of the app can observe.
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    expect(summarized).toHaveLength(1)
+    expect(listActiveRuns()).toEqual([])
+  })
+
+  it('does not summarise a turn that produced nothing', async () => {
+    // Guarded in compaction itself too, but asserted here because this is the
+    // path a stopped turn takes.
+    script = [{ type: 'done', finalText: '', usage: null }]
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    expect(summarized[0].reply).toBe('')
+  })
+
+  it('still summarises when the turn ended in an error', async () => {
+    // A turn that errored partway can still have said something worth
+    // recording, and the reply text is preserved for exactly that reason.
+    script = [
+      { type: 'text_message', text: 'I got as far as' },
+      { type: 'error', kind: 'network', message: 'connection reset' },
+      { type: 'done', finalText: 'I got as far as', usage: null }
+    ]
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    expect(summarized[0].reply).toBe('I got as far as')
+  })
+})
+
+describe('group context injection', () => {
+  it('passes the repo history into the session spec', async () => {
+    // Blueprint §5. The adapter cannot query for it — nothing under
+    // src/main/adapters/ may touch the database — so the service must resolve
+    // it and hand it over.
+    db.insert(groups).values({ id: 'g1', repoPath: REPO }).run()
+    db.insert(groupMessages)
+      .values({
+        id: 'gm-1',
+        groupId: 'g1',
+        timestamp: new Date(),
+        type: 'system_summary',
+        contactId: null,
+        content: 'Cached the token read.',
+        category: 'decision',
+        durable: true,
+        branch: null
+      })
+      .run()
+
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    expect(created[0].groupContext.map((m) => m.content)).toEqual(['Cached the token read.'])
+  })
+
+  it('passes an empty history for a repo with no group', async () => {
+    sendMessage('contact-a', 'go')
+    await settle()
+    expect(created[0].groupContext).toEqual([])
+  })
+})
+
+describe('mentionInGroup', () => {
+  const GROUP = 'group-1'
+
+  function seedGroup(): void {
+    db.insert(groups).values({ id: GROUP, repoPath: REPO }).run()
+  }
+
+  it('writes the mention to the group with no author', () => {
+    // A user_mention comes from the user, not a persona — it is the one group
+    // message type with no contactId.
+    seedGroup()
+    const { groupMessage } = mentionInGroup(GROUP, 'contact-a', '@Reviewer take a look')
+
+    expect(groupMessage).toMatchObject({ type: 'user_mention', content: '@Reviewer take a look' })
+    expect(groupMessage.contactId).toBeUndefined()
+  })
+
+  it('routes to the contact real session, streaming on the same runId', async () => {
+    seedGroup()
+    const { runId } = mentionInGroup(GROUP, 'contact-a', 'take a look')
+    await settle()
+
+    expect(emitted.some((e) => e.runId === runId && e.event.type === 'done')).toBe(true)
+  })
+
+  // The acceptance check on divergent copies. The Group thread and the 1:1
+  // thread are two views of one exchange: same session, same text, one row
+  // each rather than two conversations.
+  it('lands the same reply in both threads', async () => {
+    seedGroup()
+    mentionInGroup(GROUP, 'contact-a', 'take a look')
+    await settle()
+
+    const oneToOne = listMessages('contact-a')
+    const group = listGroupMessages(GROUP)
+
+    expect(oneToOne.map((m) => m.content)).toEqual(['take a look', 'Looks good.'])
+    expect(group.map((m) => m.type)).toEqual(['user_mention', 'agent_reply'])
+    expect(group[1].content).toBe(oneToOne[1].content)
+    expect(group[1].contactId).toBe('contact-a')
+  })
+
+  it('records the spend as a mention, not a message', async () => {
+    seedGroup()
+    mentionInGroup(GROUP, 'contact-a', 'go')
+    await settle()
+
+    expect(db.select().from(usageEvents).all()[0].source).toBe('mention')
+  })
+
+  it('resumes the contact existing session rather than starting a new one', async () => {
+    // "Routes to that Contact's real session" (§8) — a mention that started a
+    // fresh session would give the persona amnesia mid-conversation.
+    seedGroup()
+    sendMessage('contact-a', 'first')
+    await settle()
+
+    mentionInGroup(GROUP, 'contact-a', 'second')
+    expect(created[1].resumedFrom).toBe('session-abc')
+  })
+
+  // Same rule sendMessage follows: the lock is taken before anything is
+  // written, so a refusal leaves no trace in either table.
+  it('writes nothing at all when the contact is refused', () => {
+    seedGroup()
+    seedPersona('persona-write', 'workspace_write')
+    seedContact('contact-w1', 'persona-write')
+    seedContact('contact-w2', 'persona-write')
+
+    gate = holdOpen()
+    sendMessage('contact-w1', 'go')
+
+    expect(() => mentionInGroup(GROUP, 'contact-w2', 'you too')).toThrow(/already working/)
+    expect(listGroupMessages(GROUP)).toEqual([])
+    expect(listMessages('contact-w2')).toEqual([])
+  })
+
+  // Journey 2's pair, through the mention path: an @mentioned reader is never
+  // blocked by a writer. This is the acceptance check Step 1's lock fix exists
+  // to satisfy.
+  it('lets an @mentioned reader run while a writer holds the repo', () => {
+    seedGroup()
+    seedPersona('persona-write', 'workspace_write')
+    seedContact('contact-w', 'persona-write')
+
+    gate = holdOpen()
+    sendMessage('contact-w', 'refactor it')
+
+    expect(() => mentionInGroup(GROUP, 'contact-a', 'review it')).not.toThrow()
+  })
+
+  it('rejects an unknown contact without touching the group', () => {
+    seedGroup()
+    expect(() => mentionInGroup(GROUP, 'nobody', 'hi')).toThrow(/No such contact/)
+    expect(listGroupMessages(GROUP)).toEqual([])
+  })
+})

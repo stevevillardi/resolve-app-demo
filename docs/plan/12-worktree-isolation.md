@@ -8,7 +8,8 @@
 ## Why this exists
 
 Phase 6 narrowed blueprint §15D from "one run per repo" to a **write lock**:
-`read_only` personas take a shared hold and are never refused, so a reviewer can
+`read_only` personas take a shared hold and are never refused (true of the code
+only since Phase 7 — see the §15D decision entry in `00-progress.md`), so a reviewer can
 read a repo while a refactor runs. That freed the read-heavy majority, and it is
 why Journey 2 works without anything here.
 
@@ -32,7 +33,13 @@ Extend `src/main/services/git.ts` (built in Phase 6 for cloning) with
 rule carries over: **git's stderr is never passed through**, because a remote
 URL can carry a live token.
 
-### 2. Schema — migration `0005`, additive
+### 2. Schema — migration `0007`, additive
+
+> Renumbered twice: Phase 7 took `0005` for `group_messages.branch`, the column
+> this phase's awareness layer writes into, and the Phase 6/7 close-out took
+> `0006` for `usage_events.session_id`. `branch` already exists — what is still
+> unclaimed is `needs`, which nothing has modelled yet.
+
 
 | Table | Column | Meaning |
 |---|---|---|

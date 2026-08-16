@@ -153,6 +153,18 @@ describe('evaluateToolUse at read_only', () => {
   it('denies Bash with no command at all rather than defaulting open', () => {
     expect(evaluateToolUse('read_only', 'Bash', {}, REPO).allowed).toBe(false)
   })
+
+  it('refuses to leave the sandbox even for an otherwise allowlisted command', () => {
+    // `git diff` passes the allowlist on its own; asking to run it unsandboxed
+    // does not, because the flag is the request, not the command.
+    const decision = evaluateToolUse(
+      'read_only',
+      'Bash',
+      { command: 'git diff', dangerouslyDisableSandbox: true },
+      REPO
+    )
+    expect(decision.allowed).toBe(false)
+  })
 })
 
 describe('evaluateToolUse at workspace_write', () => {
@@ -179,6 +191,21 @@ describe('evaluateToolUse at workspace_write', () => {
     expect(
       evaluateToolUse('workspace_write', 'Bash', { command: 'npm test && rm tmp' }, REPO).allowed
     ).toBe(true)
+  })
+
+  // The blanket Bash allowance above is what made this reachable: the SDK's
+  // sandbox denied `echo escaped > /tmp/x`, the model reissued it with
+  // dangerouslyDisableSandbox, and nothing here said no. Confirmed live before
+  // and after the fix.
+  it('refuses a command that asks to run outside the sandbox', () => {
+    const decision = evaluateToolUse(
+      'workspace_write',
+      'Bash',
+      { command: 'echo escaped > /tmp/x', dangerouslyDisableSandbox: true },
+      REPO
+    )
+    expect(decision.allowed).toBe(false)
+    expect(decision.reason).toContain('sandboxed')
   })
 })
 
@@ -246,6 +273,19 @@ describe('the Claude OS sandbox', () => {
     // autoAllowBashIfSandboxed would skip canUseTool entirely, and with it the
     // refusal message the model can actually act on.
     expect(claudeSandboxOptions('read_only', REPO).sandbox?.autoAllowBashIfSandboxed).toBe(false)
+  })
+
+  it.runIf(supported)('refuses to honour the sandbox escape hatch', () => {
+    // The SDK defaults allowUnsandboxedCommands to true, which made
+    // allowWrite: [repoPath] confine nothing. Demonstrated live: a
+    // workspace_write persona asked to write to /tmp had its first attempt
+    // denied, reissued the same command with dangerouslyDisableSandbox, and
+    // the file landed. Every level that gets a sandbox must also refuse to
+    // give it up.
+    expect(claudeSandboxOptions('read_only', REPO).sandbox?.allowUnsandboxedCommands).toBe(false)
+    expect(claudeSandboxOptions('workspace_write', REPO).sandbox?.allowUnsandboxedCommands).toBe(
+      false
+    )
   })
 
   it.runIf(supported)('passes injected deny-read paths through', () => {

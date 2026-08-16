@@ -11,6 +11,7 @@
  *   npm run probe:adapters -- --backend claude --repo /tmp/probe --prompt "hi"
  *   npm run probe:adapters -- --backend codex --sandbox read_only --raw
  *   npm run probe:adapters -- --backend codex --resume <threadId>
+ *   npm run probe:adapters -- --backend claude --abort-after 3000
  *
  * It deliberately does NOT touch the app database: personas are built from
  * flags, so a probe run can never mutate real data.
@@ -32,6 +33,13 @@ interface Flags {
   system: string
   skillFiles: string[]
   raw: boolean
+  /**
+   * Aborts the run this many ms in. The Stop button's only honest test: unit
+   * tests can assert that we stopped forwarding events, but not that the
+   * backend subprocess actually died. Pair it with `pgrep -f codex` (or `ps`
+   * for the Claude CLI) immediately after the probe exits.
+   */
+  abortAfter?: number
 }
 
 function parseFlags(argv: string[]): Flags {
@@ -66,7 +74,8 @@ function parseFlags(argv: string[]): Flags {
     resume: get('resume'),
     system: get('system') ?? 'You are a probe. Answer briefly and do not modify anything.',
     skillFiles: all('skill'),
-    raw: argv.includes('--raw')
+    raw: argv.includes('--raw'),
+    ...(get('abort-after') ? { abortAfter: Number(get('abort-after')) } : {})
   }
 }
 
@@ -139,13 +148,31 @@ async function main(): Promise<void> {
   console.log(`--- capabilities ${JSON.stringify(adapter.capabilities)}`)
   console.log(`--- prompt ${JSON.stringify(flags.prompt)}\n`)
 
+  const controller = new AbortController()
+  if (flags.abortAfter !== undefined) {
+    setTimeout(() => {
+      console.log(`\n--- aborting after ${flags.abortAfter}ms`)
+      controller.abort()
+    }, flags.abortAfter).unref()
+  }
+
   const started = Date.now()
-  for await (const event of adapter.run(session, flags.prompt)) {
-    console.log(render(event))
+  // The abort is expected to surface as a rejection or an error event, not as
+  // a clean end — catching it here is what lets the process reach the summary
+  // below, which is the whole point of the flag.
+  try {
+    for await (const event of adapter.run(session, flags.prompt, controller.signal)) {
+      console.log(render(event))
+    }
+  } catch (error) {
+    console.log(`--- run() threw after abort: ${String(error).slice(0, 200)}`)
   }
 
   console.log(`\n--- session id for --resume: ${session.sessionId ?? '(none reported)'}`)
   console.log(`--- ${Date.now() - started}ms`)
+  if (flags.abortAfter !== undefined) {
+    console.log('--- check for a surviving subprocess now, e.g. `pgrep -fl codex`')
+  }
 }
 
 main().catch((error) => {

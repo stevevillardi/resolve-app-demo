@@ -3,7 +3,13 @@ import type { AgentCapabilities, AgentErrorKind, AgentEvent, AgentUsage } from '
 import { composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
 import { claudeSandboxOptions, evaluateToolUse, osSandboxSupported } from './sandbox'
-import type { AdapterConfig, AgentAdapter, AgentSession, SessionSpec } from './types'
+import type {
+  AdapterConfig,
+  AgentAdapter,
+  AgentSession,
+  SessionSpec,
+  StructuredResult
+} from './types'
 
 /**
  * The Claude backend, on @anthropic-ai/claude-agent-sdk.
@@ -36,7 +42,11 @@ export const CLAUDE_CAPABILITIES: AgentCapabilities = {
   // Options.sandbox confines commands at the OS level wherever the SDK has an
   // implementation. Where it doesn't (Windows) we say so rather than implying
   // a boundary that is only our in-process allowlist.
-  sandboxEnforcement: osSandboxSupported() ? 'os' : 'policy'
+  sandboxEnforcement: osSandboxSupported() ? 'os' : 'policy',
+  // Options.outputFormat + SDKResultSuccess.structured_output, both present in
+  // 0.3.233. See summarize() for the placeholder-carrier trap that comes with
+  // them.
+  supportsStructuredOutput: true
 }
 
 // --- Normalization helpers --------------------------------------------------
@@ -90,7 +100,9 @@ interface ResultLike {
       outputTokens: number
       cacheReadInputTokens: number
       cacheCreationInputTokens: number
-      costUSD: number
+      /** Optional so a payload without it degrades to the token tiebreak in
+       *  usageFromResult() rather than failing to type-check. */
+      costUSD?: number
     }
   >
   usage?: Record<string, unknown>
@@ -119,11 +131,26 @@ export function usageFromResult(result: ResultLike): AgentUsage | null {
     { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteInputTokens: 0 }
   )
 
-  // A turn can touch several models (subagents, compaction). The one that did
-  // the most generating is the one worth naming on the UsageEvent.
-  const [model] = entries.reduce((best, entry) =>
-    entry[1].outputTokens > best[1].outputTokens ? entry : best
-  )
+  // A turn can touch several models (subagents, compaction, and — on the first
+  // turn of any session — an SDK-internal haiku call). Name the one that spent
+  // the most, because the figure this is attached to is a *cost*.
+  //
+  // Picking by output tokens instead, which this did until a live probe caught
+  // it, gets the first turn of every session wrong. Measured on a fresh session
+  // with the main loop on sonnet-5:
+  //
+  //   claude-haiku-4-5   521 in /  11 out /     0 cacheWrite   $0.000576
+  //   claude-sonnet-5      2 in /   5 out / 27911 cacheWrite   $0.167547
+  //
+  // The internal call out-talks the real one, so the dashboard showed $0.168
+  // against haiku. Cost is the honest tiebreak; output tokens is the fallback
+  // for a payload that omits costUSD.
+  const [model] = entries.reduce((best, entry) => {
+    const spent = entry[1].costUSD ?? 0
+    const bestSpent = best[1].costUSD ?? 0
+    if (spent !== bestSpent) return spent > bestSpent ? entry : best
+    return entry[1].outputTokens > best[1].outputTokens ? entry : best
+  })
 
   return {
     ...totals,
@@ -325,14 +352,104 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
     }
   }
 
+  /**
+   * One schema-constrained turn (blueprint §6 compaction).
+   *
+   * Three things here are not obvious from run() and are load-bearing:
+   *
+   * - `outputFormat` sits in `options`, i.e. it is **session-level**. That is
+   *   why compaction cannot be a flag on run(): an existing conversational
+   *   session cannot be asked for JSON on its final turn.
+   * - The answer is read from `structured_output`, **not** `result`. Both
+   *   carry it on a successful turn, but `result` is the JSON serialized to a
+   *   *string* — and run() maps `result` to `done.finalText`, so a caller
+   *   reusing that path would persist raw JSON into the Group where a sentence
+   *   belongs. (A live capture also settles what sdk.d.ts:1860-1866 means by a
+   *   placeholder: it is the tool_result carrier *inside the transcript*,
+   *   whose content is "Structured output provided successfully". That matters
+   *   for forking a session, not for reading its answer.)
+   * - `error_max_structured_output_retries` means the SDK already retried and
+   *   gave up. That is a null answer, not an exception: the user's turn is long
+   *   since committed and a missing Group entry is the correct degradation.
+   *
+   * No sandbox, no tools, no repo access — it reads a finished transcript that
+   * is handed to it in the prompt. `disallowedTools` is belt and braces on top
+   * of a persona spec the caller is expected to build read-only anyway.
+   */
+  async function summarize(
+    agentSession: AgentSession,
+    prompt: string,
+    schema: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<StructuredResult> {
+    const { spec } = agentSession
+    const abort = signal ? abortControllerFor(signal) : null
+
+    try {
+      const stream = query({
+        prompt,
+        options: {
+          cwd: spec.repoPath,
+          systemPrompt: composeInstructions(spec),
+          settingSources: [],
+          outputFormat: { type: 'json_schema', schema },
+          disallowedTools: SUMMARY_DISALLOWED_TOOLS,
+          env: { ...process.env, ...config.env } as Record<string, string>,
+          ...(spec.model ? { model: spec.model } : {}),
+          ...(abort ? { abortController: abort.controller } : {}),
+          stderr: (data: string) => config.onRawEvent?.({ type: 'stderr', data })
+        }
+      })
+
+      let data: unknown | null = null
+      let usage: AgentUsage | null = null
+
+      for await (const message of stream) {
+        config.onRawEvent?.(message)
+        if (message.type !== 'result') continue
+
+        usage = usageFromResult(message)
+        if (message.subtype === 'success') data = message.structured_output ?? null
+      }
+
+      return { data, usage }
+    } catch (error) {
+      // Same contract as the null above: compaction never fails a turn that has
+      // already been persisted. The caller logs; the raw hook is what makes a
+      // swallowed failure diagnosable from `probe:structured --raw`.
+      config.onRawEvent?.({ type: 'summarize_error', error: String(error) })
+      return { data: null, usage: null }
+    } finally {
+      abort?.dispose()
+    }
+  }
+
   return {
     backend: 'claude',
     capabilities: CLAUDE_CAPABILITIES,
     createSession: (spec) => session(spec, null),
     resume: (spec, sessionId) => session(spec, sessionId),
-    run
+    run,
+    summarize
   }
 }
+
+/**
+ * A summariser reads the prompt it was given and nothing else. Named
+ * explicitly rather than derived from the sandbox level so that widening
+ * `sandbox.ts` later cannot quietly hand the summariser filesystem access.
+ */
+const SUMMARY_DISALLOWED_TOOLS = [
+  'Bash',
+  'Edit',
+  'Glob',
+  'Grep',
+  'NotebookEdit',
+  'Read',
+  'WebFetch',
+  'WebSearch',
+  'Write'
+]
 
 /**
  * The SDK takes an AbortController, callers hand us an AbortSignal.
