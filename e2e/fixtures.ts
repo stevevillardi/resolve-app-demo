@@ -1,0 +1,85 @@
+import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import { existsSync, mkdtempSync, rmSync } from 'fs'
+import { join, resolve } from 'path'
+import { tmpdir } from 'os'
+
+const APP_ROOT = resolve(__dirname, '..')
+
+/**
+ * A disposable app instance: its own userData, HOME and CODEX_HOME, so a test
+ * run can never read, write, or invalidate the developer's real Claude, Codex,
+ * or GitHub credentials — and so every run genuinely starts as a fresh install.
+ */
+export interface LaunchedApp {
+  app: ElectronApplication
+  window: Page
+  /** userData for this instance; survives close() so a relaunch can reuse it. */
+  profile: string
+}
+
+export function createProfile(): string {
+  return mkdtempSync(join(tmpdir(), 'persona-router-e2e-'))
+}
+
+export function destroyProfile(profile: string): void {
+  rmSync(profile, { recursive: true, force: true })
+}
+
+export async function launchApp(profile: string): Promise<LaunchedApp> {
+  const mainBundle = join(APP_ROOT, 'out', 'main', 'index.js')
+  if (!existsSync(mainBundle)) {
+    throw new Error(`out/main/index.js is missing — run \`npm run build\` before the E2E suite.`)
+  }
+
+  const home = join(profile, 'home')
+  const app = await electron.launch({
+    args: [APP_ROOT, `--user-data-dir=${join(profile, 'userData')}`],
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      // Point every credential lookup at the throwaway profile. Without this
+      // the app would find the developer's real logins and the "fresh install"
+      // assertions would be meaningless.
+      HOME: home,
+      USERPROFILE: home,
+      CODEX_HOME: join(home, '.codex'),
+      CLAUDE_CONFIG_DIR: join(home, '.claude'),
+      ANTHROPIC_API_KEY: '',
+      OPENAI_API_KEY: ''
+    }
+  })
+
+  const window = await app.firstWindow()
+  await window.waitForLoadState('domcontentloaded')
+  return { app, window, profile }
+}
+
+/**
+ * Waits for the main shell to be on screen.
+ *
+ * Note the nav rail's labels are `display:none` while it's collapsed, so its
+ * buttons have no accessible name — role/name queries won't find them. The
+ * sidebar's data-slot is the stable handle.
+ */
+export async function waitForShell(window: Page): Promise<void> {
+  await window.waitForSelector('[data-slot="sidebar"]', { state: 'attached' })
+}
+
+/** Calls an IPC procedure through the real preload bridge. */
+export function invoke<T = unknown>(window: Page, name: string, input?: unknown): Promise<T> {
+  return window.evaluate(
+    ([procedure, payload]) =>
+      (
+        window as unknown as { api: { invoke: (n: string, i: unknown) => Promise<unknown> } }
+      ).api.invoke(procedure as string, payload),
+    [name, input] as const
+  ) as Promise<T>
+}
+
+export interface AuthStatus {
+  claude: { authenticated: boolean; source: string | null; error?: string }
+  codex: { authenticated: boolean; source: string | null; error?: string }
+  github: { connected: boolean; configured: boolean; login?: string }
+  onboardingCompleted: boolean
+  secretStorageAvailable: boolean
+}

@@ -70,7 +70,6 @@ export function AppShell(): React.JSX.Element {
       <GitHubConnectDialog
         open={dialog === 'github'}
         onOpenChange={(open) => setDialog(open ? 'github' : null)}
-        status="not_connected"
       />
     </SidebarProvider>
   )

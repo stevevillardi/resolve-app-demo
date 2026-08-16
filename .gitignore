@@ -16,6 +16,11 @@ dist-electron/
 *.db-shm
 .drizzle-dev.db
 
+# Test output
+coverage/
+playwright-report/
+test-results/
+
 # Logs / caches
 *.log*
 .eslintcache
