@@ -31,6 +31,7 @@ const harness = createTurnHarness()
 
 const emitted: { runId: string; event: AgentEvent }[] = []
 let runsChangedCount = 0
+let usageChangedCount = 0
 
 vi.mock('../db', () => ({ initDb: () => db }))
 
@@ -38,6 +39,9 @@ vi.mock('./agent-events', () => ({
   emitAgentEvent: (runId: string, event: AgentEvent) => emitted.push({ runId, event }),
   emitRunsChanged: () => {
     runsChangedCount += 1
+  },
+  emitUsageChanged: () => {
+    usageChangedCount += 1
   }
 }))
 
@@ -81,6 +85,7 @@ beforeEach(() => {
   harness.reset()
   emitted.length = 0
   runsChangedCount = 0
+  usageChangedCount = 0
   summarized.length = 0
 
   seedSkill(db)
@@ -206,6 +211,24 @@ describe('session resumption', () => {
     await settle()
 
     expect(db.select().from(contacts).all()[0].backendSessionId).toBeNull()
+  })
+
+  it('announces the spend so a view nobody subscribed to can refresh', async () => {
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    expect(usageChangedCount).toBe(1)
+  })
+
+  it('announces nothing when the turn reported no usage', async () => {
+    // No row was written, so there is nothing to refetch. A push here would
+    // make every aborted turn refresh the app for no reason.
+    harness.script = [{ type: 'done', finalText: 'ok', usage: null }]
+
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    expect(usageChangedCount).toBe(0)
   })
 })
 

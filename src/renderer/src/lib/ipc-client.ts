@@ -23,6 +23,10 @@ export function onRunsChanged(callback: () => void): () => void {
   return window.api.onRunsChanged(callback)
 }
 
+export function onUsageChanged(callback: () => void): () => void {
+  return window.api.onUsageChanged(callback)
+}
+
 /**
  * The user-facing half of an IPC rejection.
  *

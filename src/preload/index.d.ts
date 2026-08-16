@@ -8,6 +8,8 @@ interface Api {
   onAgentEvent: (runId: string, callback: (event: AgentEvent) => void) => () => void
   /** Fires when the set of in-flight runs changes. Returns an unsubscribe. */
   onRunsChanged: (callback: () => void) => () => void
+  /** Fires when a usage row is written, whatever ran. Returns an unsubscribe. */
+  onUsageChanged: (callback: () => void) => () => void
 }
 
 declare global {

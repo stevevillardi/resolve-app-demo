@@ -35,6 +35,11 @@ const api = {
   onRunsChanged: (callback: () => void): (() => void) =>
     subscribe((message) => {
       if (message.kind === 'runs-changed') callback()
+    }),
+
+  onUsageChanged: (callback: () => void): (() => void) =>
+    subscribe((message) => {
+      if (message.kind === 'usage-changed') callback()
     })
 }
 

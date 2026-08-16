@@ -58,3 +58,16 @@ export function emitAgentEvent(runId: string, event: AgentEvent): void {
 export function emitRunsChanged(): void {
   send({ kind: 'runs-changed' })
 }
+
+/**
+ * Signals that a usage row was written, so `usage.list` is stale.
+ *
+ * Emitted from recordUsage rather than from the turn loop, because that is the
+ * one point every source passes through. A scheduled routine has no renderer
+ * subscribed to its runId, and a summary turn's usage is recorded from
+ * compaction after the run is already over — under a runId- or runs-based
+ * signal both would leave the spend view stale while somebody watched it.
+ */
+export function emitUsageChanged(): void {
+  send({ kind: 'usage-changed' })
+}
