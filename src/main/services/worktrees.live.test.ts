@@ -59,7 +59,8 @@ vi.mock('./agent-events', () => ({
     events.push({ runId, event })
     if (event.type === 'done') finished.get(runId)?.()
   },
-  emitRunsChanged: () => {}
+  emitRunsChanged: () => {},
+  emitUsageChanged: () => {}
 }))
 
 // Real adapters with no injected config, exactly as scripts/probe-adapters.ts

@@ -164,7 +164,18 @@ export const agentStreamMessageSchema = z.discriminatedUnion('kind', [
    * refetches `runs.list`, so there is one authority on what is running rather
    * than a cache the renderer maintains by replaying deltas.
    */
-  z.object({ kind: z.literal('runs-changed') })
+  z.object({ kind: z.literal('runs-changed') }),
+  /**
+   * A `usage_events` row was written, so `usage.list` is stale. No payload,
+   * for the same reason as `runs-changed`.
+   *
+   * Distinct from `done` because not every turn has a renderer watching it.
+   * `done` only reaches a component subscribed to that specific `runId`, which
+   * a scheduled routine has none of — and a summary turn records its usage
+   * from compaction, *after* the run it belongs to is already over. Emitted
+   * from recordUsage itself so all four sources announce spend by one path.
+   */
+  z.object({ kind: z.literal('usage-changed') })
 ])
 
 // --- Capabilities -----------------------------------------------------------

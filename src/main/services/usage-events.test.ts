@@ -14,6 +14,13 @@ import type { AgentUsage } from '../../shared/agent'
 let db: AppDatabase
 vi.mock('../db', () => ({ initDb: () => db }))
 
+// agent-events imports `electron`, which the node test project has no window
+// for. Mocking it also makes the announcement observable — see "announces the
+// write" below, which is the only thing keeping an unattended routine's spend
+// from sitting stale on a dashboard somebody is watching.
+const emitUsageChanged = vi.fn()
+vi.mock('./agent-events', () => ({ emitUsageChanged: (): void => emitUsageChanged() }))
+
 const { baselineFor, listUsageEvents, recordUsage } = await import('./usage-events')
 
 const SESSION = 'thread-01a00b86'
@@ -66,6 +73,7 @@ function seed(): void {
 beforeEach(() => {
   db = createTestDb()
   seed()
+  emitUsageChanged.mockClear()
 })
 
 describe('recordUsage', () => {
@@ -79,6 +87,23 @@ describe('recordUsage', () => {
     // is worth keeping; it just cannot participate in a baseline.
     recordUsage('contact-1', 'message', USAGE, null)
     expect(listUsageEvents('contact-1')[0].sessionId).toBeUndefined()
+  })
+
+  it('announces the write', () => {
+    // Written from the claim: this is what refreshes a spend view nobody's
+    // thread is mounted for.
+    recordUsage('contact-1', 'message', USAGE, SESSION)
+    expect(emitUsageChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('announces every source, not just a user-sent message', () => {
+    // A routine has no renderer subscribed to its runId and a summary is
+    // recorded after its run is over, so these two are precisely the ones a
+    // runId- or runs-based signal would have missed.
+    for (const source of ['message', 'mention', 'routine', 'summary'] as const) {
+      recordUsage('contact-1', source, USAGE, SESSION)
+    }
+    expect(emitUsageChanged).toHaveBeenCalledTimes(4)
   })
 })
 

@@ -3,15 +3,21 @@ import type { UsageEvent } from '@/types'
 import {
   aggregateUsage,
   formatCost,
+  formatCostSummary,
   formatTokens,
   usageForContact,
   usageForContacts
 } from './usage'
 
 /**
- * Cost/token aggregation. The load-bearing case is the null cost: Codex
- * reports tokens but no dollar figure (blueprint §3), so a summary can
- * legitimately have no cost and must not silently render as free.
+ * Cost/token aggregation. The load-bearing case is the null cost.
+ *
+ * It no longer means "Codex": since Phase 5 both backends yield a dollar figure
+ * — Claude's from its SDK, Codex's computed from src/main/adapters/pricing.ts.
+ * A null is a model with no row in CODEX_PRICES, so the spend is real and the
+ * amount is unknown. Two properties follow, and both are tested from that claim
+ * rather than from the implementation: an unknown must never read as free, and
+ * a total that excludes one must never read as complete.
  */
 
 let nextId = 0
@@ -33,7 +39,9 @@ describe('aggregateUsage', () => {
     expect(aggregateUsage([])).toEqual({
       totalCostUsd: null,
       totalInputTokens: 0,
-      totalOutputTokens: 0
+      totalOutputTokens: 0,
+      unpricedEvents: 0,
+      pricedEvents: 0
     })
   })
 
@@ -53,11 +61,32 @@ describe('aggregateUsage', () => {
   })
 
   it('sums only the priced events in a mixed set', () => {
-    // Mixing a Claude event with a Codex one must not treat the unknown as 0
-    // and claim the total is complete.
+    // An unpriced turn must not be treated as 0 and folded into the total.
     const summary = aggregateUsage([event({ costUsd: 0.05 }), event({ costUsd: null })])
     expect(summary.totalCostUsd).toBe(0.05)
     expect(summary.totalInputTokens).toBe(200)
+  })
+
+  it('counts the events it left out of the total', () => {
+    const summary = aggregateUsage([
+      event({ costUsd: 0.05 }),
+      event({ costUsd: null }),
+      event({ costUsd: null })
+    ])
+    expect(summary.pricedEvents).toBe(1)
+    expect(summary.unpricedEvents).toBe(2)
+  })
+
+  it('counts every event as unpriced when none carries a cost', () => {
+    const summary = aggregateUsage([event({ costUsd: null }), event({ costUsd: null })])
+    expect(summary.unpricedEvents).toBe(2)
+    expect(summary.pricedEvents).toBe(0)
+  })
+
+  it('counts a real zero as priced', () => {
+    // $0.00 is a figure we were given; null is one we never had.
+    expect(aggregateUsage([event({ costUsd: 0 })]).pricedEvents).toBe(1)
+    expect(aggregateUsage([event({ costUsd: 0 })]).unpricedEvents).toBe(0)
   })
 
   it('distinguishes a real zero cost from an unknown one', () => {
@@ -105,7 +134,9 @@ describe('usageForContact', () => {
     expect(usageForContact([event({ contactId: 'a' })], 'nobody')).toEqual({
       totalCostUsd: null,
       totalInputTokens: 0,
-      totalOutputTokens: 0
+      totalOutputTokens: 0,
+      unpricedEvents: 0,
+      pricedEvents: 0
     })
   })
 })
@@ -139,6 +170,39 @@ describe('formatCost', () => {
   it('renders unknown and free differently', () => {
     // The whole point: "—" means we don't know, "$0.00" means it was free.
     expect(formatCost(null)).not.toBe(formatCost(0))
+  })
+})
+
+describe('formatCostSummary', () => {
+  it('renders a complete total plainly', () => {
+    expect(formatCostSummary(aggregateUsage([event({ costUsd: 12.34 })]))).toBe('$12.34')
+  })
+
+  it('marks a total that excludes an unpriced turn as partial', () => {
+    // The regression guard for the defect this phase exists to fix: the same
+    // set read through formatCost looks like a complete, confident figure.
+    const summary = aggregateUsage([event({ costUsd: 12.34 }), event({ costUsd: null })])
+    expect(formatCostSummary(summary)).toBe('$12.34+')
+    expect(formatCost(summary.totalCostUsd)).toBe('$12.34')
+  })
+
+  it('keeps the partial marker on a sub-cent total', () => {
+    const summary = aggregateUsage([event({ costUsd: 0.004 }), event({ costUsd: null })])
+    expect(formatCostSummary(summary)).toBe('<$0.01+')
+  })
+
+  it('renders an all-unpriced set as unknown rather than as a partial zero', () => {
+    // "—+" would be noise: there is no total for the + to qualify.
+    expect(formatCostSummary(aggregateUsage([event({ costUsd: null })]))).toBe('—')
+  })
+
+  it('renders an empty set as unknown', () => {
+    expect(formatCostSummary(aggregateUsage([]))).toBe('—')
+  })
+
+  it('still separates free from unknown', () => {
+    expect(formatCostSummary(aggregateUsage([event({ costUsd: 0 })]))).toBe('$0.00')
+    expect(formatCostSummary(aggregateUsage([event({ costUsd: null })]))).toBe('—')
   })
 })
 

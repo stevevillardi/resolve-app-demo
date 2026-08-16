@@ -27,7 +27,11 @@ let db: AppDatabase
 const harness = createTurnHarness()
 
 vi.mock('../db', () => ({ initDb: () => db }))
-vi.mock('./agent-events', () => ({ emitAgentEvent: () => {}, emitRunsChanged: () => {} }))
+vi.mock('./agent-events', () => ({
+  emitAgentEvent: () => {},
+  emitRunsChanged: () => {},
+  emitUsageChanged: () => {}
+}))
 vi.mock('./adapter-host', () => ({ adapterForBackend: () => harness.adapter }))
 
 /**

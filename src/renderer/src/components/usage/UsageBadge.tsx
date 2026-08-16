@@ -1,5 +1,5 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { formatCost, formatTokens } from '@/lib/usage'
+import { formatCostSummary, formatTokens } from '@/lib/usage'
 import { cn } from '@/lib/utils'
 import type { UsageSummary } from '@/types'
 
@@ -15,7 +15,7 @@ export function UsageBadge({
   className
 }: UsageBadgeProps): React.JSX.Element {
   const totalTokens = summary.totalInputTokens + summary.totalOutputTokens
-  const costUnknown = summary.totalCostUsd === null
+  const { unpricedEvents } = summary
 
   return (
     <Tooltip>
@@ -26,7 +26,7 @@ export function UsageBadge({
           className
         )}
       >
-        {formatCost(summary.totalCostUsd)}
+        {formatCostSummary(summary)}
       </TooltipTrigger>
       <TooltipContent>
         <div className="flex flex-col gap-0.5 text-xs">
@@ -50,13 +50,17 @@ export function UsageBadge({
           )}
           <span className="border-background/20 mt-0.5 border-t pt-0.5">
             <span className="font-mono tabular-nums">{formatTokens(totalTokens)}</span> total ·{' '}
-            <span className="font-mono tabular-nums">{formatCost(summary.totalCostUsd)}</span>
+            <span className="font-mono tabular-nums">{formatCostSummary(summary)}</span>
           </span>
-          {/* Codex reports tokens but no dollar figure (blueprint §3) — say so
-              rather than showing $0.00 and implying the work was free. */}
-          {costUnknown && (
+          {/* What the `+` on the figure above means. Both backends report a
+              cost now — Claude's from its SDK, Codex's computed from our price
+              table — so an unknown is a model we have no price for, not a
+              backend that cannot say. The tokens are still exact. */}
+          {unpricedEvents > 0 && (
             <span className="mt-0.5 max-w-48 opacity-70">
-              This backend reports tokens but not a cost.
+              {unpricedEvents === 1 ? '1 turn ran' : `${unpricedEvents} turns ran`} on a model with
+              no published price, so {unpricedEvents === 1 ? 'its' : 'their'} cost is missing from
+              this total.
             </span>
           )}
         </div>

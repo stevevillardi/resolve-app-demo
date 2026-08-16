@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toUsageEvent } from '../db/mappers'
 import { usageEvents } from '../db/schema'
+import { emitUsageChanged } from './agent-events'
 import type { AgentUsage } from '../../shared/agent'
 import type { UsageEvent, UsageSource } from '../../shared/domain'
 
@@ -70,6 +71,17 @@ export function recordUsage(
     .insert(usageEvents)
     .values({ ...event, timestamp: new Date(event.timestamp) })
     .run()
+
+  // After the insert, never before: the renderer reacts by refetching, so
+  // announcing first would race the row it is announcing. Same ordering the
+  // turn loop uses for `done`.
+  //
+  // Budget caps (blueprint §13) are deliberately not enforced anywhere in v1.
+  // If they ever are, this is the seam: every turn's spend passes through here,
+  // and this is the only place that knows a row was just written. Note a
+  // partial total must never trip a cap — a summary carrying unpriced turns is
+  // a lower bound, not a figure.
+  emitUsageChanged()
 
   return event
 }

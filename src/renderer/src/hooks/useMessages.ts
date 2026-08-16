@@ -18,6 +18,13 @@ import type { PersistedMessage } from '@/types'
 export const messagesKey = (contactId: string): readonly unknown[] => ['messages', contactId]
 export const messagePreviewsKey = ['messages', 'previews'] as const
 export const usageKey = (contactId?: string): readonly unknown[] => ['usage', contactId ?? 'all']
+/**
+ * Prefix covering every usage cache entry — the all-events one the dashboard
+ * reads and the per-contact one each thread reads. Invalidating the prefix
+ * refreshes them together, which is exactly what a `usage-changed` push wants:
+ * it says a row was written, not whose.
+ */
+export const usageRootKey = ['usage'] as const
 export const runsKey = ['runs'] as const
 /**
  * Prefix for every group thread's cache entry. Lives here rather than in
