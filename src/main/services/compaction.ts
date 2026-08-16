@@ -1,10 +1,10 @@
-import { z } from 'zod'
 import { summaryModelFor } from '../adapters/models'
 import { adapterForBackend } from './adapter-host'
 import { getContact } from './contacts'
 import { groupForRepo, insertGroupMessage } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
 import { recordUsage } from './usage-events'
+import { SUMMARY_JSON_SCHEMA, summarySchema } from '../../shared/summary'
 import type { PersonaTemplate } from '../../shared/domain'
 
 /**
@@ -34,56 +34,6 @@ import type { PersonaTemplate } from '../../shared/domain'
  *    in listActiveRuns() and the fleet indicator; emitting events would render
  *    the summariser's output as a reply in the thread.
  */
-
-/**
- * Blueprint §6's shape, plus the branch field §12 asked Phase 7 to leave room
- * for.
- *
- * Kept in step by hand with SUMMARY_JSON_SCHEMA in scripts/probe-structured.ts,
- * which is what verifies it against a live backend.
- */
-export const summarySchema = z.object({
-  summary: z.string().min(1),
-  category: z.enum(['decision', 'tradeoff', 'routine']),
-  branch: z.string().optional()
-})
-
-export type Summary = z.infer<typeof summarySchema>
-
-/**
- * The JSON Schema handed to the backend.
- *
- * Written out rather than derived from the Zod schema above: neither SDK
- * accepts a Zod object, `z.toJSONSchema()` emits dialect keywords that
- * Claude's `json_schema` validator rejects, and the descriptions here are
- * prompt engineering — they are the only place the model is told what
- * separates a decision from routine work.
- */
-const SUMMARY_JSON_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  properties: {
-    summary: {
-      type: 'string',
-      description:
-        'One or two sentences, past tense, on what was decided or done and why. ' +
-        'Written for a different agent working on this repo later, who cannot see this conversation.'
-    },
-    category: {
-      type: 'string',
-      enum: ['decision', 'tradeoff', 'routine'],
-      description:
-        'decision: a choice that later work must respect. ' +
-        'tradeoff: a choice made with a cost worth recording. ' +
-        'routine: everything else, including questions answered and code merely read.'
-    },
-    branch: {
-      type: 'string',
-      description: 'The git branch the work landed on, if the session created or switched to one.'
-    }
-  },
-  required: ['summary', 'category'],
-  additionalProperties: false
-}
 
 const PROMPT_HEADER =
   'Summarise the exchange below for a shared project log that other agents working ' +
@@ -173,6 +123,8 @@ export async function summarizeTurn(
       // are the running decision log and are always re-injected; routine
       // entries stay queryable but fall out of context by recency.
       durable: parsed.data.category !== 'routine',
+      // Falsy covers both shapes of "no branch": Codex is obliged to send the
+      // key and sends null, Claude may omit it. Neither should be stored.
       ...(parsed.data.branch ? { branch: parsed.data.branch } : {})
     })
   } catch (error) {

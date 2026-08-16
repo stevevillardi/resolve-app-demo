@@ -429,29 +429,34 @@ describe('sandbox wiring', () => {
 
 describe('summarize', () => {
   /**
-   * ⚠️ Provenance: these fixtures are derived from the vendored SDK's own
-   * typings (sdk.d.ts — `JsonSchemaOutputFormat` at :932, `structured_output`
-   * at :4592, the end-turn-tool-session note at :1860-1866), not yet from a
-   * captured live run. That is weaker than the rule in 00-progress.md, which
-   * asks for shapes captured from real runs, and the gap is deliberate: the
-   * turn costs money and Step 0's close-out has not been run.
-   *
-   * `npm run probe:structured -- --backend claude --raw` is what closes it.
-   * Re-verify these against its output before treating them as settled.
+   * Captured from a real run: `npm run probe:structured -- --backend claude
+   * --raw`, haiku-4.5, 2026-08-16. Field-for-field as the SDK sent it.
    */
   const SCHEMA = { type: 'object', properties: { summary: { type: 'string' } } }
+
+  const SUMMARY = {
+    summary:
+      'Optimized the auth module to cache token reads at the module level with mtime-based invalidation in src/auth.ts, chosen over simpler timer-based caching to avoid serving revoked tokens during the cache interval.',
+    category: 'tradeoff'
+  }
 
   function summaryResult(overrides: Record<string, unknown> = {}): unknown {
     return {
       type: 'result',
       subtype: 'success',
-      // The placeholder. A structured turn ends on a tool_result carrier and
-      // has no trailing assistant message, so this is NOT the answer.
-      result: 'Structured output provided.',
-      structured_output: { summary: 'Renamed foo to bar.', category: 'decision' },
-      total_cost_usd: 0.0004,
+      // Note what this actually is: the JSON **as a string**, not the
+      // placeholder an earlier reading of sdk.d.ts:1860-1866 predicted. The
+      // placeholder in that note is the tool_result carrier inside the
+      // transcript ("Structured output provided successfully"), which matters
+      // for forking a session, not for reading its answer.
+      result: JSON.stringify(SUMMARY),
+      structured_output: SUMMARY,
+      total_cost_usd: 0.016992999999999998,
       modelUsage: modelUsage(),
       permission_denials: [],
+      stop_reason: 'tool_use',
+      terminal_reason: 'completed',
+      num_turns: 2,
       ...overrides
     }
   }
@@ -462,11 +467,13 @@ describe('summarize', () => {
     return adapter.summarize(adapter.createSession(SPEC), 'summarise this', SCHEMA)
   }
 
-  it('reads structured_output, not the placeholder in result', async () => {
-    // The whole reason compaction is a separate method. Reading `result` the
-    // way run() does would persist "Structured output provided." as a summary.
+  it('reads the parsed structured_output, not the JSON string in result', async () => {
+    // Both carry the answer, but `result` is a string: run() maps it to
+    // done.finalText, so a caller reusing that path would persist raw JSON into
+    // the Group as a summary rather than a sentence.
     const { data } = await run([summaryResult()])
-    expect(data).toEqual({ summary: 'Renamed foo to bar.', category: 'decision' })
+    expect(data).toEqual(SUMMARY)
+    expect(typeof data).toBe('object')
   })
 
   it('passes the schema as a session-level outputFormat', async () => {
@@ -479,7 +486,7 @@ describe('summarize', () => {
 
   it('reports usage so a summary turn is billable like any other', async () => {
     const { usage } = await run([summaryResult()])
-    expect(usage).toMatchObject({ costUsd: 0.0004, costSource: 'sdk' })
+    expect(usage).toMatchObject({ costUsd: 0.016992999999999998, costSource: 'sdk' })
   })
 
   it('returns null when the SDK exhausted its structured-output retries', async () => {

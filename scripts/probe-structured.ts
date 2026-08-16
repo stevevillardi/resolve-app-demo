@@ -31,36 +31,9 @@ import { resolve } from 'path'
 import type { PersonaBackend, PersonaTemplate, SandboxLevel } from '../src/shared/domain'
 import { adapterFor } from '../src/main/adapters'
 import { summaryModelFor } from '../src/main/adapters/models'
-
-/**
- * The real thing, not a probe-only copy — blueprint §6's shape plus the branch
- * field `12-worktree-isolation.md` asked Phase 7 to leave room for.
- *
- * Kept in step with summarySchema in src/main/services/compaction.ts by hand.
- * A probe that validated against its own private schema would prove nothing
- * about the one the app uses.
- */
-const SUMMARY_JSON_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  properties: {
-    summary: {
-      type: 'string',
-      description: 'One or two sentences on what was decided or done, in past tense.'
-    },
-    category: {
-      type: 'string',
-      enum: ['decision', 'tradeoff', 'routine'],
-      description:
-        'decision: a choice future work must respect. tradeoff: a choice with a cost worth recording. routine: everything else.'
-    },
-    branch: {
-      type: 'string',
-      description: 'The git branch the work landed on, if the session created or switched to one.'
-    }
-  },
-  required: ['summary', 'category'],
-  additionalProperties: false
-}
+// The app's real schema, imported rather than copied — a probe validating its
+// own private copy would prove nothing about what the app actually sends.
+import { SUMMARY_JSON_SCHEMA, summarySchema } from '../src/shared/summary'
 
 const DEFAULT_TEXT = [
   'User: the auth module re-reads the token file on every request, can you fix it?',
@@ -144,12 +117,18 @@ async function main(): Promise<void> {
   console.log(`\ndata     ${result.data === null ? '(null — no conforming answer)' : ''}`)
   if (result.data !== null) console.log(JSON.stringify(result.data, null, 2))
   console.log(`usage    ${result.usage ? JSON.stringify(result.usage) : 'no usage reported'}`)
+
+  // The backend saying "here is JSON" and the app being able to *use* it are
+  // different claims. Validating with the app's own Zod schema is what makes a
+  // green probe mean the compaction service would have written a row.
+  const parsed = summarySchema.safeParse(result.data)
+  console.log(`parsed   ${parsed.success ? 'ok' : `FAILED — ${parsed.error.message}`}`)
   console.log(`--- ${Date.now() - started}ms`)
 
-  // A null answer is a legitimate outcome the service absorbs, but from a probe
-  // it is the whole point of the run — make it a non-zero exit so a scripted
-  // invocation notices.
-  if (result.data === null) process.exit(2)
+  // A null or unusable answer is a legitimate outcome the service absorbs, but
+  // from a probe it is the whole point of the run — make it a non-zero exit so
+  // a scripted invocation notices.
+  if (!parsed.success) process.exit(2)
 }
 
 main().catch((error) => {

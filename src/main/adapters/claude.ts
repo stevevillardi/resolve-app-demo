@@ -343,11 +343,14 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
    * - `outputFormat` sits in `options`, i.e. it is **session-level**. That is
    *   why compaction cannot be a flag on run(): an existing conversational
    *   session cannot be asked for JSON on its final turn.
-   * - The answer is read from `structured_output`, **not** `result`. A
-   *   structured turn is an "end-turn tool session": it finishes on a
-   *   tool_result carrier whose data is a placeholder and has no trailing
-   *   assistant message, so `result` — which run() treats as authoritative —
-   *   holds the placeholder here.
+   * - The answer is read from `structured_output`, **not** `result`. Both
+   *   carry it on a successful turn, but `result` is the JSON serialized to a
+   *   *string* — and run() maps `result` to `done.finalText`, so a caller
+   *   reusing that path would persist raw JSON into the Group where a sentence
+   *   belongs. (A live capture also settles what sdk.d.ts:1860-1866 means by a
+   *   placeholder: it is the tool_result carrier *inside the transcript*,
+   *   whose content is "Structured output provided successfully". That matters
+   *   for forking a session, not for reading its answer.)
    * - `error_max_structured_output_retries` means the SDK already retried and
    *   gave up. That is a null answer, not an exception: the user's turn is long
    *   since committed and a missing Group entry is the correct degradation.
@@ -393,9 +396,11 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
       }
 
       return { data, usage }
-    } catch {
+    } catch (error) {
       // Same contract as the null above: compaction never fails a turn that has
-      // already been persisted. The caller logs.
+      // already been persisted. The caller logs; the raw hook is what makes a
+      // swallowed failure diagnosable from `probe:structured --raw`.
+      config.onRawEvent?.({ type: 'summarize_error', error: String(error) })
       return { data: null, usage: null }
     } finally {
       abort?.dispose()

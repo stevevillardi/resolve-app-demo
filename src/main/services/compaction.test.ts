@@ -186,7 +186,11 @@ describe('summarizeTurn', () => {
     await summarizeTurn('contact-1', 'q', 'a')
     const properties = lastSummarizeCall?.schema.properties as Record<string, unknown>
     expect(Object.keys(properties)).toContain('branch')
-    expect(lastSummarizeCall?.schema.required).toEqual(['summary', 'category'])
+    // `branch` is in `required` because Codex runs this through OpenAI's strict
+    // mode, which rejects a schema whose `required` omits any property — see
+    // the schema tests in adapters/codex.test.ts. Its absence is expressed as a
+    // nullable type instead.
+    expect(lastSummarizeCall?.schema.required).toEqual(['summary', 'category', 'branch'])
   })
 })
 

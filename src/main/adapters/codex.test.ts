@@ -3,6 +3,7 @@ import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk'
 import type { AgentEvent } from '../../shared/agent'
 import type { PersonaTemplate } from '../../shared/domain'
 import type { SessionSpec } from './types'
+import { SUMMARY_JSON_SCHEMA, summarySchema } from '../../shared/summary'
 
 /**
  * Event shapes here are the ones observed on real `codex exec
@@ -422,11 +423,8 @@ describe('stream normalization', () => {
 
 describe('summarize', () => {
   /**
-   * ⚠️ Provenance: derived from the vendored SDK's typings
-   * (dist/index.d.ts — `TurnOptions.outputSchema` at :171, and the
-   * `AgentMessageItem.text` note at :64-70 that the JSON arrives where prose
-   * normally would), not yet from a captured live run. Close the gap with
-   * `npm run probe:structured -- --backend codex --raw`.
+   * Shapes captured from a real run: `npm run probe:structured -- --backend
+   * codex --raw`, gpt-5.4-mini, 2026-08-16.
    */
   const SCHEMA = { type: 'object', properties: { summary: { type: 'string' } } }
 
@@ -492,5 +490,44 @@ describe('summarize', () => {
     const spec: SessionSpec = { ...SPEC, persona: { ...PERSONA, sandbox: 'workspace_write' } }
     await adapter.summarize(adapter.createSession(spec), 'go', SCHEMA)
     expect(lastThreadOptions?.sandboxMode).toBe('read-only')
+  })
+})
+
+describe('the summary schema Codex is actually sent', () => {
+  /**
+   * Codex hands `outputSchema` to OpenAI's **strict** structured-output mode,
+   * which is stricter than JSON Schema: every key in `properties` must appear
+   * in `required`, and optionality has to be expressed as a nullable type.
+   *
+   * A schema with an optional `branch` is rejected outright:
+   *
+   *   400 invalid_json_schema — 'required' is required to be supplied and to
+   *   be an array including every key in properties. Missing 'branch'.
+   *
+   * Neither SDK's typings say any of this — both take `Record<string, unknown>`
+   * — so nothing but a live run could have found it, and nothing but a test
+   * will stop the next person "tidying" branch back to optional.
+   */
+  it('lists every property as required', () => {
+    const properties = Object.keys(SUMMARY_JSON_SCHEMA.properties as Record<string, unknown>)
+    expect(SUMMARY_JSON_SCHEMA.required).toEqual(properties)
+  })
+
+  it('expresses an absent branch as a nullable type rather than an omission', () => {
+    const properties = SUMMARY_JSON_SCHEMA.properties as Record<string, { type: unknown }>
+    expect(properties.branch.type).toEqual(['string', 'null'])
+  })
+
+  it('forbids additional properties, as strict mode requires', () => {
+    expect(SUMMARY_JSON_SCHEMA.additionalProperties).toBe(false)
+  })
+
+  it('accepts the null branch both backends send when there is none', () => {
+    // Claude omits the key, Codex sends null. Both mean the same thing, and
+    // compaction stores neither.
+    expect(
+      summarySchema.safeParse({ summary: 'x', category: 'routine', branch: null }).success
+    ).toBe(true)
+    expect(summarySchema.safeParse({ summary: 'x', category: 'routine' }).success).toBe(true)
   })
 })

@@ -331,8 +331,11 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
         data: parseJson(turn.finalResponse),
         usage: turn.usage ? usageFromTurn(turn.usage, model) : null
       }
-    } catch {
-      // Compaction never fails a turn that has already been persisted.
+    } catch (error) {
+      // Compaction never fails a turn that has already been persisted — but a
+      // swallowed error with no channel out is undiagnosable, so it goes to the
+      // raw hook that `probe:structured --raw` installs.
+      config.onRawEvent?.({ type: 'summarize_error', error: String(error) })
       return { data: null, usage: null }
     }
   }

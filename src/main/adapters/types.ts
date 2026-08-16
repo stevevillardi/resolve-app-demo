@@ -126,13 +126,16 @@ export interface AgentAdapter {
    * 1. Claude's `outputFormat` is a **session-level** option, so it cannot be
    *    switched on for the last turn of a live conversational session. Codex's
    *    `outputSchema` is per-turn. There is no granularity both share.
-   * 2. A Claude structured turn has **no trailing assistant message** — it ends
-   *    on a tool_result carrier whose data is a placeholder, and the real
-   *    payload arrives separately. So `result`, which run() maps to
-   *    `done.finalText`, is the wrong field here and would persist a
-   *    placeholder.
+   * 2. The two backends put the answer in different places — Claude on a
+   *    separate `structured_output` field, Codex as a JSON string in the same
+   *    `finalResponse` that would otherwise hold prose. Normalising that is
+   *    exactly the job this layer exists for.
    * 3. Nothing about it should reach the renderer. It returns a promise rather
    *    than an event stream so there is no stream to accidentally forward.
+   *
+   * The schema handed in must satisfy **both** backends' validators, which are
+   * not equally permissive — see SUMMARY_JSON_SCHEMA in `src/shared/summary.ts`
+   * for the strict-mode constraint Codex imposes.
    *
    * Callers should pass a session built for this purpose, not a persona's own —
    * see src/main/services/compaction.ts.
