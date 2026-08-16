@@ -17,5 +17,6 @@ dist-electron/
 .drizzle-dev.db
 
 # Logs / caches
-*.log
+*.log*
 .eslintcache
+.DS_Store
