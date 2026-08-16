@@ -20,6 +20,7 @@ Surface the `usage_events` data (already being written since Phase 6/8) as real,
 
 3. **Finish Codex cost accounting** (Phase 5 built it — this is re-verification, not construction)
    - `src/main/adapters/pricing.ts` already holds the per-model table, a `LAST_VERIFIED` date, and `computeCodexCost`. Blueprint §14 open item #2 is settled: `cached_input_tokens` is a subset of `input_tokens`, so cached tokens are a discount and never an extra charge. **Re-check `LAST_VERIFIED` first** — prices move, and a stale table misreports spend silently.
+   - Phase 6 adds a per-persona model choice, so a single Contact's history can span models. Aggregate on the `model` recorded on each `UsageEvent` rather than on the persona's current setting, or changing a model silently reprices past turns.
    - Two known gaps left deliberately: the table has no context dimension, so `gpt-5.5`/`gpt-5.4` long sessions are priced at the sub-272K tier and under-report; and an unpriced model returns `null`, which the UI must render as "unknown" rather than as `$0.00`.
    - Confirm the price table built in Phase 5 is actually being read correctly per-model (i.e. the right row is selected for the model the session actually used, not a hardcoded default).
    - Spot-check a handful of real Codex sessions' computed cost against what the token counts would suggest by hand, to catch a bad formula before it silently misreports spend.

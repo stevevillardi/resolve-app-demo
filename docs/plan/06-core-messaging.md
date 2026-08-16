@@ -58,6 +58,16 @@ One caveat carried forward: `StreamingIndicator.tsx`'s comment says Claude emits
 5. **Concurrency lock, minimal version**
    - Even though Groups/routines aren't built yet, the "one active session per repo" rule (blueprint §15D) should exist now as the in-memory `repoPath → busy` map, since Phase 7 and 8 both depend on it and it's simplest to introduce while there's only one caller (a user-sent message) to test it against.
 
+6. **Per-persona model selection** — do this before item 2, since a session cannot run without resolving a model.
+
+   Nothing in the app lets a user choose a model today: blueprint §4's `PersonaTemplate` has no such field, §12's table has no such column, and Phase 2's `PersonaDetailPanel` offers only backend and sandbox. Phase 5 made that a correctness problem rather than a missing nicety — model availability turns out to depend on the **account**, not just the SDK version, so any hardcoded default is wrong for somebody. A ChatGPT-account Codex user gets a 400 on `gpt-5.2-codex` and `gpt-5.3-codex`; the adapter's `DEFAULT_CODEX_MODEL` is only correct until it isn't.
+
+   - Add `model: string | null` to `PersonaTemplate` (`src/shared/domain.ts`, `src/main/db/schema.ts`, plus a new migration — Phase 4's `0002`/`0003` are already applied, so this is `0004`, additive and nullable). **Null means "the backend's default"**, which keeps every existing persona and the first-run seed valid without a backfill.
+   - It belongs on the persona rather than the Contact because that is where `backend` already lives, and a model that doesn't match its backend is meaningless — the two have to be chosen and validated together.
+   - `PersonaDetailPanel` gets a model `Select` beside the existing backend one, repopulating when the backend changes. Keep "Default" as the first option so the null state is expressible in the UI, not just in the schema.
+   - The adapter side is already done: `SessionSpec.model` is honoured by both adapters, so this is plumbing a persisted value into a field that exists.
+   - Model lists: hardcode per backend for v1 and note the date, the same way `pricing.ts` does. Neither SDK exposes a "list models available to this account" call, and the failure mode is a 400 on first use — so surface that error clearly (it already classifies as an `error` event) rather than pretending the list is authoritative.
+
 ## Explicitly out of scope
 
 - Group thread real functionality (Phase 7) — `GroupThreadView` can stay on Phase 2's mock data for now.
@@ -70,5 +80,6 @@ One caveat carried forward: `StreamingIndicator.tsx`'s comment says Claude emits
 - [ ] Blueprint §16 Journey 1 runs live, start to finish, exactly as scripted: create "Code Reviewer" persona (`read_only`, Claude), bind via real repo picker, send "review the changes in `auth.ts`," get a real streamed response that makes no edit attempts.
 - [ ] Closing and reopening the app preserves the Contact and its message history, and sending a new message resumes the correct backend session.
 - [ ] A deliberately triggered error (e.g. temporarily revoke the API key) renders as a visible error bubble, not a hang or crash.
-- [ ] A `UsageEvent` row is created per turn with correct token/cost figures.
+- [ ] A `UsageEvent` row is created per turn with correct token/cost figures, attributed to the model that actually ran.
+- [ ] A persona's model can be changed in the UI, persists across a restart, and the next turn actually uses it — verified against a model whose name appears in the resulting `UsageEvent`, not just in the form.
 - [ ] Attempting to run two messages concurrently against Contacts on the same repo is prevented (second one queues or is rejected with a clear message, not a race).
