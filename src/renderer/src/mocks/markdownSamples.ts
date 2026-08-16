@@ -19,6 +19,17 @@ function tokensMatch(a: string, b: string): boolean {
 }
 \`\`\`
 
+### Severity
+
+| Finding | File | Severity |
+| --- | --- | --- |
+| Non-constant-time token compare | \`auth.ts:31\` | High |
+| Stale session id after refresh | \`auth.ts:58\` | Medium |
+| Missing test for expired token | \`auth.test.ts\` | Low |
+
+> Worth noting: the expiry check only covers access tokens. Refresh tokens
+> still rely on the store's TTL, which is set in a different module.
+
 No blockers otherwise — approving once the timing-safe compare is in.`
 
 export const REFACTOR_STREAMING_MARKDOWN = `Renaming \`fetchStuff\` → \`fetchWorkspaceIssues\` across the repo and updating call`
