@@ -1,6 +1,6 @@
 # Phase 8 — Routines & Scheduler
 
-**Status:** Done (pending Journey 3's PR step — see the dependency note)
+**Status:** Done (Journey 3's PR step closed in Phase 9; its issue-reading step moved to Phase 14 — see the dependency note)
 **Blueprint refs:** §7 (routines), §15E (background/tray), §16 Journey 3
 **Depends on:** Phase 7 (Group posting for `routine_run`), Phase 6 (concurrency lock, `AgentAdapter.run()`)
 
@@ -67,7 +67,7 @@ So everything below is still to build — none of it was partially done:
 
 ## Acceptance checks
 
-- [ ] Blueprint §16 Journey 3 runs live: set up a routine with `githubScope: open_pr`, trigger via "run now," it reads the repo/issues, makes a change, opens a PR (verified this is a real PR via GitHub, not a push) — **deferred, see the dependency note**. The PR half needs Phase 9; the rest of the journey is a live check still to run.
+- [x] Blueprint §16 Journey 3 runs live: set up a routine with `githubScope: open_pr`, trigger via "run now," it makes a change, opens a PR (verified this is a real PR via GitHub, not a push) — **closed in Phase 9, 2026-08-16**, by `src/main/services/journey3.live.test.ts`: two sonnet runs fired through `fireRoutine` (the same function cron calls), each producing a real pull request on a throwaway repo with the right file in it. The *"reads the repo/issues"* clause is **not** closed and is not Phase 9's to close — nothing gives a persona a view of GitHub issues, deliberately, and that is scoped as [`14-agent-capability-surface.md`](14-agent-capability-surface.md).
 - [x] The run posts to the Group as `routine_run`, visually distinct per Phase 2's `RoutineRunNotice`. `RoutineRunNotice` and its `case` in `GroupThreadView` already existed; what was missing was anything writing the row. Covered by `compaction.test.ts` and `messaging.test.ts`.
 - [x] `UsageEvent` with `source: "routine"` is logged — asserted in `scheduler.test.ts`'s shared `expectRoutineRan` helper. Reflected in the `UsageBadge` by the same path every other source uses.
 - [x] Closing the app window (not quitting) and waiting past a scheduled fire time results in the routine actually running, verified without reopening the window until after. **Automated** in `e2e/routines.spec.ts`, in two forms — window hidden, and window destroyed so `getAllWindows()` is genuinely empty — re-asserting on every poll that nothing is visible. Verified to fail when the scheduler is not started.
@@ -104,6 +104,14 @@ Journey 3's "opens a PR" step needs Phase 9's real GitHub write actions.
 **Decided 2026-08-16: stub it here and close the check after Phase 9.** Execution
 order stays 8 → 12 → 9, so the check above stays open across two phases; nothing
 else in this phase depends on it.
+
+**Settled 2026-08-16, in Phase 9.** The PR half is closed and verified live. The
+journey turned out to have a *second* dependency this note did not anticipate:
+its first sentence, "check for newly reported issues", needs a persona to be able
+to see something that is not a file on disk, and nothing in the app can — the
+Claude adapter passes `settingSources: []` on purpose and no MCP servers are
+passed on either backend. Phase 9 declined to special-case one Octokit call for
+one demo sentence and scoped it properly as Phase 14 instead.
 
 ## Limitations, recorded rather than solved
 
