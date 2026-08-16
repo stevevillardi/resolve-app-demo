@@ -1,10 +1,26 @@
 import type { IpcProcedureName, IpcInput, IpcOutput } from '../../../shared/ipc-contract'
+import type { AgentEvent } from '../../../shared/agent'
 
 export function callProcedure<K extends IpcProcedureName>(
   name: K,
   input: IpcInput<K>
 ): Promise<IpcOutput<K>> {
   return window.api.invoke(name, input)
+}
+
+/**
+ * Subscribes to one in-flight turn's event stream. Returns an unsubscribe, so
+ * it drops straight into a useEffect.
+ *
+ * Passthroughs, like callProcedure — the demultiplexing happens in preload,
+ * because that is the side that owns the channel.
+ */
+export function onAgentEvent(runId: string, callback: (event: AgentEvent) => void): () => void {
+  return window.api.onAgentEvent(runId, callback)
+}
+
+export function onRunsChanged(callback: () => void): () => void {
+  return window.api.onRunsChanged(callback)
 }
 
 /**

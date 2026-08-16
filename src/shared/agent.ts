@@ -139,6 +139,34 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   })
 ])
 
+// --- The push channel -------------------------------------------------------
+
+/**
+ * What main pushes to the renderer while a turn runs (Phase 6).
+ *
+ * Phase 1's bridge is request/response only, so this is the first traffic that
+ * travels main→renderer unprompted. It follows the same shape as `ipc-invoke`:
+ * ONE channel, with the payload saying what it is, rather than a channel per
+ * run — which keeps the preload surface fixed and avoids listener churn as
+ * runs come and go.
+ *
+ * Keyed by `runId`, not by session id: `AgentSession.sessionId` is null until
+ * the adapter fills it in mid-stream at `session_started`, so a contact's first
+ * turn would have nothing to subscribe to. Main mints the runId up front and
+ * hands it back from `messages.send`.
+ */
+export const AGENT_EVENT_CHANNEL = 'agent-event'
+
+export const agentStreamMessageSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('event'), runId: z.string(), event: agentEventSchema }),
+  /**
+   * The set of in-flight runs changed. Carries no payload — the renderer
+   * refetches `runs.list`, so there is one authority on what is running rather
+   * than a cache the renderer maintains by replaying deltas.
+   */
+  z.object({ kind: z.literal('runs-changed') })
+])
+
 // --- Capabilities -----------------------------------------------------------
 
 /**
@@ -175,6 +203,7 @@ export type AgentUsage = z.infer<typeof agentUsageSchema>
 export type AgentErrorKind = z.infer<typeof agentErrorKindSchema>
 export type AgentEvent = z.infer<typeof agentEventSchema>
 export type AgentCapabilities = z.infer<typeof agentCapabilitiesSchema>
+export type AgentStreamMessage = z.infer<typeof agentStreamMessageSchema>
 
 /** Narrowing helper — `AgentEvent & { type: T }` reads badly at call sites. */
 export type AgentEventOf<T extends AgentEvent['type']> = Extract<AgentEvent, { type: T }>
