@@ -3,8 +3,10 @@ import { adapterForBackend } from './adapter-host'
 import { getContact } from './contacts'
 import { groupForRepo, insertGroupMessage } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
+import { workingPathFor } from './run-lock'
 import type { TurnOrigin, TurnSummary } from './turn-origin'
 import { recordUsage } from './usage-events'
+import { recordOfWork, type WorkRecord } from './worktrees'
 import { SUMMARY_JSON_SCHEMA, summarySchema } from '../../shared/summary'
 import type { PersonaTemplate } from '../../shared/domain'
 
@@ -64,6 +66,30 @@ function summariserPersona(persona: PersonaTemplate): PersonaTemplate {
 }
 
 /**
+ * Tells the summariser where the work landed, when it landed out of sight.
+ *
+ * Written into the prompt rather than left for the model to discover, so the
+ * summary text itself names the branch — the row's `branch` column is what the
+ * next session's context renders, but a colleague reading the log wants the
+ * sentence to say so too.
+ */
+function describeWork(work: WorkRecord | null): string {
+  if (!work || work.files.length === 0) return ''
+
+  const files = work.files.slice(0, FILES_IN_PROMPT)
+  const more = work.files.length - files.length
+
+  return [
+    `This turn's work is committed on branch \`${work.branch}\`, which is not checked out`,
+    'in the main tree — nobody else can see these changes on disk. Say so in the summary,',
+    `and name the branch. Files changed: ${files.join(', ')}${more > 0 ? `, and ${more} more` : ''}.`
+  ].join(' ')
+}
+
+/** Enough to be useful in a summary; a whole refactor's file list is not. */
+const FILES_IN_PROMPT = 12
+
+/**
  * Summarises one finished turn into the repo's Group.
  *
  * Fire-and-forget by contract — the caller must not await it, and it never
@@ -96,16 +122,30 @@ export async function summarizeTurn(
     const group = groupForRepo(contact.repoPath)
     if (!group) return null
 
+    // What the turn left on a branch nobody else can see. Asked of git, not of
+    // the model — see recordOfWork().
+    const work = await recordOfWork(contact)
+
     const spec = {
       persona: summariserPersona(persona),
-      repoPath: contact.repoPath,
+      // The working path, not the repo: the summariser has to be able to look at
+      // the tree the turn actually happened in. Pointed at the main tree it
+      // would be describing somebody else's files.
+      repoPath: workingPathFor(contact),
       skills: [],
       model: summaryModelFor(persona.backend)
     }
 
     const { data, usage } = await adapter.summarize(
       adapter.createSession(spec),
-      `${PROMPT_HEADER}\n\n--- user ---\n${prompt}\n\n--- ${persona.name} ---\n${reply}`,
+      [
+        PROMPT_HEADER,
+        describeWork(work),
+        `--- user ---\n${prompt}`,
+        `--- ${persona.name} ---\n${reply}`
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       SUMMARY_JSON_SCHEMA
     )
 
@@ -118,6 +158,12 @@ export async function summarizeTurn(
     if (!parsed.success) return null
 
     const durable = parsed.data.category !== 'routine'
+    // git's answer wins over the model's. The model's `branch` stays as the
+    // fallback for a session that switched branches itself in the main tree,
+    // which git cannot attribute to this turn. Falsy covers both shapes of "no
+    // branch": Codex is obliged to send the key and sends null, Claude may omit
+    // it. Neither should be stored.
+    const branch = work?.branch || parsed.data.branch || null
     // A routine's summary IS its Group record — it replaces the `system_summary`
     // rather than joining it, so one unattended fire leaves one row. It still
     // carries `category`/`durable`, because contextForRepo reads both types and
@@ -133,9 +179,7 @@ export async function summarizeTurn(
       // are the running decision log and are always re-injected; routine
       // entries stay queryable but fall out of context by recency.
       durable,
-      // Falsy covers both shapes of "no branch": Codex is obliged to send the
-      // key and sends null, Claude may omit it. Neither should be stored.
-      ...(parsed.data.branch ? { branch: parsed.data.branch } : {})
+      ...(branch ? { branch } : {})
     })
 
     return { id: row.id, summary: parsed.data.summary, category: parsed.data.category, durable }

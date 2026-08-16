@@ -26,7 +26,8 @@ let userData: string
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
 
-const { ensureWorktree, pruneOrphanedWorktrees } = await import('./worktrees')
+const { ensureWorktree, pruneOrphanedWorktrees, recordOfWork, siblingBranchesFor } =
+  await import('./worktrees')
 const { createContact, deleteContact } = await import('./contacts')
 const { branchExists, worktreeList } = await import('./git')
 
@@ -252,5 +253,95 @@ describe('deleteContact', () => {
 
   it('reports an unknown id rather than throwing', async () => {
     expect(await deleteContact('no-such-contact')).toBe(false)
+  })
+})
+
+describe('recordOfWork', () => {
+  it('reports nothing for a contact in the main tree', async () => {
+    const reader = createContact({
+      personaTemplateId: PERSONA_READER,
+      repoPath: repo,
+      displayName: 'Code Reviewer · my-app'
+    })
+
+    expect(await recordOfWork(reader)).toBeNull()
+  })
+
+  it('reports nothing before the worktree has been materialised', async () => {
+    expect(await recordOfWork(writer())).toBeNull()
+  })
+
+  // The branch is read from the row and the files from git — never asked of the
+  // model, whose answer would be unverifiable even when it arrived.
+  it('names the branch and the files it changed', async () => {
+    const contact = writer()
+    await ensureWorktree(contact)
+    writeFileSync(join(contact.worktreePath!, 'src/b.ts'), 'export const b = 2\n')
+    run(['add', '-A'], contact.worktreePath!)
+    run(['commit', '-m', 'buddy work'], contact.worktreePath!)
+
+    const work = await recordOfWork(contact)
+
+    expect(work?.branch).toBe(contact.branch)
+    expect(work?.files).toEqual(['src/b.ts'])
+    expect(work?.headSha).toMatch(/^[0-9a-f]{40}$/)
+  })
+
+  it('reports no files when the turn committed nothing', async () => {
+    const contact = writer()
+    await ensureWorktree(contact)
+
+    expect((await recordOfWork(contact))?.files).toEqual([])
+  })
+})
+
+describe('siblingBranchesFor', () => {
+  it('is empty when nobody else is on the repo', () => {
+    expect(siblingBranchesFor(writer())).toEqual([])
+  })
+
+  it('excludes the contact’s own branch', async () => {
+    const contact = writer()
+    await ensureWorktree(contact)
+
+    expect(siblingBranchesFor(contact)).toEqual([])
+  })
+
+  // A Contact's branch is *planned* when it is created, so listing every row
+  // would announce branches that do not exist in the repo at all.
+  it('omits a branch that has only been planned', () => {
+    const a = writer('Refactor Buddy · my-app')
+    writer('Refactor Buddy 2 · my-app')
+
+    expect(siblingBranchesFor(a)).toEqual([])
+  })
+
+  it('lists a colleague’s branch once its worktree exists', async () => {
+    const a = writer('Refactor Buddy · my-app')
+    const b = writer('Refactor Buddy 2 · my-app')
+    await ensureWorktree(b)
+
+    const siblings = siblingBranchesFor(a)
+
+    expect(siblings).toHaveLength(1)
+    expect(siblings[0].branch).toBe(b.branch)
+    expect(siblings[0].contactName).toBe('Refactor Buddy 2 · my-app')
+    expect(siblings[0].headSha).toBe(run(['rev-parse', b.branch!]))
+  })
+
+  it('ignores contacts bound to a different repo', async () => {
+    const other = join(scratch, 'other-app')
+    execFileSync('git', ['init', '-q', '-b', 'main', other])
+
+    const a = writer('Refactor Buddy · my-app')
+    const elsewhere = createContact({
+      personaTemplateId: PERSONA_WRITER,
+      repoPath: other,
+      displayName: 'Refactor Buddy · other-app'
+    })
+    mkdirSync(elsewhere.worktreePath!, { recursive: true })
+    writeFileSync(join(elsewhere.worktreePath!, '.git'), 'gitdir: nowhere\n')
+
+    expect(siblingBranchesFor(a)).toEqual([])
   })
 })

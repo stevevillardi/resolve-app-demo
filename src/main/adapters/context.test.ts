@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GroupMessage, PersonaTemplate, Skill } from '../../shared/domain'
 import { composeInstructions, orderSkills } from './context'
-import type { SessionSpec } from './types'
+import type { SessionSpec, SiblingBranch } from './types'
 
 function skill(id: string, name: string, content: string): Skill {
   return { id, name, description: '', content }
@@ -150,5 +150,66 @@ describe('group context injection', () => {
       entry({ id: 'b', content: 'newer' })
     ])
     expect(composed.indexOf('older')).toBeLessThan(composed.indexOf('newer'))
+  })
+})
+
+describe('sibling branches', () => {
+  function withSiblings(siblingBranches: SiblingBranch[]): string {
+    return composeInstructions({ ...spec(persona([]), []), siblingBranches })
+  }
+
+  const buddy: SiblingBranch = {
+    branch: 'persona/refactor-buddy-a3f9',
+    contactName: 'Refactor Buddy · my-app',
+    headSha: '9c2a05c1df58ab5960bd708f63c3e98f273e8335'
+  }
+
+  it('is absent when nothing else is in flight', () => {
+    expect(composeInstructions(spec(persona([]), []))).not.toContain('other branches')
+  })
+
+  it('names the branch and whose it is', () => {
+    const composed = withSiblings([buddy])
+    expect(composed).toContain('persona/refactor-buddy-a3f9')
+    expect(composed).toContain('Refactor Buddy · my-app')
+  })
+
+  it('abbreviates the head rather than printing forty characters', () => {
+    expect(withSiblings([buddy])).toContain('9c2a05c')
+    expect(withSiblings([buddy])).not.toContain(buddy.headSha)
+  })
+
+  it('omits the head annotation when the ref could not be read', () => {
+    expect(withSiblings([{ ...buddy, headSha: null }])).toContain('persona/refactor-buddy-a3f9')
+  })
+
+  // This block exists to rescue blueprint §6, whose "filesystem state is free"
+  // stops being true the moment a writer has its own checkout. The rescue is
+  // that the object store is still shared — so the block has to say that the
+  // work is readable without merging, or the model has no reason to look.
+  it('says the work is readable without merging anything', () => {
+    const composed = withSiblings([buddy])
+    expect(composed).toMatch(/without merging/i)
+    expect(composed).toContain('git show <branch>:<path>')
+    expect(composed).toContain('git diff <base>...<branch>')
+  })
+
+  it('tells the persona not to merge or check them out itself', () => {
+    // Layer 3 is human by design: integrating somebody else's branch is a
+    // decision, and a persona that merges on its own has made it for them.
+    expect(withSiblings([buddy])).toMatch(/do not merge or check out/i)
+  })
+
+  // The stable prefix is what keeps prompt caching working; a volatile block in
+  // front of the skills would invalidate the cache every time a colleague ran.
+  it('comes after the persona and its skills', () => {
+    const composed = composeInstructions({
+      ...spec(persona(['s1']), [skill('s1', 'Checklist', 'Be thorough.')]),
+      siblingBranches: [buddy]
+    })
+
+    expect(composed.indexOf('Be thorough.')).toBeLessThan(
+      composed.indexOf('persona/refactor-buddy')
+    )
   })
 })

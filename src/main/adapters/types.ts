@@ -12,6 +12,20 @@ import type { GroupMessage, PersonaBackend, PersonaTemplate, Skill } from '../..
  */
 
 /**
+ * One other Contact's branch, as this session is told about it.
+ *
+ * Declared here rather than in the service that resolves it for the same reason
+ * SessionSpec is: this is the shape the adapters agree on, and nothing under
+ * src/main/adapters/ may import a service.
+ */
+export interface SiblingBranch {
+  branch: string
+  /** Whose it is, so the model can attribute the work in its own summary. */
+  contactName: string
+  headSha: string | null
+}
+
+/**
  * Everything an adapter needs to start or resume a session.
  *
  * Deviates from blueprint §3's literal `createSession(persona, repoPath)`:
@@ -40,6 +54,15 @@ export interface SessionSpec {
    * reason `skills` is: it means running git, and nothing here may.
    */
   writablePaths?: string[]
+  /**
+   * Branches other Contacts on this repo are working on, which are checked out
+   * nowhere this session can see.
+   *
+   * Resolved by the caller, like `skills` and `groupContext`. Injected rather
+   * than left to be discovered because a persona cannot find this out: `git
+   * branch` and `git worktree` are denied at read_only on purpose.
+   */
+  siblingBranches?: SiblingBranch[]
   /** Already resolved from persona.skillIds by the caller (blueprint §5). */
   skills: Skill[]
   /**

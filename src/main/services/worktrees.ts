@@ -1,10 +1,11 @@
-import { isNotNull } from 'drizzle-orm'
+import { and, eq, isNotNull, ne } from 'drizzle-orm'
 import { app } from 'electron'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { initDb } from '../db'
 import { contacts } from '../db/schema'
-import { gitWritePathsFor, worktreeAdd, worktreePrune } from './git'
+import { changedFiles, gitWritePathsFor, headSha, worktreeAdd, worktreePrune } from './git'
+import type { SiblingBranch } from '../adapters/types'
 import type { Contact, Isolation, SandboxLevel } from '../../shared/domain'
 
 /**
@@ -144,6 +145,91 @@ export async function ensureWorktree(contact: Contact): Promise<string[]> {
   }
 
   return gitWritePathsFor(worktreePath)
+}
+
+/**
+ * The branches other Contacts on this repo are working on.
+ *
+ * Synchronous and git-free on purpose: it is resolved while building the session
+ * spec, which happens inside the synchronous half of startTurn. The `existsSync`
+ * is what keeps it honest — a Contact's branch is *planned* when it is created,
+ * so listing every row would announce branches that do not exist yet.
+ *
+ * Excludes the session's own branch, which it can see perfectly well by being
+ * checked out on it.
+ */
+export function siblingBranchesFor(contact: Contact): SiblingBranch[] {
+  const rows = initDb()
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.repoPath, contact.repoPath), ne(contacts.id, contact.id)))
+    .all()
+
+  return rows
+    .filter((row) => row.branch && row.worktreePath && existsSync(join(row.worktreePath, '.git')))
+    .map((row) => ({
+      branch: row.branch as string,
+      contactName: row.displayName,
+      // Read from the ref file rather than by running git: this is on the
+      // synchronous path, and a missing sha only costs the reader a short
+      // annotation.
+      headSha: refHead(contact.repoPath, row.branch as string)
+    }))
+}
+
+/**
+ * A branch's head, straight off disk.
+ *
+ * Loose refs are a file containing the sha; packed ones are not, and rather than
+ * parse packed-refs this returns null and lets the annotation be omitted. The
+ * branch name is the load-bearing part — worktree branches are freshly written
+ * and so are loose in practice.
+ */
+function refHead(repoPath: string, branch: string): string | null {
+  try {
+    const sha = readFileSync(join(repoPath, '.git', 'refs', 'heads', branch), 'utf8').trim()
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : null
+  } catch {
+    return null
+  }
+}
+
+export interface WorkRecord {
+  branch: string
+  headSha: string | null
+  /** Paths the branch changed relative to the main tree's current HEAD. */
+  files: string[]
+}
+
+/**
+ * What a Contact's branch is carrying that nobody else can see yet.
+ *
+ * Asked of git rather than of the model. The summariser's JSON schema has had a
+ * `branch` field since Phase 7 and it has always come back null, because nothing
+ * ever told the model what the branch was — and a model-reported branch would be
+ * unverifiable even when it arrived. Main knows the branch from the row, and the
+ * head and the file list are two cheap deterministic commands.
+ *
+ * Null when there is nothing to report: a Contact in the main tree writes where
+ * everyone can already see it, so §6's "filesystem state is free" still holds
+ * for it and there is no branch worth naming.
+ */
+export async function recordOfWork(contact: Contact): Promise<WorkRecord | null> {
+  const { repoPath, worktreePath, branch } = contact
+  if (isolationOf(contact.isolation) !== 'worktree') return null
+  if (!worktreePath || !branch) return null
+  // Never materialised — the Contact exists but has not run, so there is no
+  // branch in the repo to describe.
+  if (!existsSync(join(worktreePath, '.git'))) return null
+
+  const [head, files] = await Promise.all([
+    headSha(worktreePath),
+    // Against the main tree's HEAD, which is what "invisible to everyone else"
+    // is measured from — that is the tree a colleague reads.
+    changedFiles(repoPath, 'HEAD', branch)
+  ])
+
+  return { branch, headSha: head, files }
 }
 
 /**
