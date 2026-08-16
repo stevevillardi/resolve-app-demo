@@ -1,6 +1,6 @@
 # Phase 3 — App Auth
 
-**Status:** Not started
+**Status:** Done — all 7 acceptance checks verified (2026-08-16)
 **Blueprint refs:** §15A (Claude/Codex authentication), §9 (GitHub integration — auth half only)
 **Depends on:** Phase 1 (bootstrap). Runs in parallel conceptually with Phase 2 output but should land after it so onboarding has a real shell to render into.
 
@@ -43,14 +43,35 @@ Neither is about *using* these credentials yet (no adapters, no repo picker call
 
 ## Acceptance checks
 
-- [ ] Fresh install → app detects no auth → onboarding flow appears.
-- [ ] Claude auth: either detects existing CLI auth, or accepts and stores an API key.
-- [ ] Codex auth: SDK's own auth-reuse/device-login behavior confirmed working (or documented as broken/unverified with a fallback noted).
-- [ ] GitHub device flow completes end-to-end: code shown, user authorizes in browser, app detects completion, token stored via `safeStorage`.
-- [ ] Restarting the app after completing onboarding does not re-prompt.
-- [ ] No token/key is ever written to SQLite or logs in plaintext — spot check by inspecting the DB file and console output.
-- [ ] `auth.getStatus`-style procedure correctly reflects both backend states independently (e.g. GitHub connected but Codex not, and vice versa, both render sensibly rather than crashing).
+- [x] Fresh install → app detects no auth → onboarding flow appears. *(Splash → onboarding verified on a profile with no `onboarding_completed` row.)*
+- [x] Claude auth: either detects existing CLI auth, or accepts and stores an API key. *(Detected existing CLI auth: `source: "cli"`, email + org + `Claude Pro` returned.)*
+- [x] Codex auth: SDK's own auth-reuse/device-login behavior confirmed working (or documented as broken/unverified with a fallback noted). **The blueprint's assumption was wrong — see the correction below.** Reuse detection and the device-code login both work via the vendored CLI.
+- [x] GitHub device flow completes end-to-end: code shown, user authorizes in browser, app detects completion, token stored via `safeStorage`. *(Confirmed by the user. Resulting state: `github_token.bin` written at mode `0600` with a `v10` keychain-encrypted prefix, `github_account_login=stevevillardi` and `github_scopes=repo read:user` in `app_state`, and zero token-shaped strings anywhere in the DB.)*
+- [x] Restarting the app after completing onboarding does not re-prompt. *(`completeOnboarding` → reload → app shell, not onboarding.)*
+- [x] No token/key is ever written to SQLite or logs in plaintext. *(`app_state` holds only `onboarding_completed`; no token-shaped strings anywhere under userData or in console output; `safeStorage` round-trip confirmed `v10`-prefixed ciphertext at mode `0600` that does not contain its plaintext.)*
+- [x] `auth.getStatus` reflects backend states independently. *(Claude + Codex authenticated while GitHub disconnected rendered correctly; the sidebar dot read `data-connected=false` in the same pass.)*
 
-## Open item to flag to the user during this phase
+## Resolved: blueprint §15A is wrong about Codex
 
-GitHub OAuth Device Flow requires a registered OAuth App client ID. Confirm whether one exists already or needs to be created (github.com → Settings → Developer settings → OAuth Apps) before this phase can be marked done — this is an external action, not something buildable in isolation.
+§15A says Codex's SDK handles login itself, "with its own device-code browser login if none exists." Verified against `@openai/codex-sdk@0.147.0`: the SDK exports only `Codex`, `Thread`, and `CodexOptions { codexPathOverride, baseUrl, apiKey, config, env }` — **no login or auth API of any kind**. That behaviour belongs to the `codex` CLI, which the SDK vendors as a dependency.
+
+Driving that CLI directly turned out to be *better* than what the blueprint assumed, because it exposes a device-code flow with the same shape as GitHub's:
+
+| Command | Behaviour (confirmed by running the vendored binary) |
+|---|---|
+| `codex login status` | exit 0 `Logged in using ChatGPT` / exit 1 `Not logged in` |
+| `codex login --device-auth` | prints `https://auth.openai.com/codex/device` + a one-time code (e.g. `UHHW-B1Z5X`), 15-minute expiry; exits 0 on completion |
+| `codex login --with-api-key` | reads the key from **stdin**, so it never appears in argv or `ps` |
+| `CODEX_HOME` | honoured — lets a logged-out profile be tested without touching real credentials |
+
+Because both providers are device-code flows, they share one `DeviceFlowState` shape in the IPC contract and one `DeviceCodeDisplay` component.
+
+Detection uses `login status` rather than sniffing `~/.codex/auth.json`, so an expired or malformed credential reads as logged out instead of as connected.
+
+## Resolved: Claude auth detection
+
+`Query.accountInfo()` resolves **without consuming a turn**, provided the query is created with a prompt stream that never yields and is `close()`d afterwards. No fallback to probing `~/.claude/.credentials.json` was needed.
+
+## Resolved: GitHub OAuth App
+
+A client ID already existed and is in `.env`. Device Flow is enabled on the app (verified by a live device-code request). `electron-vite` only exposes `MAIN_VITE_`-prefixed vars to main, so `envPrefix` in `electron.vite.config.ts` was widened to accept `GITHUB_` as well — the existing unprefixed `GITHUB_CLIENT_ID` works with no rename.
