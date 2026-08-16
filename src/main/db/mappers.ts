@@ -91,7 +91,8 @@ export function toGroupMessage(row: GroupMessageRow): GroupMessage {
     content: row.content,
     ...optional('contactId', row.contactId),
     ...optional('category', row.category),
-    ...optional('durable', row.durable)
+    ...optional('durable', row.durable),
+    ...optional('branch', row.branch)
   }
 }
 

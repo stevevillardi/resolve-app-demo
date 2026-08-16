@@ -106,7 +106,20 @@ export const groupMessages = sqliteTable(
     contactId: text('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
     content: text('content').notNull(),
     category: text('category', { enum: ['decision', 'tradeoff', 'routine'] }),
-    durable: integer('durable', { mode: 'boolean' })
+    durable: integer('durable', { mode: 'boolean' }),
+    /**
+     * The branch a `system_summary`'s work landed on, when the session named
+     * one. Nullable and unwritten in practice until worktrees land: every
+     * Contact shares one checkout today, so there is rarely a branch worth
+     * reporting.
+     *
+     * Added now rather than later because this column is how the rest of the
+     * repo finds out that a writer produced work nobody can see on disk — see
+     * docs/plan/12-worktree-isolation.md, which is built on Phase 7 already
+     * injecting these rows into every session on the repo. Retrofitting it
+     * would mean a migration plus a re-summarisation pass over history.
+     */
+    branch: text('branch')
   },
   (table) => [index('group_messages_group_timestamp_idx').on(table.groupId, table.timestamp)]
 )
@@ -149,7 +162,17 @@ export const usageEvents = sqliteTable(
       .notNull()
       .references(() => contacts.id, { onDelete: 'cascade' }),
     timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
-    source: text('source', { enum: ['message', 'routine'] }).notNull(),
+    /**
+     * What spent the tokens. `mention` and `summary` joined the original two
+     * in Phase 7 and needed no migration: the column is plain `text NOT NULL`
+     * in 0002 with no CHECK behind it, so the enum is a Drizzle/Zod assertion
+     * rather than a database constraint.
+     *
+     * Worth separating rather than folding into `message`: a summary turn is
+     * spend the user never asked for directly, and the usage dashboard should
+     * be able to show the cost of coordination on its own.
+     */
+    source: text('source', { enum: ['message', 'routine', 'mention', 'summary'] }).notNull(),
     inputTokens: integer('input_tokens').notNull(),
     outputTokens: integer('output_tokens').notNull(),
     cachedInputTokens: integer('cached_input_tokens'),

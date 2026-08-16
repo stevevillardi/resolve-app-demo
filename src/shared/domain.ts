@@ -24,7 +24,7 @@ export const groupMessageTypeSchema = z.enum([
   'routine_run'
 ])
 export const systemSummaryCategorySchema = z.enum(['decision', 'tradeoff', 'routine'])
-export const usageSourceSchema = z.enum(['message', 'routine'])
+export const usageSourceSchema = z.enum(['message', 'routine', 'mention', 'summary'])
 /**
  * Where a dollar figure came from: the backend returned it, or we computed it
  * from src/main/adapters/pricing.ts. Defined here rather than in agent.ts
@@ -84,7 +84,17 @@ export const groupMessageSchema = z.object({
   /** `system_summary` only. */
   category: systemSummaryCategorySchema.optional(),
   /** `system_summary` only — durable entries are always re-injected (§6). */
-  durable: z.boolean().optional()
+  durable: z.boolean().optional(),
+  /**
+   * `system_summary` only — the branch the work landed on, when there was one.
+   *
+   * Unset until worktrees land (docs/plan/12-worktree-isolation.md): with one
+   * shared checkout there is usually no branch worth naming. It exists now
+   * because these rows are already injected into every session on the repo,
+   * which makes them the channel by which a writer's invisible branch becomes
+   * known.
+   */
+  branch: z.string().optional()
 })
 
 /**
@@ -144,6 +154,11 @@ export const usageEventSchema = z.object({
 export const skillDraftSchema = skillSchema.omit({ id: true })
 export const personaTemplateDraftSchema = personaTemplateSchema.omit({ id: true })
 export const contactDraftSchema = contactSchema.omit({ id: true, backendSessionId: true })
+/**
+ * `timestamp` is omitted alongside `id` because main mints it too — a
+ * renderer-supplied time would let a clock skew reorder the thread.
+ */
+export const groupMessageDraftSchema = groupMessageSchema.omit({ id: true, timestamp: true })
 
 // --- Inferred types ---------------------------------------------------------
 
@@ -168,3 +183,4 @@ export type UsageEvent = z.infer<typeof usageEventSchema>
 export type SkillDraft = z.infer<typeof skillDraftSchema>
 export type PersonaTemplateDraft = z.infer<typeof personaTemplateDraftSchema>
 export type ContactDraft = z.infer<typeof contactDraftSchema>
+export type GroupMessageDraft = z.infer<typeof groupMessageDraftSchema>

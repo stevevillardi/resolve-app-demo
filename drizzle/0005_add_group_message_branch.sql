@@ -1,0 +1,1 @@
+ALTER TABLE `group_messages` ADD `branch` text;
