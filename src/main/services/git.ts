@@ -7,9 +7,11 @@ import { join } from 'path'
  *
  * Deliberately narrow. Blueprint §9 draws the line at not "trusting the agent
  * to shell out raw git commands unsupervised" — that is about *remote* actions,
- * which go through Octokit in Phase 9. This is the local side: cloning a repo so
- * a Contact has somewhere to work, asking whether a directory is a repo at all,
- * and since Phase 12 the worktree and merge plumbing.
+ * which go through Octokit. This is the local side: cloning a repo so a Contact
+ * has somewhere to work, asking whether a directory is a repo at all, the
+ * worktree and merge plumbing from Phase 12, and — since Phase 9 — the one
+ * remote operation no REST API can perform, which is uploading the commits a
+ * pull request is going to be *about*.
  *
  * Shelling out rather than taking a dependency: git is already a hard
  * requirement for everything this app does, a library would be a second
@@ -72,6 +74,14 @@ export async function isGitRepo(path: string): Promise<boolean> {
  * the reason `describeGitError` exists: the assembled URL must never reach a
  * log, an error message, or the renderer, and the only way to guarantee that is
  * to never pass git's raw stderr along.
+ *
+ * **And it must not outlive the command.** git writes the URL it was handed
+ * into the new repo's `.git/config` verbatim, credential and all, so a clone
+ * done this way leaves a live GitHub token in a plaintext file inside a
+ * directory personas then work in — readable by any of them, since the sandbox
+ * fences writes to `.git` but not reads. The remote is rewritten to the clean
+ * URL immediately; `git-remote.test.ts` covers the local case and the
+ * `LIVE_GITHUB` check asserts a real https clone leaves nothing behind.
  */
 export async function cloneRepo(
   cloneUrl: string,
@@ -88,6 +98,20 @@ export async function cloneRepo(
   const result = await git(['clone', authenticated, destination])
 
   if (result.code !== 0) throw new Error(describeGitError(result.stderr, cloneUrl))
+
+  if (authenticated !== cloneUrl) {
+    const scrubbed = await git(['remote', 'set-url', 'origin', cloneUrl], destination)
+    // Failing here would leave the token on disk, which is worse than failing
+    // the bind: the caller can retry a clone, but nobody would ever be told
+    // that a credential is sitting in a file.
+    if (scrubbed.code !== 0) {
+      throw new Error(
+        `Cloned ${cloneUrl}, but could not remove the credential from its git config. ` +
+          `Delete ${destination} and try again.`
+      )
+    }
+  }
+
   return destination
 }
 
@@ -129,6 +153,109 @@ export function describeGitError(stderr: string, safeUrl: string): string {
     return 'Could not reach GitHub. Check the network connection and try again.'
   }
   return `Cloning ${safeUrl} failed.`
+}
+
+// --- Remote (Phase 9) --------------------------------------------------------
+
+/**
+ * The URL of `origin`, or null when there isn't one.
+ *
+ * **Never leaves the main process.** A repo the user picked off disk may have
+ * been cloned by any tool, including one that left a credential in the remote —
+ * the very thing `cloneRepo` now scrubs. Callers want the owner and repo out of
+ * it, which is what `githubSlug` is for.
+ */
+export async function originUrl(repoPath: string): Promise<string | null> {
+  const result = await git(['remote', 'get-url', 'origin'], repoPath)
+  return result.code === 0 ? result.stdout.trim() || null : null
+}
+
+/**
+ * The `owner/repo` a remote URL points at, or null if it isn't GitHub.
+ *
+ * Both forms are real: an app clone is `https://github.com/o/r.git`, and a repo
+ * the user picked off disk is as likely to be `git@github.com:o/r.git`. Any
+ * other host returns null, which is what hides the PR action rather than
+ * failing it — binding a GitLab checkout is allowed, it just has no PR path.
+ *
+ * Pure and exported for the same reason `withToken` is: userinfo is stripped
+ * here, so this is one of the places a credential could escape.
+ */
+export function githubSlug(remoteUrl: string): { owner: string; repo: string } | null {
+  const scp = /^(?:[^@/]+@)?([^:/]+):(?!\/)(.+)$/.exec(remoteUrl.trim())
+  const path = scp ? (scp[1] === 'github.com' ? scp[2] : null) : httpsPath(remoteUrl)
+  if (!path) return null
+
+  const [owner, repo] = path
+    .replace(/\.git$/, '')
+    .replace(/^\/+|\/+$/g, '')
+    .split('/')
+  return owner && repo ? { owner, repo } : null
+}
+
+function httpsPath(remoteUrl: string): string | null {
+  try {
+    const url = new URL(remoteUrl.trim())
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    return url.hostname === 'github.com' ? url.pathname : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Uploads a branch to a remote, and nothing else.
+ *
+ * Three deliberate choices, each of them the difference between a plumbing
+ * command and a policy:
+ *
+ * - **The URL is passed, never configured.** `git push <url>` leaves no trace in
+ *   `.git/config` and sets no upstream, so the token exists only for the length
+ *   of this one process. It is the same reason `cloneRepo` scrubs its remote.
+ * - **A fully-qualified refspec**, so the branch name is never resolved against
+ *   whatever `push.default` the user has set.
+ * - **No force, ever.** A branch that has diverged from what was pushed is a
+ *   thing a human needs to look at; overwriting it silently would discard
+ *   somebody's review round.
+ */
+export async function pushBranch(
+  workingPath: string,
+  branch: string,
+  remoteUrl: string,
+  token?: string | null
+): Promise<void> {
+  const authenticated = token ? withToken(remoteUrl, token) : remoteUrl
+  const result = await git(
+    ['push', authenticated, `refs/heads/${branch}:refs/heads/${branch}`],
+    workingPath
+  )
+
+  if (result.code !== 0) throw new Error(describePushError(result.stderr, branch))
+}
+
+/**
+ * A push failure, without git's stderr.
+ *
+ * The same rule as `describeGitError` and, like it, written out by hand rather
+ * than redacted — git echoes the remote back on nearly every push failure, and
+ * that URL is carrying a live token. Separate from `describeGitError` because
+ * its messages are all clone-worded, and a user reading "cloning failed" after
+ * clicking Open PR would go looking in the wrong place.
+ */
+export function describePushError(stderr: string, branch: string): string {
+  if (/non-fast-forward|fetch first|rejected/i.test(stderr)) {
+    return `${branch} has diverged from the copy already on GitHub. Nothing was pushed — reconcile the branch first.`
+  }
+  if (/Authentication failed|could not read Username|403|denied/i.test(stderr)) {
+    return `GitHub refused the push of ${branch}. The stored token may not allow writing to this repository.`
+  }
+  if (/not found|404/i.test(stderr)) {
+    return `The repository this branch belongs to was not found on GitHub. It may be private, renamed, or deleted.`
+  }
+  if (/could not resolve host|network|timed out/i.test(stderr)) {
+    return 'Could not reach GitHub. Check the network connection and try again.'
+  }
+  return `Pushing ${branch} failed.`
 }
 
 // --- Worktrees (Phase 12) ----------------------------------------------------
