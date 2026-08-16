@@ -1,54 +1,199 @@
 @import 'tailwindcss';
 
 /*
- * Baseline neutral theme so shadcn/ui components have working tokens to
- * render against. This is a placeholder — Phase 2 (docs/plan/02-design-system.md)
- * owns the real palette/typography decisions.
+ * Persona Router visual identity (Phase 2 — docs/plan/02-design-system.md).
+ *
+ * Concept: a "signal rail" — a 3px colored left border, applied consistently
+ * to sidebar rows, message bubbles, and notices — literally encodes which
+ * channel (persona, group, or notice type) a piece of content is on. This
+ * is the app's one recurring signature element, chosen because the product
+ * is fundamentally about routing conversations across multiple agent
+ * "channels," not because colored borders are decorative.
+ *
+ * Palette: a warm-neutral canvas (not stark white/black) so long review
+ * sessions don't fight a sterile background. A single brand/contact accent
+ * (signal violet) marks 1:1 contacts and outbound bubbles; a distinct warm
+ * coral marks groups, since groups need to read differently from contacts
+ * at a glance in the sidebar. Journal/routine/mention notices each get
+ * their own quiet tint + rail color so all four GroupMessage types are
+ * legible without reading the text.
+ *
+ * Typography: system-ui stack for UI chrome — this app deliberately mirrors
+ * the native messaging app's interaction grammar, so leaning on the OS's own
+ * system font (San Francisco on macOS) reinforces that rather than fighting
+ * it with an imported display face. Code renders in a monospace stack via
+ * shiki. Bubbles use their own larger radius scale (--radius-bubble),
+ * separate from the tighter radius used by buttons/inputs/cards.
  */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #f7f6f3;
+  --foreground: #1b1d22;
+  --card: #ffffff;
+  --card-foreground: #1b1d22;
+  --popover: #ffffff;
+  --popover-foreground: #1b1d22;
+  --primary: #4c4ddc;
+  --primary-foreground: #ffffff;
+  --secondary: #eeece6;
+  --secondary-foreground: #1b1d22;
+  --muted: #eeece6;
+  --muted-foreground: #6b6d76;
+  --accent: #eeece6;
+  --accent-foreground: #1b1d22;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: #e4e2dc;
+  --input: #e4e2dc;
+  --ring: #4c4ddc;
   --radius: 0.5rem;
+  --radius-bubble: 1.125rem;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', monospace;
+
+  /* Contact vs. group — distinct accents so the sidebar reads at a glance. */
+  --accent-contact: #4c4ddc;
+  --accent-group: #e8663d;
+
+  /* Message bubbles. */
+  --bubble-outbound-bg: #4c4ddc;
+  --bubble-outbound-fg: #ffffff;
+  --bubble-inbound-bg: #eeeef2;
+  --bubble-inbound-fg: #1b1d22;
+  --bubble-inbound-border: #e0dfe8;
+
+  /* JournalNotice (system_summary) — a quiet "decision record" card, not a
+     bubble, so it visibly reads as an artifact rather than a live reply. */
+  --notice-journal-bg: #f3e9d6;
+  --notice-journal-fg: #5b4a22;
+  --notice-journal-border: #d9c79a;
+  --notice-journal-rail: #a9762f;
+
+  /* RoutineRunNotice — cool/calm, "ran while you were away." */
+  --notice-routine-bg: #dceeec;
+  --notice-routine-fg: #1f4744;
+  --notice-routine-border: #b7dad6;
+  --notice-routine-rail: #0f766e;
+
+  /* user_mention in a Group thread. */
+  --notice-mention-bg: #edeafb;
+  --notice-mention-fg: #34306b;
+  --notice-mention-border: #d6d0f5;
+  --notice-mention-rail: #4c4ddc;
+
+  /* MessageBubble error variant (rate limit / sandbox denial / network). */
+  --status-error-bg: #fdecec;
+  --status-error-fg: #7a2222;
+  --status-error-border: #f3c6c6;
+
+  /* StreamingIndicator — Claude can't show live tool progress (quiet,
+     contemplative amber pulse); Codex streams live tool status (an active,
+     "signal LED" cyan). Distinct hues so the backend is obvious at a glance. */
+  --status-streaming-accent-claude: #d97706;
+  --status-streaming-accent-codex: #14b8ac;
 }
 
+.dark {
+  --background: #15161a;
+  --foreground: #ededf0;
+  --card: #1e2027;
+  --card-foreground: #ededf0;
+  --popover: #1e2027;
+  --popover-foreground: #ededf0;
+  --primary: #7c7ff0;
+  --primary-foreground: #12131a;
+  --secondary: #23252c;
+  --secondary-foreground: #ededf0;
+  --muted: #23252c;
+  --muted-foreground: #9a9ca6;
+  --accent: #23252c;
+  --accent-foreground: #ededf0;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: #2b2d35;
+  --input: #2b2d35;
+  --ring: #7c7ff0;
+
+  --accent-contact: #7c7ff0;
+  --accent-group: #f0805a;
+
+  --bubble-outbound-bg: #5b5ce8;
+  --bubble-outbound-fg: #ffffff;
+  --bubble-inbound-bg: #23252c;
+  --bubble-inbound-fg: #ededf0;
+  --bubble-inbound-border: #2f313a;
+
+  --notice-journal-bg: #2a2416;
+  --notice-journal-fg: #e8d9ae;
+  --notice-journal-border: #4a3f24;
+  --notice-journal-rail: #c99a4a;
+
+  --notice-routine-bg: #16292a;
+  --notice-routine-fg: #a9dad6;
+  --notice-routine-border: #244745;
+  --notice-routine-rail: #2dd4c4;
+
+  --notice-mention-bg: #211e3a;
+  --notice-mention-fg: #c9c4f5;
+  --notice-mention-border: #35316b;
+  --notice-mention-rail: #7c7ff0;
+
+  --status-error-bg: #331515;
+  --status-error-fg: #f2b8b8;
+  --status-error-border: #5c2323;
+
+  --status-streaming-accent-claude: #f59e0b;
+  --status-streaming-accent-codex: #22d3c7;
+}
+
+/* Falls back to OS preference until useThemeSync applies a .dark/.light
+   class on <html> — see src/renderer/src/hooks/useThemeSync.ts. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+  :root:not(.light):not(.dark) {
+    --background: #15161a;
+    --foreground: #ededf0;
+    --card: #1e2027;
+    --card-foreground: #ededf0;
+    --popover: #1e2027;
+    --popover-foreground: #ededf0;
+    --primary: #7c7ff0;
+    --primary-foreground: #12131a;
+    --secondary: #23252c;
+    --secondary-foreground: #ededf0;
+    --muted: #23252c;
+    --muted-foreground: #9a9ca6;
+    --accent: #23252c;
+    --accent-foreground: #ededf0;
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --border: #2b2d35;
+    --input: #2b2d35;
+    --ring: #7c7ff0;
+    --accent-contact: #7c7ff0;
+    --accent-group: #f0805a;
+    --bubble-outbound-bg: #5b5ce8;
+    --bubble-outbound-fg: #ffffff;
+    --bubble-inbound-bg: #23252c;
+    --bubble-inbound-fg: #ededf0;
+    --bubble-inbound-border: #2f313a;
+    --notice-journal-bg: #2a2416;
+    --notice-journal-fg: #e8d9ae;
+    --notice-journal-border: #4a3f24;
+    --notice-journal-rail: #c99a4a;
+    --notice-routine-bg: #16292a;
+    --notice-routine-fg: #a9dad6;
+    --notice-routine-border: #244745;
+    --notice-routine-rail: #2dd4c4;
+    --notice-mention-bg: #211e3a;
+    --notice-mention-fg: #c9c4f5;
+    --notice-mention-border: #35316b;
+    --notice-mention-rail: #7c7ff0;
+    --status-error-bg: #331515;
+    --status-error-fg: #f2b8b8;
+    --status-error-border: #5c2323;
+    --status-streaming-accent-claude: #f59e0b;
+    --status-streaming-accent-codex: #22d3c7;
   }
 }
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -73,9 +218,45 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-bubble: var(--radius-bubble);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --color-accent-contact: var(--accent-contact);
+  --color-accent-group: var(--accent-group);
+
+  --color-bubble-outbound: var(--bubble-outbound-bg);
+  --color-bubble-outbound-fg: var(--bubble-outbound-fg);
+  --color-bubble-inbound: var(--bubble-inbound-bg);
+  --color-bubble-inbound-fg: var(--bubble-inbound-fg);
+  --color-bubble-inbound-border: var(--bubble-inbound-border);
+
+  --color-notice-journal: var(--notice-journal-bg);
+  --color-notice-journal-fg: var(--notice-journal-fg);
+  --color-notice-journal-border: var(--notice-journal-border);
+  --color-notice-journal-rail: var(--notice-journal-rail);
+
+  --color-notice-routine: var(--notice-routine-bg);
+  --color-notice-routine-fg: var(--notice-routine-fg);
+  --color-notice-routine-border: var(--notice-routine-border);
+  --color-notice-routine-rail: var(--notice-routine-rail);
+
+  --color-notice-mention: var(--notice-mention-bg);
+  --color-notice-mention-fg: var(--notice-mention-fg);
+  --color-notice-mention-border: var(--notice-mention-border);
+  --color-notice-mention-rail: var(--notice-mention-rail);
+
+  --color-status-error: var(--status-error-bg);
+  --color-status-error-fg: var(--status-error-fg);
+  --color-status-error-border: var(--status-error-border);
+
+  --color-status-streaming-claude: var(--status-streaming-accent-claude);
+  --color-status-streaming-codex: var(--status-streaming-accent-codex);
 }
 
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
+  font-family: var(--font-sans);
 }
