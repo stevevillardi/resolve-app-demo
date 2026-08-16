@@ -39,5 +39,28 @@ export default defineConfig(
       'react-refresh/only-export-components': 'off'
     }
   },
+  {
+    // Process-boundary rule (blueprint §2): the renderer never touches the
+    // filesystem, SQLite, the SDKs, or the scheduler directly — only main
+    // does, reached exclusively through the IPC layer (src/shared/ipc-contract.ts).
+    files: ['src/renderer/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              // Matches a path SEGMENT exactly named "main" (e.g. ../../main/db,
+              // ../../main), not any path merely containing the substring "main"
+              // (e.g. ./assets/main.css) — those must stay importable.
+              group: ['**/main', '**/main/*', '**/main/**'],
+              message:
+                'Renderer must not import from src/main — go through the IPC layer (src/shared/ipc-contract.ts).'
+            }
+          ]
+        }
+      ]
+    }
+  },
   eslintConfigPrettier
 )
