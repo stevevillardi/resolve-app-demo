@@ -20,8 +20,26 @@ import type { GroupMessage, PersonaBackend, PersonaTemplate, Skill } from '../..
  */
 export interface SessionSpec {
   persona: PersonaTemplate
-  /** Absolute path to the repo the session works in. Becomes the cwd. */
+  /**
+   * Absolute path to the directory the session works in. Becomes the cwd.
+   *
+   * Named for the repo because that is what it was until Phase 12; since then it
+   * is the *working* path, which for an isolated Contact is its worktree rather
+   * than the repo itself. Everything downstream — the cwd, the write boundary,
+   * isInsideRepo()'s fence — wants the working path, so the name is the only
+   * thing that stayed behind.
+   */
   repoPath: string
+  /**
+   * Directories outside `repoPath` that a writing session must still be able to
+   * write to. Empty unless the session runs in a `git worktree`.
+   *
+   * A worktree's `.git` is a file pointing back into the main repo, so a commit
+   * writes outside the working directory and a sandbox fenced to the cwd fails
+   * at `git add`. Resolved by the caller with gitWritePathsFor(), for the same
+   * reason `skills` is: it means running git, and nothing here may.
+   */
+  writablePaths?: string[]
   /** Already resolved from persona.skillIds by the caller (blueprint §5). */
   skills: Skill[]
   /**

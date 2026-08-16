@@ -20,8 +20,10 @@ import {
 import { skillsForPersona } from './skills'
 import type { TurnOrigin, TurnOutcome } from './turn-origin'
 import { baselineFor, recordUsage } from './usage-events'
+import { ensureWorktree } from './worktrees'
+import type { SessionSpec } from '../adapters/types'
 import type { AgentEvent } from '../../shared/agent'
-import type { GroupMessage, PersistedMessage } from '../../shared/domain'
+import type { Contact, GroupMessage, PersistedMessage } from '../../shared/domain'
 
 /**
  * Sending a message to a Contact and streaming the reply back (blueprint §16
@@ -315,7 +317,7 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
 
     // Deliberately not awaited — this is the point where the call becomes a
     // stream. Errors cannot escape runTurn(), so there is no catch on it.
-    void runTurn(runId, adapter, session, content)
+    void runTurn(runId, adapter, session, content, contact, spec)
     emitRunsChanged()
 
     return { runId, userMessage, groupMessage, completed }
@@ -334,7 +336,9 @@ async function runTurn(
   runId: string,
   adapter: Adapter,
   session: Session,
-  prompt: string
+  prompt: string,
+  contact: Contact,
+  spec: SessionSpec
 ): Promise<void> {
   const run = runs.get(runId)
   if (!run) return
@@ -352,6 +356,12 @@ async function runTurn(
   let failure: string | null = null
 
   try {
+    // The first thing the turn does, because it decides where the turn runs.
+    // Creating the worktree is deferred to here rather than done at bind time so
+    // an unused Contact costs no checkout — and it cannot happen any earlier
+    // than this, because startTurn() is synchronous and git is not.
+    spec.writablePaths = await ensureWorktree(contact)
+
     for await (const event of adapter.run(session, prompt, run.controller.signal)) {
       if (event.type === 'error') failure = event.message
       if (event.type === 'done') {

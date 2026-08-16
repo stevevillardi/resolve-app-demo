@@ -188,10 +188,17 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
       config: { developer_instructions: composeInstructions(spec) }
     })
 
+    // `additionalDirectories` becomes `--add-dir` on the CLI: writable roots
+    // alongside the workspace. A worktree session needs them because its `.git`
+    // is a file pointing back into the main repo, so a commit writes outside
+    // workingDirectory. Only meaningful at workspace-write — read-only grants no
+    // writes at all, and danger-full-access needs no grant.
+    const writablePaths = spec.writablePaths ?? []
     const threadOptions = {
       model,
       sandboxMode: codexSandboxMode(spec.persona.sandbox),
-      workingDirectory: spec.repoPath
+      workingDirectory: spec.repoPath,
+      ...(writablePaths.length > 0 ? { additionalDirectories: writablePaths } : {})
     }
 
     const thread = agentSession.sessionId

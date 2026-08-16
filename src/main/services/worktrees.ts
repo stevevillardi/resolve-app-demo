@@ -1,6 +1,8 @@
 import { app } from 'electron'
+import { existsSync } from 'fs'
 import { join } from 'path'
-import type { Isolation, SandboxLevel } from '../../shared/domain'
+import { gitWritePathsFor, worktreeAdd } from './git'
+import type { Contact, Isolation, SandboxLevel } from '../../shared/domain'
 
 /**
  * Where each Contact works, and what its branch is called.
@@ -71,6 +73,34 @@ export function defaultIsolation(sandbox: SandboxLevel): Isolation {
 /** Null reads as `shared` — that is what every pre-0007 row means. */
 export function isolationOf(isolation: Isolation | null): Isolation {
   return isolation ?? 'shared'
+}
+
+/**
+ * Creates the Contact's worktree if it does not exist yet, and returns the
+ * directories its session must be able to write to outside its own.
+ *
+ * Called on every turn rather than at bind time, so a Contact that is created
+ * and never used costs no checkout. It is cheap when there is nothing to do:
+ * one `existsSync` for a Contact in the main tree.
+ *
+ * Failure is deliberately loud. The alternative — quietly running in the main
+ * tree when the worktree could not be made — would take a Contact the user
+ * isolated on purpose and put it back in the directory they were protecting,
+ * without the run lock knowing, because the lock key was decided from the row.
+ */
+export async function ensureWorktree(contact: Contact): Promise<string[]> {
+  const { repoPath, worktreePath, branch } = contact
+  if (isolationOf(contact.isolation) !== 'worktree') return []
+  if (!worktreePath || !branch) return []
+
+  // The marker is `.git` rather than the directory: a worktree is only usable
+  // if git still knows about it, and an empty directory left behind by a failed
+  // attempt would otherwise read as ready.
+  if (!existsSync(join(worktreePath, '.git'))) {
+    await worktreeAdd(repoPath, worktreePath, branch)
+  }
+
+  return gitWritePathsFor(worktreePath)
 }
 
 /**

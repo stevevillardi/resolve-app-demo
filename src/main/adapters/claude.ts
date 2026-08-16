@@ -176,7 +176,8 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
     const sandbox = claudeSandboxOptions(
       spec.persona.sandbox,
       spec.repoPath,
-      config.denyReadPaths ?? []
+      config.denyReadPaths ?? [],
+      spec.writablePaths ?? []
     )
     const abort = signal ? abortControllerFor(signal) : null
 
