@@ -1,6 +1,6 @@
 # Phase 10 — Usage & Cost Dashboard
 
-**Status:** Not started
+**Status:** Done — all six acceptance checks verified, the live pass outstanding (see "Left for the live pass")
 **Blueprint refs:** §4 (UsageEvent), §10 (UsageBadge/UsageDashboard), §14 (open items #2, #3)
 
 ## Goal
@@ -37,9 +37,102 @@ Surface the `usage_events` data (already being written since Phase 6/8) as real,
 
 ## Acceptance checks
 
-- [ ] `UsageBadge` on a Contact updates immediately after a turn completes (message or routine).
-- [ ] `UsageDashboard` correctly aggregates across both backends — a Contact using Claude and one using Codex both roll up into the same spend-over-time view with comparable numbers.
-- [ ] Filtering by `source: routine` isolates unsupervised spend specifically.
-- [ ] Codex cost figures spot-checked by hand against raw token counts for at least 2-3 real sessions, discrepancy explained or fixed.
-- [ ] A Contact whose history spans two models attributes each turn's spend to the model that actually ran, not to the persona's current setting.
-- [ ] A total containing an unpriced turn is visibly partial rather than silently short.
+- [x] `UsageBadge` on a Contact updates immediately after a turn completes (message or routine). **The routine half was broken and is the defect this phase found** — see below. Mechanism unit-tested (`usage-events.test.ts`, `messaging.test.ts`); the on-screen confirmation is the one thing left for the live pass.
+- [x] `UsageDashboard` correctly aggregates across both backends — verified in `e2e/usage.spec.ts` with an `sdk`-priced Claude contact and a `computed`-priced Codex contact rolling into one view.
+- [x] Filtering by `source: routine` isolates unsupervised spend specifically (unit + E2E).
+- [x] Codex cost figures spot-checked by hand against raw token counts for three real sessions — exact to 6dp, table below.
+- [x] A Contact whose history spans two models attributes each turn's spend to the model that actually ran (unit + E2E: one contact, `gpt-5.5` and `gpt-5.4-mini`, split correctly).
+- [x] A total containing an unpriced turn is visibly partial rather than silently short — `$12.34+`. Proven non-vacuous by mutation.
+
+## What was built
+
+The phase doc assumed more construction than was needed and less correction. `UsageBadge` was
+already on real data (Phase 6 wired it into `ThreadView` and `ConversationList`); what was still
+mock-fed was `UsageDashboard` and `UsageScopeList`. And the premise underneath all three had gone
+stale.
+
+**The false claim.** Six places asserted that Codex reports tokens but no dollar figure — including
+two pieces of user-visible copy, one of which named the personas it applied to. Phase 5 built
+`src/main/adapters/pricing.ts` and `codex.ts:144` has computed a real Codex cost on every turn
+since. Worse, `src/renderer/src/mocks/usageEvents.ts` _manufactured_ the evidence: every Codex
+fixture row was seeded `costUsd: null`, so the dashboard was narrating a story the fixtures had
+been written to tell. `costUsd === null` now means one thing — the model has no row in
+`CODEX_PRICES` — and it can happen on either backend.
+
+**The real defect.** `aggregateUsage` skipped null-cost events and returned a plain number, so a
+mixed set rendered a confident `$12.34` that was short by whatever the unpriced turns cost.
+`formatCost` had been written carefully to print `—` for a single unknown; the aggregate discarded
+that care as soon as there was more than one event. `UsageSummary` now carries priced/unpriced
+counts and `formatCostSummary` renders `$12.34+`. Note `ConversationListItem` formatted the cost
+itself rather than going through `UsageBadge`, so it was a second silently-partial total that
+fixing the badge alone would have left behind.
+
+**Architecture.** All arithmetic lives in `src/renderer/src/lib/usage-report.ts` as pure functions;
+the components pick filters and render. Not tidiness — the Vitest renderer project matches
+`*.test.ts` only and `@testing-library` is not installed, so anything computed inside a `.tsx` is
+untestable by construction. Four breakdowns run off one `groupUsage` and four selectors.
+
+**No IPC change.** `usage.list`, `contacts.list` and `personas.list` already existed and the rollup
+happens in the renderer, which is what let this phase run alongside Phase 9 without touching
+`ipc-contract.ts` or `ThreadView.tsx`.
+
+## The defect this phase found: unattended spend went unnoticed
+
+Not in the original scope, and it defeated acceptance check #1 outright.
+
+Usage was invalidated from `useAgentStream` on `done`, which only reaches a component subscribed to
+that specific `runId`, and only while that thread is mounted. A scheduled routine satisfies
+neither — so watching the dashboard while a routine spent money showed a stale total indefinitely.
+
+`runs-changed` looks like the obvious signal and is the wrong one: `messaging.ts` fires
+`emitRunsChanged()` in its `finally` at :467 and only _then_ calls `summarizeTurn`, which records
+the summary turn's usage from `compaction.ts`. A runs-based refetch would therefore arrive before
+the row it was meant to collect, and coordination spend would lag a turn behind forever.
+
+Resolved with a `usage-changed` push emitted from `recordUsage` itself — the one point all four
+sources pass through — after the insert, so it cannot race the row it announces. Subscribed inside
+`useUsageEvents` rather than in a component, so every consumer is covered by construction.
+
+## Codex cost, spot-checked by hand
+
+Three real rows from the dev profile, all `gpt-5.5` / `cost_source: 'computed'`, against
+`CODEX_PRICES['gpt-5.5']` (input 5.0 / cached 0.5 / output 30.0 per 1M):
+
+| row        | input | cached | output | uncached×5 | cached×0.5 | output×30 | computed     | stored      |
+| ---------- | ----- | ------ | ------ | ---------- | ---------- | --------- | ------------ | ----------- |
+| `d940fddd` | 60709 | 47616  | 374    | 0.065465   | 0.023808   | 0.011220  | **0.100493** | 0.100493 ✅ |
+| `22078d46` | 45417 | 33920  | 364    | 0.057485   | 0.016960   | 0.010920  | **0.085365** | 0.085365 ✅ |
+| `c465f9dd` | 12431 | 8576   | 45     | 0.019275   | 0.004288   | 0.001350  | **0.024913** | 0.024913 ✅ |
+
+Exact on all three. This also confirms the right price row is selected for the model that actually
+ran rather than a hardcoded default, and that cached tokens are subtracted from input rather than
+billed twice. `LAST_VERIFIED = '2026-08-16'` re-checked and current as of this phase.
+
+## Known gaps, deliberately left
+
+- **The 272K-context tier under-reports, and the `+` does not warn about it.** `pricing.ts` has no
+  context dimension, so a long `gpt-5.5`/`gpt-5.4` session is priced at the sub-272K tier. Those
+  rows _have_ a price — just the wrong one — so they render as fact rather than as a floor. All
+  three rows above are far under the threshold, which makes this untested rather than disproven.
+- **`contacts.delete` cascades its usage rows away** (`schema.ts:194`). Deleting a Contact silently
+  shrinks every historical total that included it — the same class of dishonesty this phase set out
+  to fix. Not fixable in scope: it needs `ON DELETE SET NULL` plus persona/repo denormalised onto
+  `usage_events`, and a migration.
+- **`usage.list` is unbounded** and the renderer pulls every event. Fine at hundreds, a problem long
+  before it is a correctness issue. The fix is a server-side aggregate procedure, which would mean
+  editing `ipc-contract.ts` — deliberately avoided while Phase 9 owned that file.
+- **`sdk` vs `computed` is not surfaced**, by the user's decision (2026-08-16), overriding scope
+  item 3's "label estimates honestly". The column is still recorded per row, so the distinction is
+  available whenever it is wanted.
+
+## Left for the live pass
+
+Everything above is unit- or E2E-verified. What no test can cover, because the suite deliberately
+never starts a paid turn:
+
+- Send a turn on a Claude Contact and one on a Codex Contact and confirm the badge moves
+  immediately and both roll into one comparable view with real figures.
+- Fire a routine with the **dashboard** open (not the routine's thread) and confirm the total moves
+  — that is the `usage-changed` channel's whole reason to exist, and the check most likely to
+  regress.
+- Both themes, since three of the five palette slots sit under 3:1 on the light surface.
