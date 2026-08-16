@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, Play, Trash2 } from 'lucide-react'
+import { Check, Clock, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -77,7 +77,7 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
           <>
             <Button
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               aria-label="Delete routine"
               onClick={() => setConfirmingDelete(true)}
             >
@@ -95,10 +95,12 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
             </Button>
             <Button
               size="sm"
+              className="gap-1.5"
               disabled={saving || Boolean(cronError)}
               onClick={() => save({ id: routine.id, contactId, schedule, prompt, enabled })}
             >
-              Save
+              <Check className="size-3.5" />
+              {saving ? 'Saving…' : 'Save'}
             </Button>
           </>
         }

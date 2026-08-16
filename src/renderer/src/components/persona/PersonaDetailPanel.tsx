@@ -130,7 +130,13 @@ function PersonaForm({
             >
               <Trash2 className="size-3.5" />
             </Button>
-            <Button size="sm" disabled={!dirty || saving} onClick={() => save(edited)}>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              disabled={!dirty || saving}
+              onClick={() => save(edited)}
+            >
+              <Check className="size-3.5" />
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </>

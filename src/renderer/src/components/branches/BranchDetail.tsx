@@ -5,11 +5,16 @@ import {
   ExternalLink,
   GitBranch,
   GitMerge,
-  GitPullRequest
+  GitPullRequest,
+  Trash2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { EmptyPane } from '@/components/common/EmptyPane'
+import { ListRow } from '@/components/common/ListRow'
+import { PaneBody } from '@/components/common/PaneBody'
+import { PaneHeader } from '@/components/common/PaneHeader'
+import { Section } from '@/components/common/Section'
 import {
   useBranches,
   useDiscardBranch,
@@ -20,7 +25,6 @@ import {
 import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests'
 import { openExternal } from '@/hooks/useAuth'
 import { repoName } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { useUiStore } from '@/store/useUiStore'
 
 /**
@@ -90,71 +94,135 @@ function BranchDetailBody({
   const blocked = Boolean(target?.dirty) || preview.data?.clean === false
 
   return (
-    <div className="bg-background flex h-full flex-col">
-      <div className="drag-region h-12 shrink-0" />
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto flex max-w-2xl flex-col gap-5 p-5">
-          <header className="flex flex-col gap-1">
-            <h1 className="font-mono text-base">{branch.branch}</h1>
-            <p className="text-muted-foreground text-xs">
-              {repoName(branch.repoPath)} · {branch.contactName ?? 'no contact'} ·{' '}
-              {branch.headSha.slice(0, 7)}
-              {!branch.hasWorktree && ' · checkout removed'}
-            </p>
-          </header>
+    <div className="bg-background flex h-full min-h-0 flex-col">
+      {/*
+        The branch name is machine text and PaneHeader's title is sans-serif, so
+        the repo takes the title and the branch takes the mono subtitle — the
+        same split ThreadView uses for persona name and repo path. That is why
+        this needs no `titleMono` prop.
 
-          <section className="flex flex-col gap-2">
-            <h2 className="text-muted-foreground text-meta font-medium tracking-wide uppercase">
-              {branch.files.length === 1
-                ? '1 file changed'
-                : `${branch.files.length} files changed`}
-            </h2>
-            {branch.files.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                Nothing this branch has that your checkout doesn&apos;t.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-0.5">
-                {branch.files.map((file) => (
-                  <li key={file} className="text-foreground/85 font-mono text-xs">
-                    {file}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className="flex flex-col gap-2">
-            <h2 className="text-muted-foreground text-meta font-medium tracking-wide uppercase">
-              Merge into
-            </h2>
-            <div className="flex flex-col gap-1.5">
-              {targets.map((candidate) => (
-                <button
-                  key={candidate.path}
-                  type="button"
-                  onClick={() => setTargetPath(candidate.path)}
-                  className={cn(
-                    'border-border focus-visible:ring-ring/50 flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left outline-none focus-visible:ring-2',
-                    targetPath === candidate.path ? 'bg-accent' : 'hover:bg-accent/50'
-                  )}
+        The contact name is not repeated here: it already contains the repo
+        (`Refactor Buddy · checkout-service`), so the old header read
+        "checkout-service · Refactor Buddy · checkout-service · 88c574d".
+      */}
+      <PaneHeader
+        leading={<GitBranch className="text-muted-foreground size-4 shrink-0" />}
+        title={repoName(branch.repoPath)}
+        subtitle={branch.branch}
+        actions={
+          <>
+            {/* Merging takes the work into somebody's checkout; a pull request
+                sends it out for review instead. Both are the human's call, which
+                is why they sit side by side. Hidden entirely for a read_only
+                persona and for a branch whose Contact is gone. */}
+            {branch.githubScope !== 'read_only' && prState?.available && branch.contactId && (
+              <>
+                {prState.pr && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1"
+                    onClick={() => openExternal((prState.pr as { url: string }).url)}
+                  >
+                    #{prState.pr.number}
+                    <ExternalLink className="size-3.5" />
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={opening}
+                  onClick={() => {
+                    resetPr()
+                    openPr(branch.contactId as string)
+                  }}
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{candidate.label}</span>
-                    {candidate.dirty && (
-                      <span className="text-muted-foreground block text-xs">
-                        Has uncommitted changes — commit or discard them first.
-                      </span>
-                    )}
-                  </span>
-                  {targetPath === candidate.path && <Check className="size-4 shrink-0" />}
-                </button>
+                  <GitPullRequest className="size-3.5" />
+                  {opening ? 'Pushing…' : prState.pr ? 'Update PR' : 'Open PR'}
+                </Button>
+              </>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Discard branch"
+              disabled={discarding}
+              onClick={() => setConfirmingDiscard(true)}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              disabled={!targetPath || blocked || merging}
+              onClick={() => targetPath && merge({ targetPath, branch: branch.branch })}
+            >
+              <GitMerge className="size-3.5" />
+              {merging ? 'Merging…' : 'Merge'}
+            </Button>
+          </>
+        }
+      />
+
+      <PaneBody>
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs">
+          <span>{branch.contactName ?? 'No contact'}</span>
+          <span aria-hidden>·</span>
+          <span className="font-mono">{branch.headSha.slice(0, 7)}</span>
+          {!branch.hasWorktree && (
+            <>
+              <span aria-hidden>·</span>
+              <span>checkout removed</span>
+            </>
+          )}
+        </div>
+
+        <Section
+          title={
+            branch.files.length === 1 ? '1 file changed' : `${branch.files.length} files changed`
+          }
+        >
+          {branch.files.length === 0 ? (
+            <p className="text-muted-foreground text-xs">
+              Nothing this branch has that your checkout doesn&apos;t.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {branch.files.map((file) => (
+                <li key={file} className="text-foreground/85 font-mono text-xs">
+                  {file}
+                </li>
               ))}
-            </div>
-          </section>
+            </ul>
+          )}
+        </Section>
+
+        <Section title="Merge into" description="Where this branch's commits should land.">
+          <div className="flex flex-col gap-1.5">
+            {targets.map((candidate) => (
+              <ListRow
+                key={candidate.path}
+                active={targetPath === candidate.path}
+                onSelect={() => setTargetPath(candidate.path)}
+                align="center"
+                bordered
+                trailing={
+                  targetPath === candidate.path ? <Check className="size-4 shrink-0" /> : undefined
+                }
+              >
+                <span className="block truncate text-sm">{candidate.label}</span>
+                {candidate.dirty && (
+                  <span className="text-muted-foreground block text-xs">
+                    Has uncommitted changes — commit or discard them first.
+                  </span>
+                )}
+              </ListRow>
+            ))}
+          </div>
 
           {targetPath && (
-            <section className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2">
               {preview.isFetching && (
                 <p className="text-muted-foreground text-xs">Checking for conflicts…</p>
               )}
@@ -183,78 +251,49 @@ function BranchDetailBody({
                   </p>
                 </div>
               )}
-            </section>
+            </div>
           )}
+        </Section>
 
-          {(mergeError ?? discardError ?? prError) && (
-            <p className="text-destructive text-xs">{mergeError ?? discardError ?? prError}</p>
-          )}
+        {(mergeError ?? discardError ?? prError) && (
+          <p className="text-destructive text-xs">{mergeError ?? discardError ?? prError}</p>
+        )}
+      </PaneBody>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              disabled={!targetPath || blocked || merging}
-              onClick={() => targetPath && merge({ targetPath, branch: branch.branch })}
-            >
-              <GitMerge className="size-4" />
-              {merging ? 'Merging…' : 'Merge'}
-            </Button>
-            {/* Merging takes the work into somebody's checkout; a pull request
-                sends it out for review instead. Both are the human's call, which
-                is why they sit side by side. Hidden entirely for a read_only
-                persona and for a branch whose Contact is gone. */}
-            {branch.githubScope !== 'read_only' && prState?.available && branch.contactId && (
-              <>
-                <Button
-                  variant="outline"
-                  disabled={opening}
-                  onClick={() => {
-                    resetPr()
-                    openPr(branch.contactId as string)
-                  }}
-                >
-                  <GitPullRequest className="size-4" />
-                  {opening ? 'Pushing…' : prState.pr ? 'Update PR' : 'Open PR'}
-                </Button>
-                {prState.pr && (
-                  <Button
-                    variant="ghost"
-                    className="gap-1"
-                    onClick={() => openExternal((prState.pr as { url: string }).url)}
-                  >
-                    #{prState.pr.number}
-                    <ExternalLink className="size-3.5" />
-                  </Button>
-                )}
-              </>
-            )}
-            {confirmingDiscard ? (
-              <>
-                <Button
-                  variant="destructive"
-                  disabled={discarding}
-                  onClick={() =>
-                    discard({ repoPath: branch.repoPath, branch: branch.branch, force: true }, () =>
-                      setSelected(null)
-                    )
-                  }
-                >
-                  {discarding ? 'Discarding…' : 'Discard permanently'}
-                </Button>
-                <Button variant="ghost" onClick={() => setConfirmingDiscard(false)}>
-                  Cancel
-                </Button>
-                <span className="text-muted-foreground text-xs">
-                  This deletes the branch and every commit only it has.
-                </span>
-              </>
-            ) : (
-              <Button variant="outline" onClick={() => setConfirmingDiscard(true)}>
-                Discard
-              </Button>
-            )}
-          </div>
-        </div>
-      </ScrollArea>
+      {/* The same dialog every other destructive action in the app goes
+          through. This used to be a pair of buttons that appeared in place,
+          which made discarding a branch — the one irreversible action here —
+          the most casual-looking of the three. */}
+      <ConfirmDeleteDialog
+        open={confirmingDiscard}
+        onOpenChange={setConfirmingDiscard}
+        title={`Discard ${branch.branch}?`}
+        description="The branch and its checkout go. Anything committed only here goes with them."
+        consequence={
+          branch.files.length > 0 ? (
+            <>
+              <p className="mb-1 font-medium">
+                {branch.files.length === 1
+                  ? '1 file would be lost:'
+                  : `${branch.files.length} files would be lost:`}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {branch.files.map((file) => (
+                  <li key={file} className="truncate font-mono">
+                    {file}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : undefined
+        }
+        confirmLabel={discarding ? 'Discarding…' : 'Discard permanently'}
+        onConfirm={() =>
+          discard({ repoPath: branch.repoPath, branch: branch.branch, force: true }, () =>
+            setSelected(null)
+          )
+        }
+      />
     </div>
   )
 }

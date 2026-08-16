@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, Trash2 } from 'lucide-react'
+import { BookOpen, Check, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -59,9 +59,11 @@ function SkillForm({
             </Button>
             <Button
               size="sm"
+              className="gap-1.5"
               disabled={!dirty || saving}
               onClick={() => save({ ...skill, name, description, content })}
             >
+              <Check className="size-3.5" />
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </>

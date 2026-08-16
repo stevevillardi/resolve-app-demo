@@ -131,6 +131,24 @@ async function sweep(page: Page, app: ElectronApplication, profileName: string):
       await new Promise((resolve) => setTimeout(resolve, 300))
       await shoot(page, `${stem}-new-contact`)
       await page.keyboard.press('Escape')
+
+      // The destructive confirm, reached through the skill editor because it is
+      // the one section that always has rows (five ship as seed data) and its
+      // delete needs no worktree. It is the surface most in need of looking at
+      // and the sweep was missing it entirely.
+      await goTo(page, 'Skills')
+      const skillRows = page.locator('[data-slot="list-body"] button')
+      if ((await skillRows.count()) > 0) {
+        await skillRows.first().click()
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        const remove = page.getByRole('button', { name: 'Delete skill' })
+        if (await remove.isVisible().catch(() => false)) {
+          await remove.click()
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          await shoot(page, `${stem}-confirm-delete`)
+          await page.keyboard.press('Escape')
+        }
+      }
     }
   }
 }
