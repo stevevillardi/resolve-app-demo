@@ -51,6 +51,25 @@ Neither is about *using* these credentials yet (no adapters, no repo picker call
 - [x] No token/key is ever written to SQLite or logs in plaintext. *(`app_state` holds only `onboarding_completed`; no token-shaped strings anywhere under userData or in console output; `safeStorage` round-trip confirmed `v10`-prefixed ciphertext at mode `0600` that does not contain its plaintext.)*
 - [x] `auth.getStatus` reflects backend states independently. *(Claude + Codex authenticated while GitHub disconnected rendered correctly; the sidebar dot read `data-connected=false` in the same pass.)*
 
+## Tests
+
+Added 2026-08-16, alongside a retroactive pass over Phases 1–2 — see the testing decision in `00-progress.md`.
+
+| Area | File | Covers |
+|---|---|---|
+| Encryption boundary | `src/main/services/secrets.test.ts` | round trip, `0600` mode, plaintext never on disk, refusal when no keychain, recovery from foreign ciphertext |
+| App state | `src/main/services/app-state.test.ts` | real in-memory SQLite, upsert, flag semantics |
+| GitHub device flow | `src/main/services/github-auth.test.ts` | transitions, generation guard against late resolves from a cancelled flow, error translation, disconnect |
+| Codex | `src/main/services/codex-auth.test.ts` | device-code parsing against captured real CLI output, chunk merging, `login status` mapping, key on stdin not argv |
+| Claude | `src/main/services/claude-auth.test.ts` | `AccountInfo` mapping, session teardown, caching, `process.env` spread |
+| Aggregation | `src/main/services/auth-status.test.ts` | all eight connected/disconnected combinations |
+| IPC boundary | `src/main/ipc/registerProcedure.test.ts`, `src/shared/ipc-contract.test.ts` | dispatch, unknown procedure, input/output validation, schema shape |
+| Launch flow | `e2e/launch.spec.ts` | real app: splash → onboarding → shell, migrations, relaunch persistence, allowlist enforcement |
+
+`applyDeviceAuthOutput` was extracted from the spawn handler in `codex-auth.ts` so the parsing is testable without launching a 220MB binary.
+
+Two constraints worth knowing: E2E redirects `HOME`/`CODEX_HOME` at a throwaway profile, but Claude Code's login is in the macOS Keychain and **cannot** be isolated that way, so E2E asserts the shape of `claude` rather than that it's signed out. And the collapsed nav rail's buttons have no accessible name (labels are `display:none`), so use `waitForShell` rather than role/name queries.
+
 ## Resolved: blueprint §15A is wrong about Codex
 
 §15A says Codex's SDK handles login itself, "with its own device-code browser login if none exists." Verified against `@openai/codex-sdk@0.147.0`: the SDK exports only `Codex`, `Thread`, and `CodexOptions { codexPathOverride, baseUrl, apiKey, config, env }` — **no login or auth API of any kind**. That behaviour belongs to the `codex` CLI, which the SDK vendors as a dependency.

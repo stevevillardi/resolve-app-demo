@@ -122,6 +122,35 @@ const ANSI = /\[[0-9;]*m/g
 const URL_PATTERN = /https?:\/\/\S+/
 const CODE_PATTERN = /\b[A-Z0-9]{4}-[A-Z0-9]{4,6}\b/
 
+/**
+ * Folds a chunk of `codex login --device-auth` output into the flow state.
+ *
+ * Split out from the spawn handler so it can be tested against real captured
+ * CLI output without launching a 220MB binary. Chunks arrive split at
+ * arbitrary boundaries and the URL and code are on separate lines, so each
+ * field falls back to whatever the previous chunk already established.
+ *
+ * Returns `null` when the chunk carries neither field, so the caller can leave
+ * state untouched rather than clobbering it with a half-empty object.
+ */
+export function applyDeviceAuthOutput(
+  chunk: string,
+  previous: DeviceFlowState,
+  now: number
+): DeviceFlowState | null {
+  const text = chunk.replace(ANSI, '')
+  const url = text.match(URL_PATTERN)?.[0]
+  const code = text.match(CODE_PATTERN)?.[0]
+  if (!url && !code) return null
+
+  return {
+    status: 'awaiting_authorization',
+    verificationUri: url ?? previous.verificationUri,
+    userCode: code ?? previous.userCode,
+    expiresAt: previous.expiresAt ?? now + CODE_EXPIRY_MS
+  }
+}
+
 export function getCodexLoginState(): DeviceFlowState {
   return state
 }
@@ -149,19 +178,9 @@ export function startCodexLogin(): DeviceFlowState {
   child = proc
 
   const onOutput = (chunk: Buffer): void => {
-    const text = chunk.toString().replace(ANSI, '')
-    // The CLI prints the URL and the code on separate lines, and we may get
-    // them in separate chunks, so merge into whatever we already have.
-    const url = text.match(URL_PATTERN)?.[0]
-    const code = text.match(CODE_PATTERN)?.[0]
-    if (!url && !code) return
-
-    state = {
-      status: 'awaiting_authorization',
-      verificationUri: url ?? state.verificationUri,
-      userCode: code ?? state.userCode,
-      expiresAt: state.expiresAt ?? Date.now() + CODE_EXPIRY_MS
-    }
+    if (child !== proc) return // superseded by a cancel/restart
+    const next = applyDeviceAuthOutput(chunk.toString(), state, Date.now())
+    if (next) state = next
   }
 
   proc.stdout?.on('data', onOutput)
