@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, CloudDownload, FolderGit2, Search } from 'lucide-react'
+import { Check, CloudDownload, FolderGit2, FolderOpen, Search } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -14,22 +14,34 @@ import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Github } from '@/components/github/GithubMark'
+import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { useAuthStatus } from '@/hooks/useAuth'
 import { usePersonas } from '@/hooks/usePersonas'
+import { useCreateContact } from '@/hooks/useConversations'
+import { useChooseDirectory, useCloneRepo, useRepos } from '@/hooks/useRepos'
 import { useUiStore } from '@/store/useUiStore'
+import { repoName } from '@/lib/format'
 import { cn } from '@/lib/utils'
-// Personas are real as of Phase 4. Repos are not: listing them needs the
-// GitHub API and a local clone root, which is Phase 6 along with the Create
-// button below.
-import { mockRepos } from '@/mocks'
-import type { MockRepo } from '@/mocks/repos'
+import type { BoundRepo, RepoOption } from '../../../../shared/ipc-contract'
 
 interface NewContactFlowProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-type RepoListState = 'loading' | 'empty' | 'error' | { repos: MockRepo[] }
+/**
+ * Where the repo came from. Blueprint §9.1 describes the GitHub route, which is
+ * the one that makes the app feel like it knows your work — but a local folder
+ * is a first-class alternative rather than a fallback, because it removes both
+ * ways the GitHub route can fail before anything interesting happens (no token,
+ * or a clone that doesn't complete).
+ */
+type Source = 'github' | 'local'
+
+const SOURCE_OPTIONS: { value: Source; label: string }[] = [
+  { value: 'github', label: 'GitHub' },
+  { value: 'local', label: 'Local folder' }
+]
 
 const STEPS = ['persona', 'repo', 'confirm'] as const
 type Step = (typeof STEPS)[number]
@@ -61,14 +73,22 @@ function StepDots({ current }: { current: Step }): React.JSX.Element {
 export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): React.JSX.Element {
   const [step, setStep] = useState<Step>('persona')
   const [personaId, setPersonaId] = useState<string | null>(null)
+  const [source, setSource] = useState<Source>('github')
   const [repoId, setRepoId] = useState<string | null>(null)
-  // Real API-backed loading/empty/error states land in Phase 6 — this is the
-  // shape the repo picker will keep once the data source is swapped.
-  const [repoListState] = useState<RepoListState>({ repos: mockRepos })
+  const [localRepo, setLocalRepo] = useState<BoundRepo | null>(null)
+
   const { data: personaTemplates = [] } = usePersonas()
   const { data: authStatus } = useAuthStatus()
   const githubConnected = Boolean(authStatus?.github.connected)
   const setDialog = useUiStore((state) => state.setDialog)
+  const setSelectedConversation = useUiStore((state) => state.setSelectedConversation)
+
+  // Only fetched once the user is actually on the GitHub step — it is a network
+  // round trip that a local-folder binding never needs.
+  const repos = useRepos(open && step === 'repo' && source === 'github' && githubConnected)
+  const { choose, isPending: choosing } = useChooseDirectory()
+  const { clone, isPending: cloning, error: cloneError } = useCloneRepo()
+  const { create, isPending: creating, error: createError } = useCreateContact()
 
   // Reset on close rather than on open, so the dialog's exit animation doesn't
   // play over a half-cleared form.
@@ -78,13 +98,44 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       setStep('persona')
       setPersonaId(null)
       setRepoId(null)
+      setLocalRepo(null)
+      setSource('github')
     }, 200)
     return () => window.clearTimeout(timer)
   }, [open])
 
   const persona = personaTemplates.find((p) => p.id === personaId)
-  const repo =
-    typeof repoListState === 'object' ? repoListState.repos.find((r) => r.id === repoId) : undefined
+  const repo = repos.data?.find((r) => r.id === repoId)
+  const chosenPath = source === 'local' ? localRepo?.path : repo?.localPath
+  const chosenLabel = source === 'local' ? localRepo?.path : repo?.fullName
+  const hasRepo = source === 'local' ? Boolean(localRepo) : Boolean(repo)
+  const busy = cloning || creating
+
+  /** Binds the contact, cloning first when the repo is only on GitHub so far. */
+  const handleCreate = (): void => {
+    if (!persona) return
+
+    const bind = (path: string): void =>
+      create(
+        {
+          personaTemplateId: persona.id,
+          repoPath: path,
+          // Blueprint §4's example shape — "Code Reviewer · my-app".
+          displayName: `${persona.name} · ${repoName(path)}`
+        },
+        (contact) => {
+          // Land the user in the thread they just created rather than back on
+          // whatever was selected before.
+          setSelectedConversation({ kind: 'contact', id: contact.id })
+          onOpenChange(false)
+        }
+      )
+
+    if (chosenPath) return bind(chosenPath)
+    if (source === 'github' && repo) {
+      clone({ fullName: repo.fullName, cloneUrl: repo.cloneUrl }, (cloned) => bind(cloned.path))
+    }
+  }
 
   const rowClass = (selected: boolean): string =>
     cn(
@@ -127,75 +178,110 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
           </div>
         )}
 
-        {step === 'repo' && !githubConnected && (
-          // Phase 3 gate: the picker lists real GitHub repos from Phase 6
-          // onwards, so without a token there is nothing to show. Offer the
-          // fix inline rather than presenting an empty list as a dead end.
-          <EmptyState
-            compact
-            icon={Search}
-            title="Connect GitHub to browse repos"
-            description="Persona Router lists your repositories once GitHub is connected."
-            action={
-              <Button size="sm" className="gap-2" onClick={() => setDialog('github')}>
-                <Github />
-                Connect GitHub
-              </Button>
-            }
-          />
-        )}
+        {step === 'repo' && (
+          <div className="flex flex-col gap-3">
+            <SegmentedControl
+              options={SOURCE_OPTIONS}
+              value={source}
+              onChange={setSource}
+              aria-label="Repo source"
+              className="w-56"
+            />
 
-        {step === 'repo' && githubConnected && (
-          <div className="scrollbar-subtle flex max-h-72 flex-col gap-1.5 overflow-y-auto">
-            {repoListState === 'loading' && (
-              <EmptyState compact loading title="Loading repositories…" />
+            {source === 'local' && (
+              <div className="flex flex-col gap-2">
+                <Button variant="outline" className="gap-2" onClick={() => choose(setLocalRepo)}>
+                  <FolderOpen className="size-4" />
+                  {choosing ? 'Choosing…' : 'Choose a folder…'}
+                </Button>
+                {localRepo && (
+                  <div className="border-border flex items-center gap-2 rounded-lg border px-2.5 py-2">
+                    <FolderGit2 className="text-muted-foreground size-4 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                      {localRepo.path}
+                    </span>
+                    <Check className="size-4 shrink-0" />
+                  </div>
+                )}
+                {localRepo && !localRepo.isGitRepo && (
+                  // Not a blocker — an agent can read and edit a plain
+                  // directory. But it can never open a PR from one, and that is
+                  // better said now than discovered in Phase 9.
+                  <p className="text-muted-foreground text-xs">
+                    This folder isn&apos;t a git repository, so GitHub actions won&apos;t be
+                    available for this contact.
+                  </p>
+                )}
+              </div>
             )}
-            {repoListState === 'empty' && (
+
+            {source === 'github' && !githubConnected && (
+              // Without a token there is nothing to list, so offer the fix
+              // inline rather than presenting an empty list as a dead end.
               <EmptyState
                 compact
                 icon={Search}
-                title="No repositories found"
-                description="Connect GitHub to browse your repos."
+                title="Connect GitHub to browse repos"
+                description="Persona Router lists your repositories once GitHub is connected."
+                action={
+                  <Button size="sm" className="gap-2" onClick={() => setDialog('github')}>
+                    <Github />
+                    Connect GitHub
+                  </Button>
+                }
               />
             )}
-            {repoListState === 'error' && (
-              <EmptyState
-                compact
-                title="Couldn't load repositories"
-                description="Check your connection and try again."
-              />
-            )}
-            {typeof repoListState === 'object' &&
-              repoListState.repos.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setRepoId(option.id)}
-                  className={rowClass(repoId === option.id)}
-                >
-                  <FolderGit2 className="text-muted-foreground size-4 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">
-                    {option.fullName}
-                  </span>
-                  {!option.clonedLocally && (
-                    <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-[11px]">
-                      <CloudDownload className="size-3" />
-                      clone
+
+            {source === 'github' && githubConnected && (
+              <div className="scrollbar-subtle flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+                {repos.isPending && <EmptyState compact loading title="Loading repositories…" />}
+                {repos.isError && (
+                  <EmptyState
+                    compact
+                    title="Couldn't load repositories"
+                    description="Check your connection and try again."
+                  />
+                )}
+                {repos.isSuccess && repos.data.length === 0 && (
+                  <EmptyState
+                    compact
+                    icon={Search}
+                    title="No repositories found"
+                    description="This account has no repositories we can see."
+                  />
+                )}
+                {repos.data?.map((option: RepoOption) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setRepoId(option.id)}
+                    className={rowClass(repoId === option.id)}
+                  >
+                    <FolderGit2 className="text-muted-foreground size-4 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                      {option.fullName}
                     </span>
-                  )}
-                  {repoId === option.id && <Check className="size-4 shrink-0" />}
-                </button>
-              ))}
+                    {!option.localPath && (
+                      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-[11px]">
+                        <CloudDownload className="size-3" />
+                        clone
+                      </span>
+                    )}
+                    {repoId === option.id && <Check className="size-4 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {step === 'confirm' && persona && repo && (
+        {step === 'confirm' && persona && hasRepo && (
           <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
             <div className="flex items-center gap-2.5">
               <AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="lg" />
               <div className="min-w-0">
                 <p className="text-sm font-medium">{persona.name}</p>
-                <p className="text-muted-foreground truncate font-mono text-xs">{repo.fullName}</p>
+                <p className="text-muted-foreground truncate font-mono text-xs">{chosenLabel}</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -203,11 +289,13 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               <ScopeChip axis="sandbox" value={persona.sandbox} />
               <ScopeChip axis="github" value={persona.githubScope} />
             </div>
-            {!repo.clonedLocally && (
+            {!chosenPath && (
               <p className="text-muted-foreground text-xs">
-                This repo isn&apos;t cloned locally yet — it will be cloned before the first
-                message.
+                This repo isn&apos;t on this machine yet — creating the contact will clone it first.
               </p>
+            )}
+            {(cloneError ?? createError) && (
+              <p className="text-destructive text-xs">{cloneError ?? createError}</p>
             )}
           </div>
         )}
@@ -229,11 +317,15 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               </Button>
             )}
             {step === 'repo' && (
-              <Button disabled={!repoId} onClick={() => setStep('confirm')}>
+              <Button disabled={!hasRepo} onClick={() => setStep('confirm')}>
                 Continue
               </Button>
             )}
-            {step === 'confirm' && <Button onClick={() => onOpenChange(false)}>Create</Button>}
+            {step === 'confirm' && (
+              <Button disabled={busy} onClick={handleCreate}>
+                {cloning ? 'Cloning…' : creating ? 'Creating…' : 'Create'}
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>

@@ -1,6 +1,6 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
-import { callProcedure } from '@/lib/ipc-client'
-import type { Contact, Group } from '@/types'
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
+import type { Contact, ContactDraft, Group } from '@/types'
 
 /**
  * The two entities the Chats list is built from (Phase 4).
@@ -28,4 +28,33 @@ export function useGroups(): UseQueryResult<Group[]> {
     queryKey: groupsKey,
     queryFn: () => callProcedure('groups.list', undefined)
   })
+}
+
+/**
+ * Creates a contact bound to a repo (Phase 6).
+ *
+ * Invalidates groups as well as contacts: main creates the repo's Group in the
+ * same transaction when this is the first contact bound there (blueprint §4),
+ * so the sidebar would otherwise show the contact without its group until
+ * something else refetched.
+ */
+export function useCreateContact(): {
+  create: (draft: ContactDraft, onCreated?: (contact: Contact) => void) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (draft: ContactDraft) => callProcedure('contacts.create', draft),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+      void queryClient.invalidateQueries({ queryKey: groupsKey })
+    }
+  })
+
+  return {
+    create: (draft, onCreated) => mutation.mutate(draft, { onSuccess: onCreated }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
 }

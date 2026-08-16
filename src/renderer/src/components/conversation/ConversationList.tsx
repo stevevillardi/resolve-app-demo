@@ -6,17 +6,21 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
+import { useMessagePreviews } from '@/hooks/useMessages'
+import { useUsageEvents } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
-import { repoName } from '@/lib/format'
+import { previewLine, repoName } from '@/lib/format'
+import { usageForContact, usageForContacts } from '@/lib/usage'
 import { cn } from '@/lib/utils'
 import type { Contact, PersonaTemplate } from '@/types'
 
 /**
- * Contacts and groups are real rows as of Phase 4. The per-row preview,
- * timestamp, and usage badge are not: their producers are the `messages` and
- * `usage_events` tables, which stay empty until a turn actually runs in
- * Phase 6. Rather than fill them from mocks — fabricated activity next to real
- * conversations — the rows say plainly that nothing has happened yet.
+ * Every row is real as of Phase 6 — contacts and groups came in Phase 4, and
+ * the preview, timestamp and cost that had been reading "No messages yet" now
+ * come from the `messages` and `usage_events` rows a turn actually writes.
+ *
+ * A group's figures are its members' summed, since a group has no session of
+ * its own (blueprint §8: it is a merged view and a router).
  */
 
 function SectionLabel({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -80,7 +84,24 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
   const { data: contacts = [], isPending } = useContacts()
   const { data: groups = [] } = useGroups()
   const { data: personaTemplates = [] } = usePersonas()
+  const { data: previews = [] } = useMessagePreviews()
+  const { data: usageEvents = [] } = useUsageEvents()
   const needle = query.trim().toLowerCase()
+
+  const previewFor = useMemo(
+    () => (contactId: string) => previews.find((message) => message.contactId === contactId),
+    [previews]
+  )
+
+  // Undefined rather than a zeroed summary when a contact has never run: the
+  // badge should be absent, not read "$0.00", which claims a turn was free.
+  const usageFor = useMemo(
+    () => (contactId: string) => {
+      if (!usageEvents.some((event) => event.contactId === contactId)) return undefined
+      return usageForContact(usageEvents, contactId)
+    },
+    [usageEvents]
+  )
 
   const personaFor = useMemo(
     () =>
@@ -137,12 +158,17 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
       {visibleContacts.length > 0 && <SectionLabel>Contacts</SectionLabel>}
       {visibleContacts.map((contact) => {
         const persona = personaFor(contact.personaTemplateId)
+        const latest = previewFor(contact.id)
         return (
           <ConversationListItem
             key={contact.id}
             name={persona?.name ?? contact.displayName}
             repoPath={contact.repoPath}
-            preview="No messages yet"
+            // previewLine strips the markdown an assistant reply is full of —
+            // a row showing "## Findings" reads as a bug rather than a preview.
+            preview={latest ? previewLine(latest.content) : 'No messages yet'}
+            {...(latest && { timestamp: latest.timestamp })}
+            {...(usageFor(contact.id) && { usage: usageFor(contact.id) })}
             active={selected?.kind === 'contact' && selected.id === contact.id}
             onSelect={() => setSelected({ kind: 'contact', id: contact.id })}
             leading={
@@ -156,23 +182,45 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
       })}
 
       {visibleGroups.length > 0 && <SectionLabel>Repo groups</SectionLabel>}
-      {visibleGroups.map((group) => (
-        <ConversationListItem
-          key={group.id}
-          name={repoName(group.repoPath)}
-          repoPath={group.repoPath}
-          preview="No activity yet"
-          active={selected?.kind === 'group' && selected.id === group.id}
-          onSelect={() => setSelected({ kind: 'group', id: group.id })}
-          leading={
-            <GroupAvatarCluster
-              repoPath={group.repoPath}
-              contacts={contacts}
-              personaFor={personaFor}
-            />
-          }
-        />
-      ))}
+      {visibleGroups.map((group) => {
+        // A group has no messages of its own until Phase 7 builds
+        // GroupMessages, so its row summarises the contacts bound to its repo.
+        const memberIds = contacts
+          .filter((contact) => contact.repoPath === group.repoPath)
+          .map((contact) => contact.id)
+        const memberUsage = usageEvents.some((event) => memberIds.includes(event.contactId))
+          ? usageForContacts(usageEvents, memberIds)
+          : undefined
+        const latest = previews
+          .filter((message) => memberIds.includes(message.contactId))
+          .sort((a, b) => b.timestamp - a.timestamp)[0]
+
+        return (
+          <ConversationListItem
+            key={group.id}
+            name={repoName(group.repoPath)}
+            repoPath={group.repoPath}
+            preview={
+              memberIds.length === 0
+                ? 'No contacts yet'
+                : latest
+                  ? previewLine(latest.content)
+                  : 'No activity yet'
+            }
+            {...(latest && { timestamp: latest.timestamp })}
+            {...(memberUsage && { usage: memberUsage })}
+            active={selected?.kind === 'group' && selected.id === group.id}
+            onSelect={() => setSelected({ kind: 'group', id: group.id })}
+            leading={
+              <GroupAvatarCluster
+                repoPath={group.repoPath}
+                contacts={contacts}
+                personaFor={personaFor}
+              />
+            }
+          />
+        )
+      })}
     </div>
   )
 }

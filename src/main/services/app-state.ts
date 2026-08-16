@@ -13,6 +13,12 @@ export type AppStateKey =
   | 'github_scopes'
   /** Set once the first-run defaults have been inserted. See services/seed.ts. */
   | 'seed_version'
+  /**
+   * Where cloned repos land. Chosen by the user the first time a clone is
+   * needed rather than defaulted, since ~/Developer, ~/code and ~/src are each
+   * somebody's convention. See services/repos.ts.
+   */
+  | 'workspace_root'
 
 export function getAppState(key: AppStateKey): string | null {
   const row = initDb().select().from(appState).where(eq(appState.key, key)).get()

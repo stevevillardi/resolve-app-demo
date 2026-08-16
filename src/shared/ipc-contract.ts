@@ -82,6 +82,25 @@ const apiKeyInputSchema = z.object({ apiKey: z.string().min(1) })
  * a sentence — "Refactor Buddy is already working in this repo" — and the
  * renderer would otherwise have to join back to the contact list to say so.
  */
+/** A repo the user could bind to, from the GitHub side (blueprint §9.1). */
+const repoOptionSchema = z.object({
+  id: z.string(),
+  fullName: z.string(),
+  cloneUrl: z.string(),
+  private: z.boolean(),
+  /** Absolute path when already on disk; null means binding it would clone. */
+  localPath: z.string().nullable(),
+  updatedAt: z.number().nullable()
+})
+
+/** Somewhere on disk a Contact can work, however it was arrived at. */
+const boundRepoSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  /** False for a plain directory: allowed, but it can never open a PR. */
+  isGitRepo: z.boolean()
+})
+
 const activeRunSchema = z.object({
   runId: z.string(),
   contactId: z.string(),
@@ -269,6 +288,23 @@ export const ipcContract = {
     output: z.array(z.string())
   },
 
+  // --- Repo binding (Phase 6, blueprint §9.1) -----------------------------
+  // Two routes to the same outcome: a path on disk for a Contact to work in.
+  'repos.list': {
+    input: z.void(),
+    output: z.array(repoOptionSchema)
+  },
+  /** Native folder picker. Null when the user cancels. */
+  'repos.chooseDirectory': {
+    input: z.void(),
+    output: boundRepoSchema.nullable()
+  },
+  /** Clones under the workspace root, asking for one if unset. Null on cancel. */
+  'repos.clone': {
+    input: z.object({ fullName: z.string(), cloneUrl: z.string() }),
+    output: boundRepoSchema.nullable()
+  },
+
   /** Opens a verification URL in the user's real browser. Host-allowlisted in main. */
   'shell.openExternal': {
     input: z.object({ url: z.string().url() }),
@@ -287,3 +323,5 @@ export type CodexAuthStatus = z.infer<typeof codexStatusSchema>
 export type GitHubAuthStatus = z.infer<typeof githubStatusSchema>
 export type AuthStatus = z.infer<typeof authStatusSchema>
 export type ActiveRun = z.infer<typeof activeRunSchema>
+export type RepoOption = z.infer<typeof repoOptionSchema>
+export type BoundRepo = z.infer<typeof boundRepoSchema>

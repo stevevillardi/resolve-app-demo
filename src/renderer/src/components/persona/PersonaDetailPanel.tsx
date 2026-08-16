@@ -5,6 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
@@ -14,6 +21,7 @@ import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { cn } from '@/lib/utils'
 import { useContacts } from '@/hooks/useConversations'
 import { useDeletePersona, usePersonas, useUpdatePersona } from '@/hooks/usePersonas'
+import { useModels } from '@/hooks/useModels'
 import { useSkills } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
 import type {
@@ -24,6 +32,9 @@ import type {
   SandboxLevel,
   Skill
 } from '@/types'
+
+/** Stands in for `model: null` — Select can't carry null as a value. */
+const DEFAULT_MODEL = '__default__'
 
 const BACKEND_OPTIONS: { value: PersonaBackend; label: string }[] = [
   { value: 'claude', label: 'Claude' },
@@ -74,6 +85,15 @@ function PersonaForm({
   const [name, setName] = useState(persona.name)
   const [avatarColor, setAvatarColor] = useState(persona.avatarColor)
   const [backend, setBackend] = useState<PersonaBackend>(persona.backend)
+  const [model, setModel] = useState<string | null>(persona.model)
+  const availableModels = useModels(backend)
+  // "Default" has to be expressible, since null — let the backend choose — is a
+  // real and common answer rather than an unset field. A sentinel value is
+  // needed because Select can't carry null.
+  const modelItems = [
+    { label: "Default (backend's choice)", value: DEFAULT_MODEL },
+    ...availableModels.map((name) => ({ label: name, value: name }))
+  ]
   const [systemPrompt, setSystemPrompt] = useState(persona.systemPrompt)
   const [sandbox, setSandbox] = useState<SandboxLevel>(persona.sandbox)
   const [githubScope, setGithubScope] = useState<GithubScope>(persona.githubScope)
@@ -95,6 +115,7 @@ function PersonaForm({
     name,
     avatarColor,
     backend,
+    model,
     systemPrompt,
     sandbox,
     githubScope,
@@ -111,9 +132,10 @@ function PersonaForm({
         </h1>
         <div className="no-drag flex shrink-0 items-center gap-1.5">
           <BackendBadge backend={backend} />
-          {/* The UsageBadge that lived here read mock usage events. Real ones
-              don't exist until a turn actually runs (Phase 6), and fabricated
-              spend next to a real persona is worse than none. */}
+          {/* Still no UsageBadge here, though real events exist as of Phase 6.
+              Spend is per Contact, and a persona can be bound to several — a
+              single figure here would be summing unlike things. The dashboard
+              (Phase 10) is where cross-contact totals belong. */}
           <Button
             variant="ghost"
             size="icon-sm"
@@ -161,15 +183,47 @@ function PersonaForm({
               </div>
             </div>
 
-            <Field label="Backend" hint="Codex streams live tool progress; Claude cannot.">
-              <SegmentedControl
-                options={BACKEND_OPTIONS}
-                value={backend}
-                onChange={setBackend}
-                aria-label="Backend"
-                className="w-56"
-              />
-            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Backend" hint="Codex streams live tool progress; Claude cannot.">
+                <SegmentedControl
+                  options={BACKEND_OPTIONS}
+                  value={backend}
+                  onChange={(next) => {
+                    setBackend(next)
+                    // A model belongs to one backend, so carrying the old
+                    // choice across would fail every turn. Clearing to the
+                    // default fails at edit time instead, which is a much
+                    // better place to find out.
+                    setModel(null)
+                  }}
+                  aria-label="Backend"
+                />
+              </Field>
+
+              <Field
+                label="Model"
+                hint="Availability depends on your account, not just the backend."
+              >
+                <Select
+                  value={model ?? DEFAULT_MODEL}
+                  onValueChange={(value) =>
+                    setModel(value === DEFAULT_MODEL ? null : String(value))
+                  }
+                  items={modelItems}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
 
             <Field label="System prompt" htmlFor="persona-prompt">
               <Textarea
