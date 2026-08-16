@@ -1,6 +1,6 @@
 # Phase 1 — Bootstrap
 
-**Status:** Not started
+**Status:** Done
 **Blueprint refs:** §11 (tech stack), §2 (architecture/process boundary)
 
 ## Goal

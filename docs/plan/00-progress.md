@@ -11,7 +11,7 @@ Source of truth for build order. Each phase has its own file in this directory w
 
 | # | Phase | File | Status | Notes |
 |---|---|---|---|---|
-| 1 | Bootstrap | [01-bootstrap.md](01-bootstrap.md) | Not started | electron-vite + React + TS + npm, Tailwind v4/shadcn install, hand-rolled typed IPC skeleton, SQLite+Drizzle base, lint/format, packaging config |
+| 1 | Bootstrap | [01-bootstrap.md](01-bootstrap.md) | Done | electron-vite + React + TS + npm, Tailwind v4/shadcn (Base UI) install, hand-rolled typed IPC skeleton, SQLite+Drizzle base, lint/format, packaging config. All 6 acceptance checks verified on branch `phase-1-bootstrap`. |
 | 2 | Design system | [02-design-system.md](02-design-system.md) | Not started | Theme tokens, shadcn components, iMessage-style layout shell with mock data |
 | 3 | App auth | [03-app-auth.md](03-app-auth.md) | Not started | Claude/Codex SDK auth onboarding + GitHub OAuth Device Flow, combined first-run flow |
 | 4 | Data layer | [04-data-layer.md](04-data-layer.md) | Not started | Drizzle schema/migrations, IPC CRUD for skills/personas/contacts |
