@@ -65,6 +65,17 @@ export async function waitForShell(window: Page): Promise<void> {
   await window.waitForSelector('[data-slot="sidebar"]', { state: 'attached' })
 }
 
+/**
+ * Waits for the preload bridge, without caring which screen is on top.
+ *
+ * Use this rather than waitForShell whenever a test only needs IPC: the shell
+ * doesn't exist until onboarding is complete, so waiting on the sidebar in a
+ * profile that hasn't onboarded yet just times out against the splash.
+ */
+export async function waitForBridge(window: Page): Promise<void> {
+  await window.waitForFunction(() => 'api' in window)
+}
+
 /** Calls an IPC procedure through the real preload bridge. */
 export function invoke<T = unknown>(window: Page, name: string, input?: unknown): Promise<T> {
   return window.evaluate(
