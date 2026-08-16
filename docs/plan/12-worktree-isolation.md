@@ -33,11 +33,12 @@ Extend `src/main/services/git.ts` (built in Phase 6 for cloning) with
 rule carries over: **git's stderr is never passed through**, because a remote
 URL can carry a live token.
 
-### 2. Schema — migration `0006`, additive
+### 2. Schema — migration `0007`, additive
 
-> Renumbered: Phase 7 took `0005` for `group_messages.branch`, the column this
-> phase's awareness layer writes into. That column already exists — what is
-> still unclaimed is `needs`, which nothing has modelled yet.
+> Renumbered twice: Phase 7 took `0005` for `group_messages.branch`, the column
+> this phase's awareness layer writes into, and the Phase 6/7 close-out took
+> `0006` for `usage_events.session_id`. `branch` already exists — what is still
+> unclaimed is `needs`, which nothing has modelled yet.
 
 
 | Table | Column | Meaning |
