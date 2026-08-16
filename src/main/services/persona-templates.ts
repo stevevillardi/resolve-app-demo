@@ -38,6 +38,10 @@ export function updatePersonaTemplate(persona: PersonaTemplate): PersonaTemplate
       name: persona.name,
       avatarColor: persona.avatarColor,
       backend: persona.backend,
+      // Explicitly listed, like every other column: an omission here is a
+      // silent no-op rather than a type error, which is exactly how `model`
+      // went unsaved when the column was added.
+      model: persona.model,
       systemPrompt: persona.systemPrompt,
       skillIds: persona.skillIds,
       sandbox: persona.sandbox,

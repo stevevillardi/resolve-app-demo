@@ -95,6 +95,20 @@ describe('update', () => {
     expect(getPersonaTemplate(persona.id)?.skillIds).toEqual([])
   })
 
+  // Regression: `model` was added to the schema and the domain but not to this
+  // service's `.set()`, so choosing one saved silently and reloaded as null.
+  // An omitted column here is a no-op, not a type error — every column added
+  // from now on needs a test that reads it back.
+  it('persists a model choice, and clearing it back to the default', () => {
+    const persona = createPersonaTemplate(DRAFT)
+
+    updatePersonaTemplate({ ...persona, model: 'claude-opus-5' })
+    expect(getPersonaTemplate(persona.id)?.model).toBe('claude-opus-5')
+
+    updatePersonaTemplate({ ...persona, model: null })
+    expect(getPersonaTemplate(persona.id)?.model).toBeNull()
+  })
+
   it('throws for a persona that no longer exists', () => {
     expect(() => updatePersonaTemplate({ id: 'missing', ...DRAFT })).toThrow(/No such persona/)
   })

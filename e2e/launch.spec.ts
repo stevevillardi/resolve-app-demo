@@ -177,6 +177,9 @@ test.describe('persistence', () => {
       name: 'Bound Persona',
       avatarColor: '#2a78d6',
       backend: 'claude',
+      // Required since migration 0004. Null means "the backend's default" —
+      // the draft has no default of its own, so it has to be stated.
+      model: null,
       systemPrompt: '',
       skillIds: [],
       sandbox: 'read_only',
