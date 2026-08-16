@@ -14,6 +14,8 @@ export type {
   GroupMessageType,
   SystemSummaryCategory,
   UsageSource,
+  /** Where a Contact's session runs — see docs/plan/12-worktree-isolation.md. */
+  Isolation,
   Skill,
   PersonaTemplate,
   Contact,

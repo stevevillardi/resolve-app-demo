@@ -1,4 +1,5 @@
-import type { Contact, PersonaTemplate } from '../../shared/domain'
+import { isolationOf } from './worktrees'
+import type { Contact, Isolation, PersonaTemplate } from '../../shared/domain'
 
 /**
  * Who may run where, at the same time (blueprint §15D).
@@ -13,9 +14,9 @@ import type { Contact, PersonaTemplate } from '../../shared/domain'
  * exactly the pair blueprint §16 Journey 2 wants running together.
  *
  * So the lock is a *write* lock, and it is keyed on the **working path** rather
- * than the repo. Those are the same string today. They stop being the same once
- * a Contact can run in its own `git worktree`, which is why the indirection
- * exists now rather than later — see workingPathFor().
+ * than the repo. Since Phase 12 those are genuinely different strings: a Contact
+ * with its own `git worktree` locks its own checkout, which nobody else works
+ * in — see workingPathFor().
  *
  * In-memory and single-process, as §15D says: sufficient for a single-user
  * local app. Module-level mutable state matches the existing style in
@@ -49,18 +50,28 @@ const holders = new Map<string, RunHolder[]>()
 /**
  * Where a Contact's session actually runs, which is what gets locked.
  *
- * Returns `repoPath` today, so the lock behaves exactly as if it were keyed on
- * the repo. The worktree phase gives a Contact its own checkout and this starts
- * returning that instead — at which point two writing personas on one repo stop
- * contending, because they are no longer working in the same directory. Every
- * caller goes through here so that change lands in one place.
+ * A `worktree` Contact has its own checkout, so this returns a path nobody else
+ * uses — which is the whole mechanism by which two writing personas on one repo
+ * stop contending. They are not sharing a lock more politely; they are no longer
+ * working in the same directory.
+ *
+ * `worktreePath` is set when the Contact is created, before the directory
+ * exists, precisely so this stays a pure function of the row. See the
+ * worktree_path comment in src/main/db/schema.ts.
  */
 export function workingPathFor(contact: Contact): string {
-  return contact.repoPath
+  return contact.worktreePath ?? contact.repoPath
 }
 
 /**
  * `read_only` personas share; anything that can write is exclusive.
+ *
+ * Isolation decides *where* a session runs, not whether it locks — the two are
+ * separate axes and conflating them is easy to do. A `workspace_write` Contact
+ * left in the main tree still has to take the lock, or the phase would have
+ * quietly unlocked every writer that opted out of worktrees. The one exception
+ * is `exclusive`, which exists to demand the main tree to itself, and so locks
+ * even for a reader.
  *
  * Worth knowing how strong the read-only half is, because it differs by
  * backend and this function cannot tell you: Codex's `--sandbox read-only` is
@@ -68,7 +79,8 @@ export function workingPathFor(contact: Contact): string {
  * implementation, with our allowlist behind it. `AgentCapabilities.sandboxEnforcement`
  * reports which of the two a given turn got.
  */
-export function lockModeFor(persona: PersonaTemplate): LockMode {
+export function lockModeFor(persona: PersonaTemplate, isolation: Isolation | null): LockMode {
+  if (isolationOf(isolation) === 'exclusive') return 'exclusive'
   return persona.sandbox === 'read_only' ? 'shared' : 'exclusive'
 }
 

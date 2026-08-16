@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  contactDraftSchema,
   contactSchema,
   groupMessageSchema,
   personaTemplateDraftSchema,
@@ -102,29 +103,69 @@ describe('drafts', () => {
 })
 
 describe('contact', () => {
+  const base = {
+    id: 'c1',
+    personaTemplateId: 'p1',
+    repoPath: '~/code/app',
+    displayName: 'Code Reviewer · app',
+    backendSessionId: null,
+    worktreePath: null,
+    branch: null,
+    isolation: null
+  }
+
+  function without(key: keyof typeof base): Record<string, unknown> {
+    const copy: Record<string, unknown> = { ...base }
+    delete copy[key]
+    return copy
+  }
+
   it('requires backendSessionId to be present, even as null', () => {
     // Null means "no session yet"; omitting it would mean "unknown", and the
     // persona editor renders those differently.
-    expect(() =>
-      contactSchema.parse({
-        id: 'c1',
-        personaTemplateId: 'p1',
-        repoPath: '~/code/app',
-        displayName: 'Code Reviewer · app'
-      })
-    ).toThrow()
+    expect(() => contactSchema.parse(without('backendSessionId'))).toThrow()
   })
 
   it('accepts an explicit null session', () => {
-    expect(() =>
-      contactSchema.parse({
-        id: 'c1',
-        personaTemplateId: 'p1',
-        repoPath: '~/code/app',
-        displayName: 'Code Reviewer · app',
-        backendSessionId: null
-      })
-    ).not.toThrow()
+    expect(() => contactSchema.parse(base)).not.toThrow()
+  })
+
+  // Same rule as backendSessionId, for the same reason: workingPathFor() reads
+  // `worktreePath ?? repoPath`, which only means what it looks like it means if
+  // the key is always there.
+  it('requires the worktree fields to be present, even as null', () => {
+    for (const key of ['worktreePath', 'branch', 'isolation'] as const) {
+      expect(() => contactSchema.parse(without(key)), key).toThrow()
+    }
+  })
+
+  it('rejects an isolation mode it does not know', () => {
+    expect(() => contactSchema.parse({ ...base, isolation: 'sandbox' })).toThrow()
+  })
+
+  // The draft is the renderer's shape, and a renderer-supplied working path
+  // would point a session at any directory on disk.
+  it('does not let a draft choose its own worktree path', () => {
+    const draft = contactDraftSchema.parse({
+      personaTemplateId: 'p1',
+      repoPath: '~/code/app',
+      displayName: 'Code Reviewer · app',
+      worktreePath: '/etc',
+      branch: 'main'
+    })
+
+    expect(draft).not.toHaveProperty('worktreePath')
+    expect(draft).not.toHaveProperty('branch')
+  })
+
+  it('lets a draft omit isolation, meaning "decide for me"', () => {
+    const draft = contactDraftSchema.parse({
+      personaTemplateId: 'p1',
+      repoPath: '~/code/app',
+      displayName: 'Code Reviewer · app'
+    })
+
+    expect(draft.isolation).toBeUndefined()
   })
 })
 

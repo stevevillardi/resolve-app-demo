@@ -233,7 +233,7 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
   if (!persona) throw new Error(`Contact "${contact.displayName}" has no persona template.`)
 
   const workingPath = workingPathFor(contact)
-  const mode = lockModeFor(persona)
+  const mode = lockModeFor(persona, contact.isolation)
   const runId = randomUUID()
 
   const release = acquire({
@@ -246,11 +246,14 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
   })
 
   if (!release) {
+    // "Here" rather than "in this repo": since Phase 12 a refusal means the two
+    // share a working directory, which is now a narrower thing than sharing a
+    // repo — two Contacts in their own worktrees never reach this at all.
     const holder = blockingHolder(workingPath, mode)
     throw new Error(
       holder
-        ? `${holder.contactName} is already working in this repo. Wait for it to finish, or stop it from that conversation.`
-        : 'This repo is busy.'
+        ? `${holder.contactName} is already working here. Wait for it to finish, or stop it from that conversation.`
+        : 'This working copy is busy.'
     )
   }
 

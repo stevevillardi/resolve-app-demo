@@ -59,13 +59,36 @@ export const personaTemplateSchema = z.object({
   githubScope: githubScopeSchema
 })
 
+/**
+ * Where a Contact's session runs (docs/plan/12-worktree-isolation.md §4).
+ *
+ * Chosen per Contact rather than per persona, because the same persona may want
+ * isolation on one repo and not on another. This picks the *location*; the lock
+ * mode still comes from the persona's sandbox level — except for `exclusive`,
+ * which is the escape hatch that locks the main tree even for a reader.
+ */
+export const isolationSchema = z.enum(['shared', 'worktree', 'exclusive'])
+
 export const contactSchema = z.object({
   id: z.string(),
   personaTemplateId: z.string(),
+  /** The canonical repo, whatever directory the session actually runs in. */
   repoPath: z.string(),
   displayName: z.string(),
   /** Resume key for the backend session; null until the first turn runs. */
-  backendSessionId: z.string().nullable()
+  backendSessionId: z.string().nullable(),
+  /**
+   * Where this Contact works; null means the repo itself.
+   *
+   * Set when the Contact is created and before the directory exists — see the
+   * column comment in src/main/db/schema.ts for why the path is planned up
+   * front rather than at first use.
+   */
+  worktreePath: z.string().nullable(),
+  /** The branch that worktree is on. Null whenever worktreePath is. */
+  branch: z.string().nullable(),
+  /** Null reads as `shared` — that is what every pre-0007 row means. */
+  isolation: isolationSchema.nullable()
 })
 
 export const groupSchema = z.object({
@@ -160,7 +183,19 @@ export const usageEventSchema = z.object({
 
 export const skillDraftSchema = skillSchema.omit({ id: true })
 export const personaTemplateDraftSchema = personaTemplateSchema.omit({ id: true })
-export const contactDraftSchema = contactSchema.omit({ id: true, backendSessionId: true })
+/**
+ * `worktreePath` and `branch` are omitted alongside the ids because main derives
+ * them from the repo and persona — a renderer-supplied working path would be a
+ * way to point a session at any directory on disk, which is the one thing the
+ * sandbox levels exist to prevent. `isolation` stays, because it is the choice
+ * the bind flow actually asks the user to make.
+ */
+export const contactDraftSchema = contactSchema
+  .omit({ id: true, backendSessionId: true, worktreePath: true, branch: true, isolation: true })
+  // Optional rather than nullable: an absent isolation means "decide for me",
+  // and main picks from the persona's sandbox level. Null is only ever a stored
+  // value, meaning a row written before the column existed.
+  .extend({ isolation: isolationSchema.optional() })
 /**
  * `timestamp` is omitted alongside `id` because main mints it too — a
  * renderer-supplied time would let a clock skew reorder the thread.
@@ -193,6 +228,7 @@ export type GroupMessageType = z.infer<typeof groupMessageTypeSchema>
 export type SystemSummaryCategory = z.infer<typeof systemSummaryCategorySchema>
 export type UsageSource = z.infer<typeof usageSourceSchema>
 export type CostSource = z.infer<typeof costSourceSchema>
+export type Isolation = z.infer<typeof isolationSchema>
 
 export type Skill = z.infer<typeof skillSchema>
 export type PersonaTemplate = z.infer<typeof personaTemplateSchema>
