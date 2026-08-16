@@ -1,12 +1,16 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { IpcProcedureName } from '../shared/ipc-contract'
 
-// Custom APIs for renderer
-const api = {}
+const IPC_CHANNEL = 'ipc-invoke'
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
+// Generic bridge for the hand-rolled typed IPC layer (src/shared/ipc-contract.ts).
+// Renderer never gets one bespoke bridge method per procedure — everything goes
+// through this single invoke, validated against the shared contract on both ends.
+const api = {
+  invoke: (name: IpcProcedureName, input: unknown) => ipcRenderer.invoke(IPC_CHANNEL, name, input)
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
