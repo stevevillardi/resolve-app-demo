@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
-import { useMessagePreviews } from '@/hooks/useMessages'
+import { useActiveRuns, useMessagePreviews } from '@/hooks/useMessages'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
 import { previewLine, repoName } from '@/lib/format'
@@ -86,6 +86,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
   const { data: personaTemplates = [] } = usePersonas()
   const { data: previews = [] } = useMessagePreviews()
   const { data: usageEvents = [] } = useUsageEvents()
+  const { data: runs = [] } = useActiveRuns()
   const needle = query.trim().toLowerCase()
 
   const previewFor = useMemo(
@@ -169,6 +170,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
             preview={latest ? previewLine(latest.content) : 'No messages yet'}
             {...(latest && { timestamp: latest.timestamp })}
             {...(usageFor(contact.id) && { usage: usageFor(contact.id) })}
+            running={runs.some((run) => run.contactId === contact.id)}
             active={selected?.kind === 'contact' && selected.id === contact.id}
             onSelect={() => setSelected({ kind: 'contact', id: contact.id })}
             leading={
@@ -209,6 +211,9 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
             }
             {...(latest && { timestamp: latest.timestamp })}
             {...(memberUsage && { usage: memberUsage })}
+            // A group is a merged view of its members, so it is "running" when
+            // any contact bound to its repo is.
+            running={runs.some((run) => memberIds.includes(run.contactId))}
             active={selected?.kind === 'group' && selected.id === group.id}
             onSelect={() => setSelected({ kind: 'group', id: group.id })}
             leading={

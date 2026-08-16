@@ -1,5 +1,3 @@
-import { BarChart3, BookOpen, Clock, MessagesSquare, Users2 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -11,27 +9,16 @@ import {
 } from '@/components/ui/sidebar'
 import { ThemeMenu } from './ThemeMenu'
 import { GitHubStatusButton } from '@/components/github/GitHubStatusButton'
-import { useUiStore, type Section } from '@/store/useUiStore'
-
-interface NavItem {
-  section: Section
-  label: string
-  icon: LucideIcon
-}
-
-// Ordered by how often you reach for them, not alphabetically: conversations
-// are the app, everything below configures what talks in them.
-const NAV_ITEMS: NavItem[] = [
-  { section: 'chats', label: 'Chats', icon: MessagesSquare },
-  { section: 'personas', label: 'Personas', icon: Users2 },
-  { section: 'skills', label: 'Skills', icon: BookOpen },
-  { section: 'routines', label: 'Routines', icon: Clock },
-  { section: 'usage', label: 'Usage', icon: BarChart3 }
-]
+import { RunIndicator } from '@/components/common/RunIndicator'
+import { useActiveRuns } from '@/hooks/useMessages'
+import { NAV_ITEMS } from '@/lib/nav-items'
+import { useUiStore } from '@/store/useUiStore'
 
 export function NavRail(): React.JSX.Element {
   const section = useUiStore((state) => state.section)
   const setSection = useUiStore((state) => state.setSection)
+  const navExpanded = useUiStore((state) => state.navExpanded)
+  const { data: runs = [] } = useActiveRuns()
 
   return (
     <Sidebar collapsible="icon" className="border-sidebar-border border-r">
@@ -61,6 +48,10 @@ export function NavRail(): React.JSX.Element {
       </SidebarContent>
 
       <SidebarFooter className="gap-1 px-2 pb-3">
+        {/* What the fleet is doing right now. It sits above the account and
+            appearance controls because it is state, not a setting — and it is
+            the one thing here that changes on its own. */}
+        <RunIndicator count={runs.length} expanded={navExpanded} />
         <SidebarMenu className="gap-1">
           <SidebarMenuItem>
             <GitHubStatusButton />

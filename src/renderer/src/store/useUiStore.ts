@@ -14,8 +14,13 @@ export type ConversationSelection =
 /** What the usage dashboard is scoped to. */
 export type UsageScope = { kind: 'all' } | { kind: 'persona'; id: string }
 
-/** The two surfaces that stay genuinely modal — everything else is a view. */
-export type ModalDialog = 'newContact' | 'github' | null
+/**
+ * The surfaces that stay genuinely modal — everything else is a view.
+ *
+ * `command` joins them because the palette is the same shape of thing: a short
+ * decision you finish and dismiss, not a place you work.
+ */
+export type ModalDialog = 'newContact' | 'github' | 'command' | null
 
 interface UiState {
   section: Section

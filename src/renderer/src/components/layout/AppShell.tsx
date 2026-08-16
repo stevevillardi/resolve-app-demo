@@ -6,7 +6,9 @@ import { ListPanel } from './ListPanel'
 import { WorkspaceView } from './WorkspaceView'
 import { NewContactFlow } from '@/components/persona/NewContactFlow'
 import { GitHubConnectDialog } from '@/components/github/GitHubConnectDialog'
+import { CommandPalette } from '@/components/common/CommandPalette'
 import { useThemeSync } from '@/hooks/useThemeSync'
+import { useCommandPalette } from '@/hooks/useCommandPalette'
 import { useUiStore } from '@/store/useUiStore'
 
 // 64px so the inset macOS traffic lights (x:14, 3 × 12px buttons) sit fully
@@ -17,6 +19,7 @@ const RAIL_WIDTH_EXPANDED = '13rem'
 
 export function AppShell(): React.JSX.Element {
   useThemeSync()
+  useCommandPalette()
   // Panel widths persist themselves to localStorage, so the shell reopens the
   // way you left it. react-resizable-panels v4 replaced the old `autoSaveId`
   // prop with this hook.
@@ -71,6 +74,7 @@ export function AppShell(): React.JSX.Element {
         open={dialog === 'github'}
         onOpenChange={(open) => setDialog(open ? 'github' : null)}
       />
+      <CommandPalette />
     </SidebarProvider>
   )
 }
