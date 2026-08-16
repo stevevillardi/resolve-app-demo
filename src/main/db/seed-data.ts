@@ -63,6 +63,7 @@ export const SEED_PERSONA_TEMPLATES: PersonaTemplate[] = [
     name: 'Code Reviewer',
     avatarColor: '#2a78d6',
     backend: 'claude',
+    model: null,
     systemPrompt:
       'You are a meticulous code reviewer. Read diffs carefully, flag correctness and security issues, and never edit files directly.',
     skillIds: ['skill-typescript-style', 'skill-security-checklist'],
@@ -74,6 +75,7 @@ export const SEED_PERSONA_TEMPLATES: PersonaTemplate[] = [
     name: 'Refactor Buddy',
     avatarColor: '#eb6834',
     backend: 'codex',
+    model: null,
     systemPrompt:
       'You are a refactoring specialist. Make small, well-reasoned structural improvements and always explain your rationale.',
     skillIds: ['skill-typescript-style', 'skill-conventional-commits'],
@@ -85,6 +87,7 @@ export const SEED_PERSONA_TEMPLATES: PersonaTemplate[] = [
     name: 'Docs Writer',
     avatarColor: '#1baf7a',
     backend: 'claude',
+    model: null,
     systemPrompt: 'You keep documentation accurate and readable. You do not modify source code.',
     skillIds: ['skill-conventional-commits'],
     sandbox: 'read_only',

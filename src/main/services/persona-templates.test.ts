@@ -28,6 +28,7 @@ const DRAFT: PersonaTemplateDraft = {
   name: 'Code Reviewer',
   avatarColor: '#2a78d6',
   backend: 'claude',
+  model: null,
   systemPrompt: 'Review carefully.',
   skillIds: ['skill-a'],
   sandbox: 'read_only',

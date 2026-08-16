@@ -1,0 +1,83 @@
+import { describe, expect, it } from 'vitest'
+import type { PersonaTemplate, Skill } from '../../shared/domain'
+import { composeInstructions, orderSkills } from './context'
+import type { SessionSpec } from './types'
+
+function skill(id: string, name: string, content: string): Skill {
+  return { id, name, description: '', content }
+}
+
+function persona(skillIds: string[], systemPrompt = 'You review code.'): PersonaTemplate {
+  return {
+    id: 'p1',
+    name: 'Reviewer',
+    avatarColor: '#000',
+    backend: 'claude',
+    model: null,
+    systemPrompt,
+    skillIds,
+    sandbox: 'read_only',
+    githubScope: 'read_only'
+  }
+}
+
+function spec(p: PersonaTemplate, skills: Skill[]): SessionSpec {
+  return { persona: p, repoPath: '/tmp/repo', skills }
+}
+
+describe('orderSkills', () => {
+  it('follows skillIds order, not the order the caller loaded them in', () => {
+    const skills = [skill('b', 'B', 'bee'), skill('a', 'A', 'ay')]
+    expect(orderSkills(['a', 'b'], skills).map((s) => s.id)).toEqual(['a', 'b'])
+  })
+
+  it('drops ids with no matching skill instead of producing holes', () => {
+    // A persona can reference a skill that was deleted — Phase 4 strips the id
+    // on delete, but a stale spec must not become `undefined` in the prompt.
+    const skills = [skill('a', 'A', 'ay')]
+    expect(orderSkills(['a', 'gone'], skills).map((s) => s.id)).toEqual(['a'])
+  })
+})
+
+describe('composeInstructions', () => {
+  it('returns just the system prompt when no skills are attached', () => {
+    expect(composeInstructions(spec(persona([]), []))).toBe('You review code.')
+  })
+
+  it('appends each skill under a heading', () => {
+    const result = composeInstructions(
+      spec(persona(['a', 'b']), [skill('a', 'Style', 'Use tabs.'), skill('b', 'Tests', 'Test it.')])
+    )
+    expect(result).toContain('You review code.')
+    expect(result).toContain('## Skills')
+    expect(result).toContain('### Style\n\nUse tabs.')
+    expect(result).toContain('### Tests\n\nTest it.')
+    expect(result.indexOf('### Style')).toBeLessThan(result.indexOf('### Tests'))
+  })
+
+  it('is stable across calls, so the cached prefix stays cached', () => {
+    const a = composeInstructions(spec(persona(['a']), [skill('a', 'S', 'x')]))
+    const b = composeInstructions(spec(persona(['a']), [skill('a', 'S', 'x')]))
+    expect(a).toBe(b)
+  })
+
+  it('ignores skills the persona does not reference', () => {
+    const result = composeInstructions(spec(persona([]), [skill('a', 'Unused', 'nope')]))
+    expect(result).not.toContain('Unused')
+  })
+
+  it('trims so an empty system prompt does not leave leading blank lines', () => {
+    const result = composeInstructions(spec(persona(['a'], '  '), [skill('a', 'S', 'x')]))
+    expect(result.startsWith('## Skills')).toBe(true)
+  })
+
+  it('gives both backends byte-identical text', () => {
+    // The whole reason this lives in one shared module: Claude passes it as
+    // `systemPrompt` and Codex as `developer_instructions`, and the two must
+    // not be able to drift.
+    const claude = persona(['a'])
+    const codex: PersonaTemplate = { ...claude, backend: 'codex' }
+    const skills = [skill('a', 'S', 'x')]
+    expect(composeInstructions(spec(claude, skills))).toBe(composeInstructions(spec(codex, skills)))
+  })
+})

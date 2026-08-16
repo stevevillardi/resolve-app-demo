@@ -278,4 +278,52 @@ describe('toUsageEvent', () => {
     expect(event.costUsd).toBeNull()
     expect('cachedInputTokens' in event).toBe(false)
   })
+
+  it('carries every field an adapter reports, so none is dropped on the way in', () => {
+    // The table used to keep tokens and cost only, which meant AgentUsage
+    // (src/shared/agent.ts) could not be persisted as produced — the model
+    // that served the turn went unrecorded, leaving its spend unattributable.
+    seedContact()
+    db.insert(usageEvents)
+      .values({
+        id: 'u3',
+        contactId: 'c1',
+        timestamp: new Date(TIMESTAMP),
+        source: 'message',
+        inputTokens: 12231,
+        outputTokens: 58,
+        cachedInputTokens: 4480,
+        cacheWriteInputTokens: 1845,
+        reasoningOutputTokens: 32,
+        costUsd: 0.0402,
+        model: 'gpt-5.5',
+        costSource: 'computed'
+      })
+      .run()
+    const event = toUsageEvent(db.select().from(usageEvents).all()[0])
+    expect(event.model).toBe('gpt-5.5')
+    expect(event.costSource).toBe('computed')
+    expect(event.cacheWriteInputTokens).toBe(1845)
+    expect(event.reasoningOutputTokens).toBe(32)
+  })
+
+  it('omits the attribution fields on rows written before they existed', () => {
+    // Migration 0004 is additive with no backfill, so every pre-existing row
+    // reads back as "we don't know which model this was" rather than guessing.
+    seedContact()
+    db.insert(usageEvents)
+      .values({
+        id: 'u4',
+        contactId: 'c1',
+        timestamp: new Date(TIMESTAMP),
+        source: 'message',
+        inputTokens: 10,
+        outputTokens: 2,
+        costUsd: null
+      })
+      .run()
+    const event = toUsageEvent(db.select().from(usageEvents).all()[0])
+    expect('model' in event).toBe(false)
+    expect('costSource' in event).toBe(false)
+  })
 })
