@@ -33,6 +33,20 @@ export interface SessionSpec {
    * See contextForRepo() in src/main/services/group-messages.ts.
    */
   groupContext?: GroupMessage[]
+  /**
+   * Everything this session has already been billed for, so a backend that
+   * reports usage cumulatively can be reduced to one turn's own figure.
+   *
+   * Resolved by the caller for the same reason `skills` and `groupContext` are:
+   * it comes from `usage_events`, and nothing here may query. See baselineFor()
+   * in src/main/services/usage-events.ts, which also records the measurements
+   * that made this necessary.
+   *
+   * Only the Codex adapter reads it — Claude's figures were verified per-turn
+   * under `resume`. Leaving it unset means "no baseline known", which is
+   * correct for a fresh session and merely over-reports once for a resumed one.
+   */
+  usageBaseline?: AgentUsage | null
   /** Overrides the backend's default. Mostly for the probe CLI. */
   model?: string
 }

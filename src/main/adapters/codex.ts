@@ -96,15 +96,52 @@ function isToolItem(item: ThreadItem): boolean {
   )
 }
 
-export function usageFromTurn(usage: Usage | null | undefined, model: string): AgentUsage | null {
-  if (!usage) return null
+/**
+ * Codex's `turn.completed` reading minus what the thread has already been
+ * billed for.
+ *
+ * The SDK types every field as usage "during the turn" (`dist/index.d.ts:119`)
+ * and that is simply not what it sends — three one-word replies on one resumed
+ * thread reported 5, 10 and 15 output tokens. See baselineFor() in
+ * services/usage-events.ts for the full measurement.
+ *
+ * Floored at 0 rather than trusted: the first turn after this shipped sees a
+ * baseline summed only from rows that carry a session id, so on a thread that
+ * predates the column the reading can legitimately exceed it. A negative token
+ * count would be a worse lie than a low one.
+ */
+export function deltaFrom(usage: Usage, baseline: AgentUsage | null | undefined): Usage {
+  if (!baseline) return usage
+  const less = (reported: number, billed: number | undefined): number =>
+    Math.max(0, reported - (billed ?? 0))
+
   return {
-    inputTokens: usage.input_tokens,
-    outputTokens: usage.output_tokens,
-    cachedInputTokens: usage.cached_input_tokens,
-    cacheWriteInputTokens: usage.cache_write_input_tokens,
-    reasoningOutputTokens: usage.reasoning_output_tokens,
-    costUsd: computeCodexCost(model, usage),
+    input_tokens: less(usage.input_tokens, baseline.inputTokens),
+    cached_input_tokens: less(usage.cached_input_tokens, baseline.cachedInputTokens),
+    cache_write_input_tokens: less(usage.cache_write_input_tokens, baseline.cacheWriteInputTokens),
+    output_tokens: less(usage.output_tokens, baseline.outputTokens),
+    reasoning_output_tokens: less(usage.reasoning_output_tokens, baseline.reasoningOutputTokens)
+  }
+}
+
+export function usageFromTurn(
+  usage: Usage | null | undefined,
+  model: string,
+  baseline?: AgentUsage | null
+): AgentUsage | null {
+  if (!usage) return null
+
+  // Subtracted before pricing, never after: cost is recomputed from this turn's
+  // own tokens rather than differenced out of two cumulative totals.
+  const turn = deltaFrom(usage, baseline)
+
+  return {
+    inputTokens: turn.input_tokens,
+    outputTokens: turn.output_tokens,
+    cachedInputTokens: turn.cached_input_tokens,
+    cacheWriteInputTokens: turn.cache_write_input_tokens,
+    reasoningOutputTokens: turn.reasoning_output_tokens,
+    costUsd: computeCodexCost(model, turn),
     costSource: 'computed',
     model
   }
@@ -255,7 +292,7 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
         }
 
         case 'turn.completed': {
-          usage = usageFromTurn(event.usage, model)
+          usage = usageFromTurn(event.usage, model, spec.usageBaseline)
           break
         }
 
@@ -329,6 +366,9 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
 
       return {
         data: parseJson(turn.finalResponse),
+        // No baseline: startThread() every time, and a summariser thread is
+        // never resumed, so its first turn is also its only one. The cumulative
+        // reading and the per-turn one are the same number here.
         usage: turn.usage ? usageFromTurn(turn.usage, model) : null
       }
     } catch (error) {

@@ -198,7 +198,21 @@ export const usageEvents = sqliteTable(
     costSource: text('cost_source', { enum: ['sdk', 'computed'] }),
     /** Both backends report these; neither is included in the two above. */
     cacheWriteInputTokens: integer('cache_write_input_tokens'),
-    reasoningOutputTokens: integer('reasoning_output_tokens')
+    reasoningOutputTokens: integer('reasoning_output_tokens'),
+    /**
+     * The backend session this turn belonged to. Nullable, and it exists for
+     * one reason: Codex reports token usage **cumulatively across a thread**,
+     * not per turn, so recording what it says would over-report every turn
+     * after the first by a growing margin. Summing the deltas already recorded
+     * for a session gives the baseline to subtract — see baselineFor() in
+     * services/usage-events.ts.
+     *
+     * Rows written before this column existed carry NULL and are excluded from
+     * that sum, so an already-running Codex thread over-reports once more and
+     * is exact from then on. Cheaper than a backfill that would have to guess
+     * which historical rows were deltas and which were cumulative readings.
+     */
+    sessionId: text('session_id')
   },
   (table) => [index('usage_events_contact_timestamp_idx').on(table.contactId, table.timestamp)]
 )

@@ -143,7 +143,14 @@ export const usageEventSchema = z.object({
   /** Recorded per event: a persona's model can change, its history can't. */
   model: z.string().optional(),
   /** Whether costUsd came from the backend or from our own price table. */
-  costSource: costSourceSchema.optional()
+  costSource: costSourceSchema.optional(),
+  /**
+   * The backend session this turn belonged to. Absent on rows written before
+   * the column existed, and on turns no session id was reported for. Used to
+   * subtract Codex's cumulative token reading back down to one turn — see the
+   * column comment in db/schema.ts.
+   */
+  sessionId: z.string().optional()
 })
 
 // --- Write shapes -----------------------------------------------------------

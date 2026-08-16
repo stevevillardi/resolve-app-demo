@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk'
-import type { AgentEvent } from '../../shared/agent'
+import type { AgentEvent, AgentUsage } from '../../shared/agent'
 import type { PersonaTemplate } from '../../shared/domain'
 import type { SessionSpec } from './types'
 import { SUMMARY_JSON_SCHEMA, summarySchema } from '../../shared/summary'
@@ -189,6 +189,86 @@ describe('usageFromTurn', () => {
   it('returns null when the turn reported no usage at all', () => {
     expect(usageFromTurn(null, 'gpt-5.5')).toBeNull()
     expect(usageFromTurn(undefined, 'gpt-5.5')).toBeNull()
+  })
+})
+
+/**
+ * Codex reports usage cumulatively across a thread even though its own typings
+ * say "during the turn". These three readings are verbatim from
+ * `npm run probe:adapters -- --backend codex` over one resumed thread, three
+ * single-word replies: output goes 5 → 10 → 15, which no three one-word replies
+ * do. Fabricating them would have missed the bug entirely, so they stay as
+ * captured (rule (e)).
+ */
+describe('usageFromTurn subtracts what the thread was already billed for', () => {
+  const TURN_2 = {
+    input_tokens: 25610,
+    cached_input_tokens: 16128,
+    cache_write_input_tokens: 0,
+    output_tokens: 10,
+    reasoning_output_tokens: 0
+  }
+
+  const BILLED_AFTER_TURN_1: AgentUsage = {
+    inputTokens: 12122,
+    outputTokens: 5,
+    cachedInputTokens: 4480,
+    cacheWriteInputTokens: 0,
+    reasoningOutputTokens: 0,
+    costUsd: 0.0406,
+    costSource: 'computed',
+    model: 'gpt-5.5'
+  }
+
+  it('reports the turn, not the running total', () => {
+    const usage = usageFromTurn(TURN_2, 'gpt-5.5', BILLED_AFTER_TURN_1)
+    expect(usage).toMatchObject({
+      inputTokens: 13488,
+      outputTokens: 5,
+      cachedInputTokens: 11648
+    })
+  })
+
+  it('prices the delta rather than differencing two totals', () => {
+    // The cumulative reading prices at ~$0.0558. Recomputing from the delta is
+    // what keeps the figure honest when a price table changes between turns.
+    const billed = usageFromTurn(TURN_2, 'gpt-5.5', BILLED_AFTER_TURN_1)?.costUsd ?? 0
+    const cumulative = usageFromTurn(TURN_2, 'gpt-5.5')?.costUsd ?? 0
+    expect(billed).toBeLessThan(cumulative)
+    expect(billed).toBeCloseTo(
+      cumulative -
+        (usageFromTurn(
+          {
+            input_tokens: BILLED_AFTER_TURN_1.inputTokens,
+            cached_input_tokens: BILLED_AFTER_TURN_1.cachedInputTokens ?? 0,
+            cache_write_input_tokens: 0,
+            output_tokens: BILLED_AFTER_TURN_1.outputTokens,
+            reasoning_output_tokens: 0
+          },
+          'gpt-5.5'
+        )?.costUsd ?? 0),
+      9
+    )
+  })
+
+  it('reports the reading unchanged when no baseline is known', () => {
+    // A fresh thread, and the state of every row written before session ids
+    // were recorded. Over-reporting once beats inventing a baseline.
+    expect(usageFromTurn(TURN_2, 'gpt-5.5', null)?.inputTokens).toBe(25610)
+    expect(usageFromTurn(TURN_2, 'gpt-5.5')?.inputTokens).toBe(25610)
+  })
+
+  it('floors at zero rather than reporting negative tokens', () => {
+    // Reachable on a thread that predates the session_id column: the baseline
+    // sums only the rows that carry one, so it can undershoot — but a baseline
+    // that *overshoots* a reading must not produce a negative count.
+    const usage = usageFromTurn(TURN_2, 'gpt-5.5', {
+      ...BILLED_AFTER_TURN_1,
+      inputTokens: 999999,
+      outputTokens: 999999
+    })
+    expect(usage?.inputTokens).toBe(0)
+    expect(usage?.outputTokens).toBe(0)
   })
 })
 

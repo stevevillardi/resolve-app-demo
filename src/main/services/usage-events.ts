@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toUsageEvent } from '../db/mappers'
 import { usageEvents } from '../db/schema'
@@ -37,12 +37,18 @@ export function listUsageEvents(contactId?: string): UsageEvent[] {
  * published price", which is not the same as free, and rendering it as 0 would
  * quietly under-report a demo's spend.
  */
-export function recordUsage(contactId: string, source: UsageSource, usage: AgentUsage): UsageEvent {
+export function recordUsage(
+  contactId: string,
+  source: UsageSource,
+  usage: AgentUsage,
+  sessionId?: string | null
+): UsageEvent {
   const event: UsageEvent = {
     id: randomUUID(),
     contactId,
     timestamp: Date.now(),
     source,
+    ...(sessionId ? { sessionId } : {}),
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     costUsd: usage.costUsd,
@@ -66,4 +72,65 @@ export function recordUsage(contactId: string, source: UsageSource, usage: Agent
     .run()
 
   return event
+}
+
+/**
+ * What a backend has already been credited with for `sessionId` — the figure an
+ * adapter subtracts to get one turn's own usage.
+ *
+ * Exists because **Codex reports usage cumulatively across a thread**, despite
+ * `@openai/codex-sdk`'s own typings documenting every field as "during the
+ * turn" (`dist/index.d.ts:119-131`). Measured over three one-word replies on a
+ * single resumed thread:
+ *
+ *   turn 1   input 12122   output  5   cached  4480   $0.0406
+ *   turn 2   input 25610   output 10   cached 16128   $0.0558
+ *   turn 3   input 39114   output 15   cached 28800   $0.0664
+ *
+ * Output going 5 → 10 → 15 for three one-word replies is a running sum. Left
+ * alone, every UsageEvent after the first over-reports by a margin that grows
+ * with the conversation.
+ *
+ * Since every row this returns is itself already a delta, their sum *is* the
+ * cumulative total the backend will report next — no separate cursor to keep in
+ * step, and nothing to repair if a turn crashes before it records.
+ *
+ * Claude does not need this: its `total_cost_usd`/`modelUsage` were verified
+ * per-turn under `resume` over the same three-turn shape (turn 3 cost *less*
+ * than turn 2). It ignores the baseline.
+ */
+export function baselineFor(contactId: string, sessionId: string | null): AgentUsage | null {
+  if (!sessionId) return null
+
+  const rows = initDb()
+    .select()
+    .from(usageEvents)
+    .where(and(eq(usageEvents.contactId, contactId), eq(usageEvents.sessionId, sessionId)))
+    .all()
+
+  if (rows.length === 0) return null
+
+  return rows.reduce<AgentUsage>(
+    (total, row) => ({
+      inputTokens: total.inputTokens + row.inputTokens,
+      outputTokens: total.outputTokens + row.outputTokens,
+      cachedInputTokens: (total.cachedInputTokens ?? 0) + (row.cachedInputTokens ?? 0),
+      cacheWriteInputTokens: (total.cacheWriteInputTokens ?? 0) + (row.cacheWriteInputTokens ?? 0),
+      reasoningOutputTokens: (total.reasoningOutputTokens ?? 0) + (row.reasoningOutputTokens ?? 0),
+      // Only the token counts are subtracted; cost is recomputed from the
+      // delta, never differenced. Carried as null/'computed' to satisfy the
+      // shape.
+      costUsd: null,
+      costSource: 'computed'
+    }),
+    {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      cacheWriteInputTokens: 0,
+      reasoningOutputTokens: 0,
+      costUsd: null,
+      costSource: 'computed'
+    }
+  )
 }

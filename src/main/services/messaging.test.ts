@@ -34,6 +34,7 @@ let created: {
   model?: string
   skillNames: string[]
   groupContext: { content: string }[]
+  usageBaseline: AgentUsage | null
 }[] = []
 let sessionIdToReport: string | null = 'session-abc'
 let lastSignal: AbortSignal | null = null
@@ -67,6 +68,13 @@ vi.mock('./compaction', () => ({
   }
 }))
 
+interface SpecLike {
+  model?: string
+  skills: { name: string }[]
+  groupContext?: { content: string }[]
+  usageBaseline?: AgentUsage | null
+}
+
 const fakeAdapter = {
   backend: 'claude' as const,
   capabilities: {
@@ -75,28 +83,23 @@ const fakeAdapter = {
     costSource: 'sdk' as const,
     sandboxEnforcement: 'os' as const
   },
-  createSession(spec: {
-    model?: string
-    skills: { name: string }[]
-    groupContext?: { content: string }[]
-  }) {
+  createSession(spec: SpecLike) {
     created.push({
       resumedFrom: null,
       ...(spec.model !== undefined && { model: spec.model }),
       skillNames: spec.skills.map((skill) => skill.name),
-      groupContext: spec.groupContext ?? []
+      groupContext: spec.groupContext ?? [],
+      usageBaseline: spec.usageBaseline ?? null
     })
     return { backend: 'claude' as const, spec, sessionId: null as string | null }
   },
-  resume(
-    spec: { model?: string; skills: { name: string }[]; groupContext?: { content: string }[] },
-    sessionId: string
-  ) {
+  resume(spec: SpecLike, sessionId: string) {
     created.push({
       resumedFrom: sessionId,
       ...(spec.model !== undefined && { model: spec.model }),
       skillNames: spec.skills.map((skill) => skill.name),
-      groupContext: spec.groupContext ?? []
+      groupContext: spec.groupContext ?? [],
+      usageBaseline: spec.usageBaseline ?? null
     })
     return { backend: 'claude' as const, spec, sessionId: sessionId as string | null }
   },
@@ -270,6 +273,37 @@ describe('session resumption', () => {
     expect(created[1].resumedFrom).toBe('session-abc')
   })
 
+  // Codex reports usage cumulatively across a thread (see baselineFor), so a
+  // resumed session has to be told what it has already been billed for or every
+  // turn after the first over-reports. This is the wiring for that; the
+  // subtraction itself is adapters/codex.test.ts.
+  it('stamps each usage row with the session that produced it', async () => {
+    sendMessage('contact-a', 'first')
+    await settle()
+
+    expect(db.select().from(usageEvents).all()[0].sessionId).toBe('session-abc')
+  })
+
+  it('hands a resumed session what it has already been billed for', async () => {
+    sendMessage('contact-a', 'first')
+    await settle()
+    sendMessage('contact-a', 'second')
+    await settle()
+
+    // Nothing to subtract on the first turn of a session.
+    expect(created[0].usageBaseline).toBeNull()
+    expect(created[1].usageBaseline).toMatchObject({ inputTokens: 120, outputTokens: 45 })
+  })
+
+  it('accumulates the baseline across every turn of the session', async () => {
+    for (const prompt of ['first', 'second', 'third']) {
+      sendMessage('contact-a', prompt)
+      await settle()
+    }
+
+    expect(created[2].usageBaseline).toMatchObject({ inputTokens: 240, outputTokens: 90 })
+  })
+
   it('leaves the contact alone when the backend reports no session', async () => {
     sessionIdToReport = null
     script = [{ type: 'done', finalText: 'ok', usage: null }]
@@ -400,17 +434,18 @@ describe('the concurrency lock', () => {
     expect(() => sendMessage('contact-a', 'go')).not.toThrow()
   })
 
-  // The other direction still serializes: a writer waits for a reader to
-  // finish rather than starting a mutation underneath it. Previously this
-  // assertion carried the title of the test above, so neither claim was
-  // actually covered.
-  it('refuses a writer while a reader holds the repo', () => {
+  // And the other direction, which is the same claim read the other way round:
+  // "only writer-vs-writer serializes" (00-progress.md, 07-group-coordination.md).
+  // A reader holding the repo has nothing to serialize against — the worst it
+  // suffers is a mid-write snapshot, which it can already get by starting under
+  // a writer. Refusing here would let one long review block every writer.
+  it('lets a writer run while a reader holds the repo', () => {
     seedPersona('persona-write', 'workspace_write')
     seedContact('contact-w', 'persona-write')
 
     gate = holdOpen()
     sendMessage('contact-a', 'go')
-    expect(() => sendMessage('contact-w', 'go')).toThrow()
+    expect(() => sendMessage('contact-w', 'go')).not.toThrow()
   })
 
   it('refuses a second writer, naming who holds it', () => {

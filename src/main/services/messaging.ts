@@ -18,7 +18,7 @@ import {
   type Release
 } from './run-lock'
 import { skillsForPersona } from './skills'
-import { recordUsage } from './usage-events'
+import { baselineFor, recordUsage } from './usage-events'
 import type { AgentEvent } from '../../shared/agent'
 import type { GroupMessage, PersistedMessage } from '../../shared/domain'
 
@@ -234,6 +234,10 @@ function startTurn(contactId: string, content: string, groupId?: string): Starte
       // by a colleague between two of this contact's turns is visible on the
       // next one instead of at the next restart.
       groupContext: contextForRepo(contact.repoPath),
+      // What this session has already been billed for. Codex reports usage
+      // cumulatively across a thread, so without this every turn after the
+      // first over-reports — see baselineFor(). Claude ignores it.
+      usageBaseline: baselineFor(contactId, contact.backendSessionId),
       ...(persona.model ? { model: persona.model } : {})
     }
 
@@ -337,7 +341,11 @@ function finish(
     // A mention is spend the user asked for from the Group rather than from a
     // 1:1 thread; separating them lets the dashboard show what coordination
     // costs (see usageSourceSchema).
-    if (done?.usage) recordUsage(contactId, groupId ? 'mention' : 'message', done.usage)
+    // Stamped with the session so the next turn can subtract what this one
+    // already accounted for — the row is a delta, and baselineFor() sums them.
+    if (done?.usage) {
+      recordUsage(contactId, groupId ? 'mention' : 'message', done.usage, session.sessionId)
+    }
 
     // Read after the run, never before: the adapters fill this in mid-stream at
     // `session_started`, and it is what makes the next turn a resume.
