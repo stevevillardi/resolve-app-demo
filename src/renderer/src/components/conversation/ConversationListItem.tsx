@@ -1,6 +1,6 @@
 import { RunPulse } from '@/components/common/RunIndicator'
 import { formatListTimestamp, repoName } from '@/lib/format'
-import { formatCost } from '@/lib/usage'
+import { formatCostSummary } from '@/lib/usage'
 import { cn } from '@/lib/utils'
 import type { UsageSummary } from '@/types'
 
@@ -76,7 +76,7 @@ export function ConversationListItem({
               cost is never something you have to go looking for. */}
           {usage && (
             <span className="text-muted-foreground shrink-0 font-mono text-[10px] tabular-nums">
-              {formatCost(usage.totalCostUsd)}
+              {formatCostSummary(usage)}
             </span>
           )}
         </span>
