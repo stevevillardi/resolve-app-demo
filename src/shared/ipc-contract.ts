@@ -8,6 +8,9 @@ import {
   personaBackendSchema,
   personaTemplateDraftSchema,
   personaTemplateSchema,
+  routineDraftSchema,
+  routineSchema,
+  routineUpdateSchema,
   skillDraftSchema,
   skillSchema,
   usageEventSchema
@@ -217,6 +220,64 @@ export const ipcContract = {
   'personas.delete': {
     input: z.object({ id: z.string() }),
     output: z.object({ deleted: z.boolean() })
+  },
+
+  // --- Routines (Phase 8, blueprint §7) ------------------------------------
+  // `lastRunAt`/`lastRunSummary` are absent from both write shapes: run history
+  // is the scheduler's to write, and taking a whole routine on update would let
+  // an editor open across a fire save its stale copy back over the run.
+  'routines.list': {
+    input: z.void(),
+    output: z.array(routineSchema)
+  },
+  'routines.get': {
+    input: z.object({ id: z.string() }),
+    output: routineSchema.nullable()
+  },
+  /** Rejects a schedule the scheduler could not arm — main validates too. */
+  'routines.create': {
+    input: routineDraftSchema,
+    output: routineSchema
+  },
+  'routines.update': {
+    input: routineUpdateSchema,
+    output: routineSchema
+  },
+  'routines.delete': {
+    input: z.object({ id: z.string() }),
+    output: z.object({ deleted: z.boolean() })
+  },
+  /**
+   * Cron validation, in main because node-cron lives there.
+   *
+   * The renderer could not do this without shipping a scheduler runtime into
+   * its own bundle, and a second hand-rolled validator is the drift this repo
+   * has been bitten by twice. `nextRuns` feeds the editor's "Next: ..." hint,
+   * which is more use than restating the expression back at the user.
+   */
+  'routines.validateSchedule': {
+    input: z.object({ schedule: z.string() }),
+    output: z.object({
+      valid: z.boolean(),
+      error: z.string().nullable(),
+      nextRuns: z.array(z.number())
+    })
+  },
+  /**
+   * The manual trigger behind "Run now".
+   *
+   * Returns as soon as the turn is *running*, exactly like `messages.send`, so
+   * the reply streams on the push channel rather than holding an invoke open
+   * for what can be minutes. `runId` is null when the turn never started —
+   * refused by the run lock, or the routine is gone — and `skipped` says why.
+   *
+   * This is the same `fireRoutine` a cron tick calls, with no branch between
+   * them: blueprint §16 Journey 3 uses the button for demo reliability and
+   * calls out that equivalence as something to be able to state truthfully.
+   */
+  'routines.runNow': {
+    input: z.object({ id: z.string() }),
+    output: z.object({ runId: z.string().nullable(), skipped: z.string().nullable() })
   },
 
   // Read + create only. Sessions, messages, and the UI that calls create are

@@ -7,6 +7,7 @@ import './procedures/shell'
 import './procedures/data'
 import './procedures/messaging'
 import './procedures/repos'
+import './procedures/routines'
 
 /** Import every procedure module for its registration side effect, then wire the channel. */
 export function setupIpc(): void {
