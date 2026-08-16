@@ -4,7 +4,13 @@ import { composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
 import { computeCodexCost } from './pricing'
 import { codexSandboxMode } from './sandbox'
-import type { AdapterConfig, AgentAdapter, AgentSession, SessionSpec } from './types'
+import type {
+  AdapterConfig,
+  AgentAdapter,
+  AgentSession,
+  SessionSpec,
+  StructuredResult
+} from './types'
 
 /**
  * The Codex backend, on @openai/codex-sdk.
@@ -40,7 +46,10 @@ export const CODEX_CAPABILITIES: AgentCapabilities = {
   // The CLI's own `--sandbox` preset is enforced by the OS, on every platform
   // it runs on. This was already true in Phase 5 — it is only stated now that
   // the Claude side has an equivalent to be compared against.
-  sandboxEnforcement: 'os'
+  sandboxEnforcement: 'os',
+  // TurnOptions.outputSchema in 0.147.0. Per-turn rather than per-session,
+  // unlike Claude — see summarize().
+  supportsStructuredOutput: true
 }
 
 /**
@@ -270,11 +279,90 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
     }
   }
 
+  /**
+   * One schema-constrained turn (blueprint §6 compaction).
+   *
+   * The mirror image of the Claude side. `outputSchema` is a **per-turn**
+   * TurnOptions field, so no separate session shape is needed — but there is
+   * also no separate field to read the answer out of: the SDK documents
+   * `AgentMessageItem.text` as "either natural-language text or JSON when
+   * structured output is requested", so the JSON arrives exactly where prose
+   * normally would and we parse it ourselves.
+   *
+   * A model that answers with prose anyway therefore surfaces as a parse
+   * failure, which is the same null the Claude adapter returns when its retries
+   * are exhausted. Callers cannot tell the two apart, and should not need to.
+   *
+   * `read-only` sandbox rather than the persona's: a summariser is given its
+   * material in the prompt and has no reason to touch the tree.
+   */
+  async function summarize(
+    agentSession: AgentSession,
+    prompt: string,
+    schema: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<StructuredResult> {
+    const { spec } = agentSession
+    const model = spec.model ?? DEFAULT_CODEX_MODEL
+
+    try {
+      const { Codex } = await import('@openai/codex-sdk')
+
+      const client = new Codex({
+        ...(config.codexBinaryPath ? { codexPathOverride: config.codexBinaryPath } : {}),
+        ...(config.env ? { env: { ...process.env, ...config.env } as Record<string, string> } : {}),
+        config: { developer_instructions: composeInstructions(spec) }
+      })
+
+      const thread = client.startThread({
+        model,
+        sandboxMode: 'read-only',
+        workingDirectory: spec.repoPath
+      })
+
+      const turn = await thread.run(prompt, {
+        outputSchema: schema,
+        ...(signal ? { signal } : {})
+      })
+
+      config.onRawEvent?.(turn)
+
+      return {
+        data: parseJson(turn.finalResponse),
+        usage: turn.usage ? usageFromTurn(turn.usage, model) : null
+      }
+    } catch {
+      // Compaction never fails a turn that has already been persisted.
+      return { data: null, usage: null }
+    }
+  }
+
   return {
     backend: 'codex',
     capabilities: CODEX_CAPABILITIES,
     createSession: (spec) => session(spec, null),
     resume: (spec, sessionId) => session(spec, sessionId),
-    run
+    run,
+    summarize
+  }
+}
+
+/**
+ * Null rather than a throw on malformed JSON — see summarize().
+ *
+ * Tolerates a fenced ```json block, because a model asked for JSON in prose
+ * form frequently supplies one and discarding an otherwise-valid summary over
+ * three backticks would be a poor trade.
+ */
+function parseJson(text: string): unknown | null {
+  const unfenced = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+
+  try {
+    return JSON.parse(unfenced)
+  } catch {
+    return null
   }
 }

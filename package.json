@@ -12,6 +12,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "probe:adapters": "tsx scripts/probe-adapters.ts",
+    "probe:structured": "tsx scripts/probe-structured.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

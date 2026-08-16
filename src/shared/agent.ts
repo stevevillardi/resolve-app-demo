@@ -193,7 +193,19 @@ export const agentCapabilitiesSchema = z.object({
    * a weaker one. The UI should say which the user is getting rather than
    * showing the same "read-only" chip for both.
    */
-  sandboxEnforcement: z.enum(['os', 'policy'])
+  sandboxEnforcement: z.enum(['os', 'policy']),
+  /**
+   * Whether `AgentAdapter.summarize()` can actually constrain output to a
+   * schema on this backend.
+   *
+   * Both do today, by different mechanisms (Claude's session-level
+   * `outputFormat`, Codex's per-turn `outputSchema`). The flag exists so
+   * blueprint §6's compaction can degrade honestly on a backend that stops
+   * supporting it, rather than silently writing unparseable summaries into the
+   * Group — the same reason `sandboxEnforcement` is reported rather than
+   * assumed.
+   */
+  supportsStructuredOutput: z.boolean()
 })
 
 // --- Inferred types ---------------------------------------------------------

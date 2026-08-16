@@ -102,7 +102,8 @@ describe('agentCapabilitiesSchema', () => {
         streamsTextDeltas: true,
         streamsToolProgress: true,
         costSource: 'sdk',
-        sandboxEnforcement: 'os'
+        sandboxEnforcement: 'os',
+        supportsStructuredOutput: true
       }).success
     ).toBe(true)
     expect(
@@ -110,7 +111,8 @@ describe('agentCapabilitiesSchema', () => {
         streamsTextDeltas: false,
         streamsToolProgress: true,
         costSource: 'computed',
-        sandboxEnforcement: 'os'
+        sandboxEnforcement: 'os',
+        supportsStructuredOutput: true
       }).success
     ).toBe(true)
   })
@@ -119,11 +121,28 @@ describe('agentCapabilitiesSchema', () => {
     // The whole reason this field exists is that "read-only" meant two
     // different things per backend without anyone saying so. A capabilities
     // object that omits it must not parse.
+    //
+    // Every other field is present on purpose: omitting two at once would let
+    // this pass even if sandboxEnforcement became optional.
     expect(
       agentCapabilitiesSchema.safeParse({
         streamsTextDeltas: true,
         streamsToolProgress: true,
-        costSource: 'sdk'
+        costSource: 'sdk',
+        supportsStructuredOutput: true
+      }).success
+    ).toBe(false)
+  })
+
+  it('requires structured-output support to be stated too', () => {
+    // Same argument as above. Compaction degrades on a backend that cannot
+    // constrain output to a schema, so "unset" must not read as "yes".
+    expect(
+      agentCapabilitiesSchema.safeParse({
+        streamsTextDeltas: true,
+        streamsToolProgress: true,
+        costSource: 'sdk',
+        sandboxEnforcement: 'os'
       }).success
     ).toBe(false)
   })

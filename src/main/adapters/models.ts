@@ -44,6 +44,33 @@ export function modelsForBackend(backend: PersonaBackend): string[] {
 }
 
 /**
+ * The model that writes end-of-session summaries (blueprint §6), per backend.
+ *
+ * Deliberately not the persona's model. Compaction runs after *every* turn, so
+ * pinning it to the persona would roughly double the cost of an Opus-class
+ * persona for a task that is classification, not reasoning: read one finished
+ * turn, write a sentence, pick one of three categories. The cheapest model on
+ * each backend is enough, and it keeps the price of coordination independent of
+ * how expensive a persona the user chose.
+ *
+ * Same caveat as MODELS above — hardcoded because neither SDK will tell us, and
+ * dated so the staleness is visible. A model that is unavailable to the account
+ * fails the summary turn, which is swallowed: the user's turn is already
+ * committed by then, so the visible symptom is a missing Group entry, not a
+ * broken conversation.
+ */
+export const SUMMARY_MODELS: Record<PersonaBackend, string> = {
+  claude: 'claude-haiku-4-5-20251001',
+  // gpt-5.4-mini is the cheapest entry that CODEX_PRICES also knows, which
+  // matters because summary turns are recorded as usage_events like any other.
+  codex: 'gpt-5.4-mini'
+}
+
+export function summaryModelFor(backend: PersonaBackend): string {
+  return SUMMARY_MODELS[backend]
+}
+
+/**
  * Whether a persisted model still belongs to its backend.
  *
  * The editor uses this to clear a stale choice when the backend is switched —

@@ -3,7 +3,13 @@ import type { AgentCapabilities, AgentErrorKind, AgentEvent, AgentUsage } from '
 import { composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
 import { claudeSandboxOptions, evaluateToolUse, osSandboxSupported } from './sandbox'
-import type { AdapterConfig, AgentAdapter, AgentSession, SessionSpec } from './types'
+import type {
+  AdapterConfig,
+  AgentAdapter,
+  AgentSession,
+  SessionSpec,
+  StructuredResult
+} from './types'
 
 /**
  * The Claude backend, on @anthropic-ai/claude-agent-sdk.
@@ -36,7 +42,11 @@ export const CLAUDE_CAPABILITIES: AgentCapabilities = {
   // Options.sandbox confines commands at the OS level wherever the SDK has an
   // implementation. Where it doesn't (Windows) we say so rather than implying
   // a boundary that is only our in-process allowlist.
-  sandboxEnforcement: osSandboxSupported() ? 'os' : 'policy'
+  sandboxEnforcement: osSandboxSupported() ? 'os' : 'policy',
+  // Options.outputFormat + SDKResultSuccess.structured_output, both present in
+  // 0.3.233. See summarize() for the placeholder-carrier trap that comes with
+  // them.
+  supportsStructuredOutput: true
 }
 
 // --- Normalization helpers --------------------------------------------------
@@ -325,14 +335,99 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
     }
   }
 
+  /**
+   * One schema-constrained turn (blueprint §6 compaction).
+   *
+   * Three things here are not obvious from run() and are load-bearing:
+   *
+   * - `outputFormat` sits in `options`, i.e. it is **session-level**. That is
+   *   why compaction cannot be a flag on run(): an existing conversational
+   *   session cannot be asked for JSON on its final turn.
+   * - The answer is read from `structured_output`, **not** `result`. A
+   *   structured turn is an "end-turn tool session": it finishes on a
+   *   tool_result carrier whose data is a placeholder and has no trailing
+   *   assistant message, so `result` — which run() treats as authoritative —
+   *   holds the placeholder here.
+   * - `error_max_structured_output_retries` means the SDK already retried and
+   *   gave up. That is a null answer, not an exception: the user's turn is long
+   *   since committed and a missing Group entry is the correct degradation.
+   *
+   * No sandbox, no tools, no repo access — it reads a finished transcript that
+   * is handed to it in the prompt. `disallowedTools` is belt and braces on top
+   * of a persona spec the caller is expected to build read-only anyway.
+   */
+  async function summarize(
+    agentSession: AgentSession,
+    prompt: string,
+    schema: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<StructuredResult> {
+    const { spec } = agentSession
+    const abort = signal ? abortControllerFor(signal) : null
+
+    try {
+      const stream = query({
+        prompt,
+        options: {
+          cwd: spec.repoPath,
+          systemPrompt: composeInstructions(spec),
+          settingSources: [],
+          outputFormat: { type: 'json_schema', schema },
+          disallowedTools: SUMMARY_DISALLOWED_TOOLS,
+          env: { ...process.env, ...config.env } as Record<string, string>,
+          ...(spec.model ? { model: spec.model } : {}),
+          ...(abort ? { abortController: abort.controller } : {}),
+          stderr: (data: string) => config.onRawEvent?.({ type: 'stderr', data })
+        }
+      })
+
+      let data: unknown | null = null
+      let usage: AgentUsage | null = null
+
+      for await (const message of stream) {
+        config.onRawEvent?.(message)
+        if (message.type !== 'result') continue
+
+        usage = usageFromResult(message)
+        if (message.subtype === 'success') data = message.structured_output ?? null
+      }
+
+      return { data, usage }
+    } catch {
+      // Same contract as the null above: compaction never fails a turn that has
+      // already been persisted. The caller logs.
+      return { data: null, usage: null }
+    } finally {
+      abort?.dispose()
+    }
+  }
+
   return {
     backend: 'claude',
     capabilities: CLAUDE_CAPABILITIES,
     createSession: (spec) => session(spec, null),
     resume: (spec, sessionId) => session(spec, sessionId),
-    run
+    run,
+    summarize
   }
 }
+
+/**
+ * A summariser reads the prompt it was given and nothing else. Named
+ * explicitly rather than derived from the sandbox level so that widening
+ * `sandbox.ts` later cannot quietly hand the summariser filesystem access.
+ */
+const SUMMARY_DISALLOWED_TOOLS = [
+  'Bash',
+  'Edit',
+  'Glob',
+  'Grep',
+  'NotebookEdit',
+  'Read',
+  'WebFetch',
+  'WebSearch',
+  'Write'
+]
 
 /**
  * The SDK takes an AbortController, callers hand us an AbortSignal.

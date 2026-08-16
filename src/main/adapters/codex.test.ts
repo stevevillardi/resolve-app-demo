@@ -16,6 +16,14 @@ let lastClientOptions: Record<string, unknown> | undefined
 let lastThreadOptions: Record<string, unknown> | undefined
 let lastResumedId: string | undefined
 
+/** Set by the summarize tests; `run()` is the non-streaming turn they use. */
+let turnResult: { finalResponse: string; usage: unknown; items: unknown[] } = {
+  finalResponse: '',
+  usage: null,
+  items: []
+}
+let lastTurnOptions: Record<string, unknown> | undefined
+
 class FakeThread {
   async runStreamed(): Promise<{ events: AsyncGenerator<ThreadEvent> }> {
     return {
@@ -23,6 +31,10 @@ class FakeThread {
         for (const event of events) yield event
       })()
     }
+  }
+  async run(_prompt: string, options: Record<string, unknown>): Promise<typeof turnResult> {
+    lastTurnOptions = options
+    return turnResult
   }
 }
 
@@ -405,5 +417,80 @@ describe('stream normalization', () => {
       { type: 'item.completed', item: { id: 't', type: 'todo_list', items: [] } }
     ])
     expect(collected.filter((e) => e.type === 'error')).toHaveLength(0)
+  })
+})
+
+describe('summarize', () => {
+  /**
+   * ⚠️ Provenance: derived from the vendored SDK's typings
+   * (dist/index.d.ts — `TurnOptions.outputSchema` at :171, and the
+   * `AgentMessageItem.text` note at :64-70 that the JSON arrives where prose
+   * normally would), not yet from a captured live run. Close the gap with
+   * `npm run probe:structured -- --backend codex --raw`.
+   */
+  const SCHEMA = { type: 'object', properties: { summary: { type: 'string' } } }
+
+  async function run(finalResponse: string, usage: unknown = null): Promise<unknown> {
+    turnResult = { finalResponse, usage, items: [] }
+    const adapter = createCodexAdapter()
+    const result = await adapter.summarize(adapter.createSession(SPEC), 'summarise', SCHEMA)
+    return result.data
+  }
+
+  beforeEach(() => {
+    turnResult = { finalResponse: '', usage: null, items: [] }
+    lastTurnOptions = undefined
+  })
+
+  it('parses the JSON out of finalResponse', async () => {
+    // Unlike Claude there is no separate field — the SDK documents this text
+    // as "either natural-language text or JSON when structured output is
+    // requested", so the answer arrives exactly where prose would.
+    expect(await run('{"summary":"Renamed foo to bar.","category":"decision"}')).toEqual({
+      summary: 'Renamed foo to bar.',
+      category: 'decision'
+    })
+  })
+
+  it('passes the schema as a per-turn outputSchema', async () => {
+    await run('{}')
+    expect(lastTurnOptions?.outputSchema).toEqual(SCHEMA)
+  })
+
+  it('tolerates a fenced code block', async () => {
+    // Asked for JSON in prose form, a model frequently fences it. Discarding
+    // an otherwise-valid summary over three backticks would be a poor trade.
+    expect(await run('```json\n{"summary":"ok","category":"routine"}\n```')).toEqual({
+      summary: 'ok',
+      category: 'routine'
+    })
+  })
+
+  it('returns null when the model answered with prose instead', async () => {
+    // Indistinguishable, by design, from Claude exhausting its retries: both
+    // mean "no conforming answer this turn".
+    expect(await run('I renamed foo to bar because the old name was ambiguous.')).toBeNull()
+  })
+
+  it('reports usage so a summary turn is billable like any other', async () => {
+    turnResult = {
+      finalResponse: '{"summary":"ok","category":"routine"}',
+      usage: { input_tokens: 900, cached_input_tokens: 100, output_tokens: 40 },
+      items: []
+    }
+    const adapter = createCodexAdapter()
+    const { usage } = await adapter.summarize(adapter.createSession(SPEC), 'go', SCHEMA)
+    expect(usage).toMatchObject({ outputTokens: 40, costSource: 'computed' })
+  })
+
+  it('runs read-only regardless of what the persona could do', async () => {
+    // Deliberately a workspace_write persona: with the read_only default this
+    // assertion would hold even if summarize() passed the persona's own level
+    // through, which is the thing being ruled out.
+    turnResult = { finalResponse: '{}', usage: null, items: [] }
+    const adapter = createCodexAdapter()
+    const spec: SessionSpec = { ...SPEC, persona: { ...PERSONA, sandbox: 'workspace_write' } }
+    await adapter.summarize(adapter.createSession(spec), 'go', SCHEMA)
+    expect(lastThreadOptions?.sandboxMode).toBe('read-only')
   })
 })
