@@ -1,4 +1,4 @@
-import { isolationOf } from './worktrees'
+import { isolationOf } from '../../shared/domain'
 import type { Contact, Isolation, PersonaTemplate } from '../../shared/domain'
 
 /**

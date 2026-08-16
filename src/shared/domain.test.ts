@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   contactDraftSchema,
   contactSchema,
+  defaultIsolation,
+  isolationOf,
   groupMessageSchema,
   personaTemplateDraftSchema,
   personaTemplateSchema,
@@ -287,5 +289,27 @@ describe('usageEvent', () => {
 
   it('requires costUsd to be present, even as null', () => {
     expect(() => usageEventSchema.parse(BASE)).toThrow()
+  })
+})
+
+describe('isolation', () => {
+  // Readers stay in the main tree: they are never refused by the run lock
+  // anyway, and the main tree is the only place the uncommitted work they were
+  // asked to look at is visible.
+  it('leaves readers in the main tree', () => {
+    expect(defaultIsolation('read_only')).toBe('shared')
+  })
+
+  it('isolates anything that can write', () => {
+    expect(defaultIsolation('workspace_write')).toBe('worktree')
+    expect(defaultIsolation('full_access')).toBe('worktree')
+  })
+
+  it('reads a pre-0007 null as shared', () => {
+    expect(isolationOf(null)).toBe('shared')
+  })
+
+  it('passes a stored mode through', () => {
+    expect(isolationOf('exclusive')).toBe('exclusive')
   })
 })

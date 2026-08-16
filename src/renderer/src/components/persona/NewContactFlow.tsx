@@ -23,6 +23,8 @@ import { useUiStore } from '@/store/useUiStore'
 import { repoName } from '@/lib/format'
 import { NON_REPO_NOTE, repoBindingProblem } from '@/lib/repo-binding'
 import { cn } from '@/lib/utils'
+import { defaultIsolation } from '../../../../shared/domain'
+import type { Isolation } from '@/types'
 import type { BoundRepo, RepoOption } from '../../../../shared/ipc-contract'
 
 interface NewContactFlowProps {
@@ -44,14 +46,56 @@ const SOURCE_OPTIONS: { value: Source; label: string }[] = [
   { value: 'local', label: 'Local folder' }
 ]
 
-const STEPS = ['persona', 'repo', 'confirm'] as const
+const STEPS = ['persona', 'repo', 'isolation', 'confirm'] as const
 type Step = (typeof STEPS)[number]
 
 const STEP_COPY: Record<Step, { title: string; description: string }> = {
   persona: { title: 'Pick a persona', description: 'Which template should this contact use?' },
   repo: { title: 'Bind a repo', description: 'The persona only ever works inside this repo.' },
+  // After the repo rather than before it, because the choice is only meaningful
+  // once we know whether the binding is a git repo at all.
+  isolation: {
+    title: 'Where it works',
+    description: 'Your own checkout, or one of its own.'
+  },
   confirm: { title: 'Confirm', description: 'Check the scope before creating the contact.' }
 }
+
+/**
+ * The three modes, in the order they are worth considering.
+ *
+ * Written out here rather than derived, because each one's cost is the thing
+ * that decides it and none of those costs are inferable from the name.
+ */
+const ISOLATION_OPTIONS: {
+  value: Isolation
+  label: string
+  description: string
+  /** Needs a git repo to be possible at all. */
+  needsGit: boolean
+}[] = [
+  {
+    value: 'worktree',
+    label: 'Its own checkout',
+    description:
+      'Works on its own branch in a separate directory, so it never waits for another persona and never touches your files. It starts from the last commit — your uncommitted work and node_modules are not there.',
+    needsGit: true
+  },
+  {
+    value: 'shared',
+    label: 'Your checkout',
+    description:
+      'Works directly in the repo, seeing your uncommitted changes and everything already installed. Writers take turns here: one runs at a time.',
+    needsGit: false
+  },
+  {
+    value: 'exclusive',
+    label: 'Your checkout, alone',
+    description:
+      'The same directory, but held for the whole turn so nothing else can read it mid-write. For work that needs the repo to itself.',
+    needsGit: false
+  }
+]
 
 function StepDots({ current }: { current: Step }): React.JSX.Element {
   const index = STEPS.indexOf(current)
@@ -77,6 +121,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const [source, setSource] = useState<Source>('github')
   const [repoId, setRepoId] = useState<string | null>(null)
   const [localRepo, setLocalRepo] = useState<BoundRepo | null>(null)
+  // Null until the user decides, so the step can show the default without having
+  // silently made the choice on their behalf.
+  const [isolation, setIsolation] = useState<Isolation | null>(null)
 
   const { data: personaTemplates = [] } = usePersonas()
   const { data: authStatus } = useAuthStatus()
@@ -100,6 +147,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       setPersonaId(null)
       setRepoId(null)
       setLocalRepo(null)
+      setIsolation(null)
       setSource('github')
     }, 200)
     return () => window.clearTimeout(timer)
@@ -118,6 +166,16 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       ? repoBindingProblem(persona?.backend, persona?.name, localRepo.isGitRepo)
       : null
 
+  // A GitHub repo is a git repo by definition; only a hand-picked folder can
+  // fail to be one, and a folder that isn't cannot have a worktree at all.
+  const isGitRepo = source === 'local' ? Boolean(localRepo?.isGitRepo) : true
+  const suggestedIsolation: Isolation = !isGitRepo
+    ? 'exclusive'
+    : persona
+      ? defaultIsolation(persona.sandbox)
+      : 'shared'
+  const chosenIsolation = isolation ?? suggestedIsolation
+
   /** Binds the contact, cloning first when the repo is only on GitHub so far. */
   const handleCreate = (): void => {
     if (!persona) return
@@ -128,7 +186,8 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
           personaTemplateId: persona.id,
           repoPath: path,
           // Blueprint §4's example shape — "Code Reviewer · my-app".
-          displayName: `${persona.name} · ${repoName(path)}`
+          displayName: `${persona.name} · ${repoName(path)}`,
+          isolation: chosenIsolation
         },
         (contact) => {
           // Land the user in the thread they just created rather than back on
@@ -285,6 +344,43 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
           </div>
         )}
 
+        {step === 'isolation' && persona && (
+          <div className="flex flex-col gap-2">
+            {ISOLATION_OPTIONS.map((option) => {
+              const unavailable = option.needsGit && !isGitRepo
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={unavailable}
+                  onClick={() => setIsolation(option.value)}
+                  className={cn(
+                    rowClass(chosenIsolation === option.value),
+                    'items-start disabled:cursor-not-allowed disabled:opacity-50'
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                      {option.label}
+                      {option.value === suggestedIsolation && !unavailable && (
+                        <span className="text-muted-foreground text-[11px] font-normal">
+                          Recommended
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      {unavailable
+                        ? 'Needs a git repository — this folder isn’t one.'
+                        : option.description}
+                    </p>
+                  </div>
+                  {chosenIsolation === option.value && <Check className="mt-0.5 size-4 shrink-0" />}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {step === 'confirm' && persona && hasRepo && (
           <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
             <div className="flex items-center gap-2.5">
@@ -299,6 +395,13 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               <ScopeChip axis="sandbox" value={persona.sandbox} />
               <ScopeChip axis="github" value={persona.githubScope} />
             </div>
+            <p className="text-muted-foreground text-xs">
+              {chosenIsolation === 'worktree'
+                ? 'Works on its own branch, in its own checkout.'
+                : chosenIsolation === 'exclusive'
+                  ? 'Works in your checkout, holding it for the whole turn.'
+                  : 'Works in your checkout, alongside everyone else.'}
+            </p>
             {!chosenPath && (
               <p className="text-muted-foreground text-xs">
                 This repo isn&apos;t on this machine yet — creating the contact will clone it first.
@@ -314,10 +417,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
           <StepDots current={step} />
           <div className="flex items-center gap-2">
             {step !== 'persona' && (
-              <Button
-                variant="outline"
-                onClick={() => setStep(step === 'confirm' ? 'repo' : 'persona')}
-              >
+              // An index walk rather than a ternary chain, so inserting a step
+              // is one line in STEPS instead of a correction here as well.
+              <Button variant="outline" onClick={() => setStep(STEPS[STEPS.indexOf(step) - 1])}>
                 Back
               </Button>
             )}
@@ -329,11 +431,12 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             {step === 'repo' && (
               <Button
                 disabled={!hasRepo || Boolean(bindingProblem)}
-                onClick={() => setStep('confirm')}
+                onClick={() => setStep('isolation')}
               >
                 Continue
               </Button>
             )}
+            {step === 'isolation' && <Button onClick={() => setStep('confirm')}>Continue</Button>}
             {step === 'confirm' && (
               <Button disabled={busy} onClick={handleCreate}>
                 {cloning ? 'Cloning…' : creating ? 'Creating…' : 'Create'}

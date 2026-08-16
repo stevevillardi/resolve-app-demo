@@ -6,7 +6,8 @@ import { initDb } from '../db'
 import { contacts } from '../db/schema'
 import { changedFiles, gitWritePathsFor, headSha, worktreeAdd, worktreePrune } from './git'
 import type { SiblingBranch } from '../adapters/types'
-import type { Contact, Isolation, SandboxLevel } from '../../shared/domain'
+import { isolationOf } from '../../shared/domain'
+import type { Contact } from '../../shared/domain'
 
 /**
  * Where each Contact works, and what its branch is called.
@@ -58,27 +59,6 @@ export function plannedWorktree(
   const name = `${persona}-${shortId(contactId)}`
 
   return { path: join(worktreeRoot(), repo, name), branch: `persona/${name}` }
-}
-
-/**
- * What a new Contact gets when the bind flow doesn't say.
- *
- * Readers stay in the main tree: they are never refused by the run lock anyway,
- * and the main tree is the only place uncommitted work is visible — which is
- * usually the thing a reviewer was asked to look at. Writers are the ones that
- * contend, so they are the ones that get isolated.
- *
- * A repo that is not a git repo cannot be isolated at all; the bind flow is
- * responsible for choosing `exclusive` there, because it is the only layer that
- * can ask git the question before the Contact exists.
- */
-export function defaultIsolation(sandbox: SandboxLevel): Isolation {
-  return sandbox === 'read_only' ? 'shared' : 'worktree'
-}
-
-/** Null reads as `shared` — that is what every pre-0007 row means. */
-export function isolationOf(isolation: Isolation | null): Isolation {
-  return isolation ?? 'shared'
 }
 
 /**

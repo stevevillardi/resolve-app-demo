@@ -5,7 +5,7 @@ const USER_DATA = '/Users/dev/Library/Application Support/persona-router'
 
 vi.mock('electron', () => ({ app: { getPath: () => USER_DATA } }))
 
-const { defaultIsolation, isolationOf, plannedWorktree, worktreeRoot } = await import('./worktrees')
+const { plannedWorktree, worktreeRoot } = await import('./worktrees')
 
 /**
  * The branch names this produces go straight to git, so the interesting
@@ -108,29 +108,5 @@ describe('plannedWorktree', () => {
 
     expect(path).toBe(`${USER_DATA}/worktrees/repo/persona-a3f9`)
     expect(branch).toBe('persona/persona-a3f9')
-  })
-})
-
-describe('defaultIsolation', () => {
-  // Readers stay in the main tree: they are never refused anyway, and the main
-  // tree is the only place the uncommitted work they were asked to look at is
-  // visible.
-  it('leaves readers in the main tree', () => {
-    expect(defaultIsolation('read_only')).toBe('shared')
-  })
-
-  it('isolates anything that can write', () => {
-    expect(defaultIsolation('workspace_write')).toBe('worktree')
-    expect(defaultIsolation('full_access')).toBe('worktree')
-  })
-})
-
-describe('isolationOf', () => {
-  it('reads a pre-0007 null as shared', () => {
-    expect(isolationOf(null)).toBe('shared')
-  })
-
-  it('passes a stored mode through', () => {
-    expect(isolationOf('exclusive')).toBe('exclusive')
   })
 })

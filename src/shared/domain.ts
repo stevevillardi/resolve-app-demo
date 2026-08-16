@@ -69,6 +69,27 @@ export const personaTemplateSchema = z.object({
  */
 export const isolationSchema = z.enum(['shared', 'worktree', 'exclusive'])
 
+/**
+ * What a new Contact gets when nobody says otherwise.
+ *
+ * Lives here rather than in main because the bind flow has to show the same
+ * answer the service would have chosen — two copies of this rule would drift
+ * into a picker that pre-selects one thing and a database that stores another.
+ *
+ * Readers stay in the main tree: they are never refused by the run lock anyway,
+ * and the main tree is the only place uncommitted work is visible, which is
+ * usually the thing a reviewer was asked to look at. Writers are the ones that
+ * contend, so writers are the ones that get isolated.
+ */
+export function defaultIsolation(sandbox: SandboxLevel): Isolation {
+  return sandbox === 'read_only' ? 'shared' : 'worktree'
+}
+
+/** Null reads as `shared` — that is what every pre-0007 row means. */
+export function isolationOf(isolation: Isolation | null): Isolation {
+  return isolation ?? 'shared'
+}
+
 export const contactSchema = z.object({
   id: z.string(),
   personaTemplateId: z.string(),

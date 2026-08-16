@@ -6,7 +6,8 @@ import { toContact } from '../db/mappers'
 import { contacts, personaTemplates } from '../db/schema'
 import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
-import { defaultIsolation, plannedWorktree } from './worktrees'
+import { plannedWorktree } from './worktrees'
+import { defaultIsolation } from '../../shared/domain'
 import type { Contact, ContactDraft } from '../../shared/domain'
 
 /**
