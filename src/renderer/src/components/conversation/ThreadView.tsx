@@ -21,6 +21,7 @@ import {
   useSendMessage
 } from '@/hooks/useMessages'
 import { useUsageEvents } from '@/hooks/useUsage'
+import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests'
 import { useRunStore } from '@/store/useRunStore'
 import { streamText } from '@/lib/stream'
 import { usageForContact } from '@/lib/usage'
@@ -45,6 +46,9 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
   const { send, error: sendError, reset } = useSendMessage(contactId)
   const { cancel } = useCancelRun()
+
+  const { data: prState } = usePullRequestState(contactId)
+  const { open: openPr, isPending: opening, error: prError, reset: resetPr } = useOpenPullRequest()
 
   const usage = useMemo(() => usageForContact(usageEvents, contactId), [usageEvents, contactId])
 
@@ -84,7 +88,16 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
           <>
             <BackendBadge backend={persona.backend} />
             <UsageBadge summary={usage} />
-            <OpenPRButton githubScope={persona.githubScope} />
+            <OpenPRButton
+              githubScope={persona.githubScope}
+              available={prState?.available ?? false}
+              pr={prState?.pr ?? null}
+              isPending={opening}
+              onOpen={() => {
+                resetPr()
+                openPr(contactId)
+              }}
+            />
           </>
         }
       />
@@ -153,7 +166,11 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
         onStop={() => turn && cancel(turn.runId)}
         disabled={Boolean(blocker)}
         notice={
+          // A pull-request refusal belongs here rather than beside the button:
+          // the messages name what to do next ("commit or discard them first"),
+          // and the header has no room to say it.
           sendError ??
+          prError ??
           (blocker
             ? `${blocker.contactName} is working in this repo. Wait for it to finish, or stop it from that conversation.`
             : undefined)
