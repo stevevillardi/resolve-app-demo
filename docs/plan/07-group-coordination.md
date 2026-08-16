@@ -14,6 +14,11 @@ Make the Group layer real: end-of-session structured summaries posting as `syste
    - At session end (after each `AgentAdapter.run()` completes, not just on explicit "close"), request a structured summary from the model: `{ summary: string, category: "decision" | "tradeoff" | "routine" }`, schema-enforced via Zod + the SDK's structured-output support (both backends claim to support this per blueprint §3 — confirm during implementation).
    - `decision` / `tradeoff` → `durable: true`, `routine` → `durable: false`.
    - Persist as a `GroupMessage` with `type: "system_summary"` on the repo's Group.
+   - **Leave room for branch metadata.** Once `12-worktree-isolation.md` lands,
+     this summary is how the rest of the repo finds out a writer produced work
+     on a branch nobody can see on disk — the Group becomes the awareness
+     channel for branch state. Adding an optional `branch` (and later `needs`)
+     to the structured output is cheap now and awkward retrofitted.
 
 2. **Context injection of durable/recent entries (blueprint §5)**
    - On session start (or resume), inject the last N `durable` GroupMessages for that repo plus the last N `routine`-category ones into the session's context, on top of the persona's own system prompt/skills (Phase 5's context injection).
@@ -29,8 +34,24 @@ Make the Group layer real: end-of-session structured summaries posting as `syste
    - **v1: single-target only** — no broadcast. Enforce this in the picker (single-select, not multi).
    - 1:1 threads and the Group thread must render from the same underlying session/message state — no duplicated storage of the same conversation.
 
-5. **Concurrency lock, full version (blueprint §15D)**
-   - Extend Phase 6's `repoPath → busy` map to also gate @mention-triggered runs, not just direct 1:1 messages — an @mention firing while that Contact (or any Contact on that repo, per the soft single-session-per-repo rule) is already busy should queue or be rejected with a clear UI signal, not silently race.
+5. **Concurrency lock — extend to @mentions (blueprint §15D, as narrowed in Phase 6)**
+
+   **Read `00-progress.md`'s entry on this before assuming §15D's wording.** Phase 6
+   deliberately did not build the `repoPath → busy` map §15D describes. The lock
+   is a *write* lock keyed on the working path: `read_only` personas take a
+   shared hold and are never refused, and only writer-vs-writer serializes.
+
+   - An @mention-triggered run acquires through the same
+     `acquire()` / `lockModeFor()` / `workingPathFor()` in
+     `src/main/services/run-lock.ts` that a 1:1 message uses. There is nothing
+     to extend in the lock itself — the work is routing the refusal into the
+     Group thread's UI rather than the composer's.
+   - So an @mentioned **reader** is never blocked, which is what makes Journey 2
+     work as scripted: Refactor Buddy (`workspace_write`) and Code Reviewer
+     (`read_only`) run against one repo *concurrently*, with no worktrees
+     involved. Journey 2 does not need `12-worktree-isolation.md`.
+   - What still serializes is two writers. If that becomes the limiting factor
+     here rather than in Phase 8, pull the worktree phase forward.
 
 ## Explicitly out of scope
 
@@ -41,5 +62,6 @@ Make the Group layer real: end-of-session structured summaries posting as `syste
 
 - [ ] Blueprint §16 Journey 2 runs live: "Refactor Buddy" (`workspace_write`) makes a change and states a rationale; its structured summary posts to the Group as a durable `system_summary`; opening "Code Reviewer" scoped to the same repo shows it referencing the refactor without being told manually; @mentioning a third persona from the Group thread gets a live routed reply.
 - [ ] `decision`/`tradeoff` summaries persist indefinitely and are always injected; `routine`-category summaries only show the most recent N but remain queryable in SQLite.
-- [ ] Two Contacts cannot run simultaneously against the same repo — verified by triggering an @mention while a 1:1 session on that repo is mid-stream.
+- [ ] An @mentioned `read_only` Contact runs while a writer holds the same repo — the Phase 6 lock semantics hold for this caller too.
+- [ ] Two _writing_ Contacts on one repo serialize — verified by @mentioning a `workspace_write` persona while a 1:1 writing session on that repo is mid-stream, with the refusal visible in the Group thread rather than only in a log.
 - [ ] 1:1 thread and Group thread both reflect the exact same message when a Contact replies via @mention (no divergent copies).

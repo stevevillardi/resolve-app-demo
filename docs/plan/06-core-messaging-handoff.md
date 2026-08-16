@@ -1,6 +1,9 @@
 # Phase 6 — Core Messaging: implementation handoff
 
-**Status:** Planned, not started
+**Status:** Implemented on `phase-6-core-messaging`, pending live verification.
+Part A is built and covered by 491 unit tests + 24 E2E; Part B's doc updates are
+applied, including the new [`12-worktree-isolation.md`](12-worktree-isolation.md).
+What remains is running Journey 1 against a real backend — see "Verification".
 **Companion doc:** [`06-core-messaging.md`](06-core-messaging.md) — the original
 scope doc. This file is the *implementation* plan derived from it, written after
 a fresh pass over the code. Where the two disagree, this file is newer and says
@@ -533,11 +536,10 @@ the phase, not an afterthought.
 ## `docs/plan/06-core-messaging.md`
 
 Rewrite scope item 5 (concurrency) around the write-lock model; add the stop
-button as item 7; record the repo-picker and clone-root decisions; correct the
-`Select`-vs-`SegmentedControl` detail; note migration `0004` also touches
-`usage_events`. Update the acceptance checks to match — in particular the
-concurrency check now reads "two writers on one repo serialize; a reader is
-never blocked."
+button as its own item; record the repo-picker and clone-root decisions; correct
+the `Select`-vs-`SegmentedControl` detail. Update the acceptance checks to
+match — in particular the concurrency check now reads "two writers on one repo
+serialize; a reader is never blocked."
 
 ## `docs/plan/00-progress.md`
 
@@ -547,8 +549,8 @@ Tracker row for Phase 6, plus new decision entries:
   Codex-OS-enforced vs Claude-policy-enforced asymmetry, and the
   `workingPathFor()` seam.
 - **Worktree isolation adopted, deferred, and chosen per Contact at bind time.**
-- **Model/cost columns on `usage_events`**, and why `cacheWriteInputTokens` /
-  `reasoningOutputTokens` were left out.
+- **Migration `0004`'s usage-attribution columns**, and why the two that
+  blueprint §12 doesn't list went in anyway.
 
 ## `docs/plan/07-group-coordination.md`
 

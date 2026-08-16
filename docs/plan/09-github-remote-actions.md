@@ -11,9 +11,24 @@ Real write-side GitHub actions — push, open PR, comment — performed via the 
 ## Scope
 
 1. **Octokit REST client** (`@octokit/rest`) in the main process, authenticated with the token stored in Phase 3's `safeStorage` service.
+   - Phase 6 already built one for the repo picker — see `listRepos()` in
+     `src/main/services/repos.ts`, which reads the token through
+     `getGitHubToken()`. Extract the client rather than constructing a third.
+   - Local git also already exists: `src/main/services/git.ts` (built in Phase 6
+     for cloning) is where push plumbing belongs. Note its rule — git's stderr
+     is **never** passed through, because the clone URL carries a live token and
+     git echoes the remote back on most failures.
 
 2. **`OpenPRButton`**
    - Wire Phase 2's shell to a real action: given a Contact's session has made local changes (detect via git status on the bound `repoPath`, or track explicitly if the adapter reports files changed), push the branch and open a PR via the API.
+   - **Much cleaner once `12-worktree-isolation.md` has landed**, and worth
+     sequencing after it if the order is still open. A worktree Contact already
+     works on its own branch, so "Open PR" pushes *that* branch — rather than
+     having to invent one from whatever state the user's own working tree
+     happens to be in, which is the awkward case this step otherwise has to
+     handle. A Contact bound to a plain directory (not a git repo at all — the
+     picker allows it) has no branch and no PR path; hide the action rather than
+     failing it.
    - This is explicitly a user-clicked action for interactive sessions (blueprint §9: "surface as an explicit action... not an automatic side effect").
    - For routine-triggered runs (Phase 8), this same code path is what fires automatically at the end of a routine run that made changes — reconcile this with the "explicit action" framing: the distinction is that the *routine itself* is the explicit, user-configured trigger (the user set `githubScope: open_pr` and enabled the routine), not that a human clicks a button per run. Document this distinction clearly since it's a subtle point the blueprint raises but doesn't fully spell out.
 

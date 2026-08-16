@@ -29,7 +29,19 @@ So everything below is still to build — none of it was partially done:
 
 2. **Scheduler**
    - `node-cron` in the main process, loading all enabled `Routine`s and scheduling them from their cron expression on app startup (and re-scheduling on any create/update/delete/enable-toggle without requiring a restart).
-   - On fire: check the concurrency lock (Phase 6/7's `repoPath → busy` map) — skip or queue if busy, per blueprint §6/§7 (don't run in parallel).
+   - On fire: acquire through Phase 6's `src/main/services/run-lock.ts`, the
+     same way a user-sent message does. **Not** the `repoPath → busy` map
+     blueprint §15D describes — see `00-progress.md`: the lock is a *write* lock
+     keyed on the working path, so a `read_only` routine never skips at all, and
+     only a *writing* routine can be refused.
+   - A writing routine firing against a repo a user is actively working in is
+     **the first genuine writer-vs-writer contention in the product** — a 1:1
+     chat and an @mention are both things a human triggers and can see, whereas
+     a routine fires unattended and will collide unannounced. It is the case
+     `12-worktree-isolation.md` exists to solve: give the routine's Contact its
+     own worktree and it stops competing for the user's tree entirely. If that
+     phase hasn't landed, a refused routine must record *why* it skipped in
+     `lastRunSummary` rather than silently doing nothing.
    - Call `AgentAdapter.run(contact.session, routine.prompt)` — same code path as a user-sent message, no special "routine mode" branching in the adapter itself.
    - Result appends to the Contact's normal message history (opening the Contact shows what it did while "asleep") AND posts to the repo's Group as `routine_run`.
    - Log `UsageEvent` with `source: "routine"`.
@@ -60,7 +72,8 @@ So everything below is still to build — none of it was partially done:
 - [ ] `UsageEvent` with `source: "routine"` is logged and reflected in the Contact's `UsageBadge`.
 - [ ] Closing the app window (not quitting) and waiting past a scheduled fire time results in the routine actually running, verified without reopening the window until after.
 - [ ] Tray menu correctly lists next-scheduled routines and quit actually terminates the process.
-- [ ] Firing a routine while its target repo is busy (another session active) results in a skip/queue, not a concurrent run.
+- [ ] Firing a **writing** routine while a writer holds its target repo results in a skip, with the reason recorded in `lastRunSummary` — not a concurrent run and not a silent no-op.
+- [ ] Firing a **read_only** routine while a writer holds that repo runs normally: readers are never refused (Phase 6's lock semantics).
 
 ## Dependency note
 

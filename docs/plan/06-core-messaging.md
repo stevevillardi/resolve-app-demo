@@ -55,10 +55,37 @@ One caveat carried forward: `StreamingIndicator.tsx`'s comment says Claude emits
    - Errors (rate limit, sandbox denial, network failure) render as a distinct error-type message bubble in the same thread — not a silent failure, not console-only.
    - Cover at minimum: SDK auth failure, network failure mid-stream, and a sandbox-denial case.
 
-5. **Concurrency lock, minimal version**
-   - Even though Groups/routines aren't built yet, the "one active session per repo" rule (blueprint §15D) should exist now as the in-memory `repoPath → busy` map, since Phase 7 and 8 both depend on it and it's simplest to introduce while there's only one caller (a user-sent message) to test it against.
+5. **Concurrency lock — a _write_ lock, narrowing blueprint §15D**
 
-6. **Per-persona model selection** — do this before item 2, since a session cannot run without resolving a model.
+   §15D specifies `repoPath → boolean busy`, checked before starting **any**
+   run. That is stricter than the hazard it exists for, and the cost is severe:
+   it would stop a `read_only` reviewer from reading a repo while a refactor is
+   in progress — the exact pair blueprint §16 Journey 2 is built around.
+
+   What actually breaks is two agents mutating one working tree: half-applied
+   edits, one agent reading a file another is rewriting, contention on
+   `.git/index.lock`. A persona that cannot write cannot cause any of it.
+
+   - `read_only` personas take a **shared** hold; anything that can write takes
+     an **exclusive** one. Readers are unlimited and are never refused.
+   - Keyed on the **working path**, not the repo. Identical today —
+     `workingPathFor(contact)` returns `contact.repoPath` — and the indirection
+     is what the worktree phase (`12-worktree-isolation.md`) changes in one
+     place so two _writers_ can eventually overlap too.
+   - A refusal names the holder and writes no message row: a persisted question
+     nothing will answer reads as a lost message rather than as a refusal.
+   - Lives in `src/main/services/run-lock.ts`, pure and unit-tested. Phase 7
+     (@mentions) and Phase 8 (routines) acquire through the same function.
+
+6. **Stop a running turn**
+   - `AgentAdapter.run()` already takes an `AbortSignal`; wire it through so a
+     mid-stream turn can be stopped. Text already produced is kept — a
+     half-written review beats a blank bubble — and usage is still recorded if
+     the turn reported any, since it was billed regardless.
+   - Doubles as the way to recover a stuck run, and therefore a stuck lock,
+     during a live demo.
+
+7. **Per-persona model selection** — do this before item 2, since a session cannot run without resolving a model.
 
    Nothing in the app lets a user choose a model today: blueprint §4's `PersonaTemplate` has no such field, §12's table has no such column, and Phase 2's `PersonaDetailPanel` offers only backend and sandbox. Phase 5 made that a correctness problem rather than a missing nicety — model availability turns out to depend on the **account**, not just the SDK version, so any hardcoded default is wrong for somebody. A ChatGPT-account Codex user gets a 400 on `gpt-5.2-codex` and `gpt-5.3-codex`; the adapter's `DEFAULT_CODEX_MODEL` is only correct until it isn't.
 
@@ -82,4 +109,11 @@ One caveat carried forward: `StreamingIndicator.tsx`'s comment says Claude emits
 - [ ] A deliberately triggered error (e.g. temporarily revoke the API key) renders as a visible error bubble, not a hang or crash.
 - [ ] A `UsageEvent` row is created per turn with correct token/cost figures, attributed to the model that actually ran.
 - [ ] A persona's model can be changed in the UI, persists across a restart, and the next turn actually uses it — verified against a model whose name appears in the resulting `UsageEvent`, not just in the form.
-- [ ] Attempting to run two messages concurrently against Contacts on the same repo is prevented (second one queues or is rejected with a clear message, not a race).
+- [ ] A `read_only` Contact and a `workspace_write` Contact on the **same repo**
+      run at the same time and both complete — the §15D narrowing, and the pair
+      Journey 2 depends on.
+- [ ] Two _writing_ Contacts on the same repo serialize: the second is refused
+      with a message naming the holder, not a race, and no orphan message row is
+      left behind.
+- [ ] A turn can be stopped mid-stream; the partial reply is kept and the repo
+      is immediately available again.
