@@ -8,6 +8,13 @@
       "when": 1786842709193,
       "tag": "0000_chilly_ma_gnuci",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786854220471,
+      "tag": "0001_pretty_warlock",
+      "breakpoints": true
     }
   ]
 }

@@ -351,4 +351,28 @@
   .no-drag {
     -webkit-app-region: no-drag;
   }
+
+  /* Launch splash (components/launch/SplashScreen.tsx). An indeterminate
+     sweep rather than a spinner: at launch there is no operation to spin
+     "on", and a spinner at 0% progress reads as a hang. */
+  .animate-splash-sweep {
+    animation: splash-sweep 1.15s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-splash-sweep {
+      animation: none;
+      width: 100%;
+      opacity: 0.5;
+    }
+  }
+}
+
+@keyframes splash-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
 }

@@ -13,6 +13,9 @@ import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
+import { Github } from '@/components/github/GithubMark'
+import { useAuthStatus } from '@/hooks/useAuth'
+import { useUiStore } from '@/store/useUiStore'
 import { cn } from '@/lib/utils'
 import { mockRepos, personaTemplates } from '@/mocks'
 import type { MockRepo } from '@/mocks/repos'
@@ -58,6 +61,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   // Real API-backed loading/empty/error states land in Phase 6 — this is the
   // shape the repo picker will keep once the data source is swapped.
   const [repoListState] = useState<RepoListState>({ repos: mockRepos })
+  const { data: authStatus } = useAuthStatus()
+  const githubConnected = Boolean(authStatus?.github.connected)
+  const setDialog = useUiStore((state) => state.setDialog)
 
   // Reset on close rather than on open, so the dialog's exit animation doesn't
   // play over a half-cleared form.
@@ -116,7 +122,25 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
           </div>
         )}
 
-        {step === 'repo' && (
+        {step === 'repo' && !githubConnected && (
+          // Phase 3 gate: the picker lists real GitHub repos from Phase 6
+          // onwards, so without a token there is nothing to show. Offer the
+          // fix inline rather than presenting an empty list as a dead end.
+          <EmptyState
+            compact
+            icon={Search}
+            title="Connect GitHub to browse repos"
+            description="Persona Router lists your repositories once GitHub is connected."
+            action={
+              <Button size="sm" className="gap-2" onClick={() => setDialog('github')}>
+                <Github />
+                Connect GitHub
+              </Button>
+            }
+          />
+        )}
+
+        {step === 'repo' && githubConnected && (
           <div className="scrollbar-subtle flex max-h-72 flex-col gap-1.5 overflow-y-auto">
             {repoListState === 'loading' && (
               <EmptyState compact loading title="Loading repositories…" />

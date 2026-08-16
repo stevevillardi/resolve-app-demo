@@ -62,5 +62,24 @@ export default defineConfig(
       ]
     }
   },
+  {
+    // Encryption boundary (Phase 3, blueprint §11): every safeStorage read and
+    // write goes through src/main/services/secrets.ts, so the one place that
+    // handles plaintext credentials stays auditable in isolation. Scattering
+    // safeStorage calls is exactly what 03-app-auth.md's token-storage section
+    // says not to do.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/main/services/secrets.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'safeStorage',
+          message:
+            'Use src/main/services/secrets.ts — it is the only permitted safeStorage boundary.'
+        }
+      ]
+    }
+  },
   eslintConfigPrettier
 )
