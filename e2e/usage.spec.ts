@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync } from 'fs'
 import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 import {
   createProfile,
   destroyProfile,
@@ -46,12 +46,12 @@ let codexPersonaName: string
  * total beside "All personas", so a bare `getByText('$4.00+')` keeps passing
  * after a filter has been applied — it is reading the sidebar, not the answer.
  */
-function reportedSpend() {
+function reportedSpend(): Locator {
   return launched.window.getByText('Reported spend').locator('..')
 }
 
 /** The source filter, addressed by its group so its labels can't collide. */
-function sourceFilter() {
+function sourceFilter(): Locator {
   return launched.window.getByRole('radiogroup', { name: 'Usage source' })
 }
 
@@ -139,7 +139,11 @@ test.beforeAll(async () => {
   claudePersonaName = claude!.name
   codexPersonaName = codex!.name
 
-  const make = (personaTemplateId: string, repoPath: string, displayName: string) =>
+  const make = (
+    personaTemplateId: string,
+    repoPath: string,
+    displayName: string
+  ): Promise<{ id: string }> =>
     invoke<{ id: string }>(launched.window, 'contacts.create', {
       personaTemplateId,
       repoPath,
