@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useActiveRuns, useMessagePreviews } from '@/hooks/useMessages'
+import { useGroupMessagePreviews } from '@/hooks/useGroupMessages'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
 import { previewLine, repoName } from '@/lib/format'
@@ -85,6 +86,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
   const { data: groups = [] } = useGroups()
   const { data: personaTemplates = [] } = usePersonas()
   const { data: previews = [] } = useMessagePreviews()
+  const { data: groupPreviews = [] } = useGroupMessagePreviews()
   const { data: usageEvents = [] } = useUsageEvents()
   const { data: runs = [] } = useActiveRuns()
   const needle = query.trim().toLowerCase()
@@ -185,17 +187,16 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
 
       {visibleGroups.length > 0 && <SectionLabel>Repo groups</SectionLabel>}
       {visibleGroups.map((group) => {
-        // A group has no messages of its own until Phase 7 builds
-        // GroupMessages, so its row summarises the contacts bound to its repo.
         const memberIds = contacts
           .filter((contact) => contact.repoPath === group.repoPath)
           .map((contact) => contact.id)
         const memberUsage = usageEvents.some((event) => memberIds.includes(event.contactId))
           ? usageForContacts(usageEvents, memberIds)
           : undefined
-        const latest = previews
-          .filter((message) => memberIds.includes(message.contactId))
-          .sort((a, b) => b.timestamp - a.timestamp)[0]
+        // The group's own log, not its members' 1:1 threads — a group row
+        // should preview what happened *in the group*, which since Phase 7
+        // means session summaries, mentions, and routed replies.
+        const latest = groupPreviews.find((message) => message.groupId === group.id)
 
         return (
           <ConversationListItem

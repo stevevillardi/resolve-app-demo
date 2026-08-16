@@ -19,6 +19,12 @@ export const messagesKey = (contactId: string): readonly unknown[] => ['messages
 export const messagePreviewsKey = ['messages', 'previews'] as const
 export const usageKey = (contactId?: string): readonly unknown[] => ['usage', contactId ?? 'all']
 export const runsKey = ['runs'] as const
+/**
+ * Prefix for every group thread's cache entry. Lives here rather than in
+ * useGroupMessages so that invalidating it from the 1:1 stream does not make
+ * this module depend on that one — a 1:1 turn writes a Group summary too.
+ */
+export const groupMessagesRootKey = ['groupMessages'] as const
 
 export function useMessages(contactId: string): UseQueryResult<PersistedMessage[]> {
   return useQuery({
@@ -62,7 +68,13 @@ export function useAgentStream(contactId: string): void {
         queryClient.invalidateQueries({ queryKey: messagePreviewsKey }),
         queryClient.invalidateQueries({ queryKey: usageKey(contactId) }),
         queryClient.invalidateQueries({ queryKey: usageKey() }),
-        queryClient.invalidateQueries({ queryKey: contactsKey })
+        queryClient.invalidateQueries({ queryKey: contactsKey }),
+        // Prefix-matched, so it refreshes every group thread rather than only
+        // the one this turn was started from. A turn always writes to at most
+        // one group, but the caller does not know which, and an @mentioned
+        // reply that is not invalidated here shows in the live bubble and then
+        // vanishes when end() clears the store.
+        queryClient.invalidateQueries({ queryKey: groupMessagesRootKey })
       ]).then(() => end(contactId))
     })
   }, [runId, contactId, apply, end, queryClient])
