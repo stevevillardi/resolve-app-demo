@@ -246,6 +246,17 @@ export function evaluateToolUse(
 
   if (toolName === 'Bash') {
     const command = typeof input.command === 'string' ? input.command : ''
+
+    // The SDK lets a model reissue a sandbox-denied command with this flag to
+    // run it unconfined. `allowUnsandboxedCommands: false` already makes the
+    // SDK ignore it, but this layer is what turns a silent bypass into a
+    // sentence the model can act on — and it holds on platforms where there is
+    // no OS sandbox to configure at all. Never legitimate below full_access,
+    // which returned above.
+    if (input.dangerouslyDisableSandbox === true) {
+      return deny(`This persona always runs sandboxed and cannot disable it. Refused: ${command}`)
+    }
+
     if (level === 'read_only') {
       return isReadOnlyCommand(command)
         ? ALLOWED
@@ -342,6 +353,16 @@ export interface ClaudeSandboxOptions {
  *   safe to let every command through, but keeping the in-process allowlist in
  *   the path means a refused command comes back as a sentence the model can
  *   act on ("this persona is read-only") rather than an opaque OS error.
+ * - `allowUnsandboxedCommands: false`. **Defaults to true**, and that default
+ *   is a hole with a demonstration: a `workspace_write` persona bound to a
+ *   scratch repo was asked to `echo escaped > /tmp/outside-the-repo.txt`. The
+ *   first attempt failed against the sandbox; the model reissued the identical
+ *   command with `dangerouslyDisableSandbox`, the SDK honoured it, and the file
+ *   landed in /tmp. `allowWrite: [repoPath]` was correct the whole time and
+ *   confined nothing, because the escape hatch is a separate switch. With this
+ *   false the SDK ignores the parameter entirely and every command stays
+ *   sandboxed. See also the `dangerouslyDisableSandbox` check in
+ *   evaluateToolUse, which refuses the same request one layer earlier.
  *
  * @param repoPath absolute path to the session's repo — the write boundary at
  *   workspace_write, which is what finally makes that level mean something for
@@ -367,6 +388,7 @@ export function claudeSandboxOptions(
             enabled: true,
             failIfUnavailable: true,
             autoAllowBashIfSandboxed: false,
+            allowUnsandboxedCommands: false,
             filesystem: filesystem(allowWrite)
           }
         }
