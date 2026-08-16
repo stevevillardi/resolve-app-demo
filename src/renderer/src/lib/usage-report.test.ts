@@ -11,7 +11,8 @@ import {
   filterUsage,
   groupUsage,
   metricValue,
-  rangeStart
+  rangeStart,
+  scopeFilter
 } from './usage-report'
 
 /**
@@ -109,6 +110,45 @@ describe('filterUsage', () => {
       event({ source: 'message', contactId: 'a' })
     ]
     expect(filterUsage(events, { sources: ['routine'], contactIds: ['a'] })).toHaveLength(1)
+  })
+})
+
+describe('scopeFilter', () => {
+  const contacts = [contact({ id: 'a', personaTemplateId: 'p1', repoPath: '/code/alpha' })]
+
+  it('keeps everything under the all scope', () => {
+    expect(
+      [event({ contactId: null })].filter(scopeFilter(contacts, { kind: 'all' }))
+    ).toHaveLength(1)
+  })
+
+  it('keeps a deleted contact’s spend under the repo it was spent on', () => {
+    // The load-bearing case. Scoping by contact id would drop this row, while
+    // the by-repo breakdown beside it still listed the repo — two totals on one
+    // screen disagreeing about the same money.
+    const orphan = event({ contactId: null, repoPath: '/code/alpha' })
+    const kept = [orphan].filter(scopeFilter(contacts, { kind: 'repo', repoPath: '/code/alpha' }))
+    expect(kept).toHaveLength(1)
+  })
+
+  it('keeps a deleted contact’s spend under its persona', () => {
+    const orphan = event({ contactId: null, personaTemplateId: 'p1' })
+    const kept = [orphan].filter(scopeFilter(contacts, { kind: 'persona', id: 'p1' }))
+    expect(kept).toHaveLength(1)
+  })
+
+  it('still excludes spend from another scope', () => {
+    const orphan = event({ contactId: null, repoPath: '/code/beta' })
+    expect(
+      [orphan].filter(scopeFilter(contacts, { kind: 'repo', repoPath: '/code/alpha' }))
+    ).toHaveLength(0)
+  })
+
+  it('falls back to the contact for a row with no stamped attribution', () => {
+    const legacy = event({ contactId: 'a' })
+    expect(
+      [legacy].filter(scopeFilter(contacts, { kind: 'repo', repoPath: '/code/alpha' }))
+    ).toHaveLength(1)
   })
 })
 
@@ -221,6 +261,40 @@ describe('byPersona', () => {
     expect(groups).toHaveLength(1)
     expect(groups[0].label).toBe('Unknown persona')
   })
+
+  it('attributes a deleted contact’s spend from the event itself', () => {
+    // The contact is gone — there is nothing left to join against — but the
+    // persona was stamped on the row when it was written, so the spend is
+    // still that persona's.
+    const groups = groupUsage(
+      [event({ contactId: null, personaTemplateId: 'p1' })],
+      byPersona(contacts, personas)
+    )
+    expect(groups[0].key).toBe('p1')
+    expect(groups[0].label).toBe('Reviewer')
+  })
+
+  it('prefers the event’s persona over the contact it came from', () => {
+    // Only observable if the two disagree, which is the case a re-pointed
+    // Contact would create. The event wins: it records what was true when the
+    // spend happened, and the join records what is true now.
+    const groups = groupUsage(
+      [event({ contactId: 'a', personaTemplateId: 'p2' })],
+      byPersona(contacts, personas)
+    )
+    expect(groups[0].key).toBe('p2')
+  })
+
+  it('says a persona was deleted, rather than that it is unknown', () => {
+    // Two different facts. An id we cannot resolve means the persona itself
+    // was deleted; no id at all means a row older than the column.
+    const groups = groupUsage(
+      [event({ contactId: null, personaTemplateId: 'p-gone' })],
+      byPersona(contacts, personas)
+    )
+    expect(groups[0].label).toBe('Deleted persona')
+    expect(groups[0].key).toBe('p-gone')
+  })
 })
 
 describe('byRepo', () => {
@@ -247,6 +321,26 @@ describe('byRepo', () => {
     )
     expect(groups).toHaveLength(2)
     expect(groups.every((g) => g.label === 'app')).toBe(true)
+  })
+
+  it('still names the repo after the contact is deleted', () => {
+    // repoName needs no lookup, so once the path is stamped on the event this
+    // dimension is self-contained: a deleted Contact's spend reads under
+    // "alpha", not "Unknown repo".
+    const groups = groupUsage(
+      [event({ contactId: null, repoPath: '/Users/steve/code/alpha' })],
+      byRepo([])
+    )
+    expect(groups[0].label).toBe('alpha')
+    expect(groups[0].key).toBe('/Users/steve/code/alpha')
+  })
+
+  it('falls back to the contact for a row written before the column existed', () => {
+    const groups = groupUsage(
+      [event({ contactId: 'a' })],
+      byRepo([contact({ id: 'a', repoPath: '/one/legacy' })])
+    )
+    expect(groups[0].label).toBe('legacy')
   })
 })
 

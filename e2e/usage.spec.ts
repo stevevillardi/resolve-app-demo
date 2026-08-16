@@ -43,7 +43,7 @@ let codexPersonaName: string
  * The headline figure, scoped to its tile.
  *
  * Not a window-wide text match: the scope list always shows the *all personas*
- * total beside "All personas", so a bare `getByText('$4.00+')` keeps passing
+ * total beside "All personas", so a bare `getByText('$6.00+')` keeps passing
  * after a filter has been applied — it is reading the sidebar, not the answer.
  */
 function reportedSpend(): Locator {
@@ -64,7 +64,10 @@ function daysAgo(days: number): number {
 }
 
 interface SeedRow {
-  contactId: string
+  /** Null models spend whose Contact has since been deleted. */
+  contactId: string | null
+  personaTemplateId: string | null
+  repoPath: string | null
   source: 'message' | 'routine' | 'mention' | 'summary'
   inputTokens: number
   outputTokens: number
@@ -88,14 +91,16 @@ function seedUsage(rows: SeedRow[]): void {
   try {
     const insert = db.prepare(
       `insert into usage_events
-         (id, contact_id, timestamp, source, input_tokens, output_tokens,
-          cost_usd, model, cost_source)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, contact_id, persona_template_id, repo_path, timestamp, source,
+          input_tokens, output_tokens, cost_usd, model, cost_source)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     rows.forEach((row, index) => {
       insert.run(
         `seed-${index}`,
         row.contactId,
+        row.personaTemplateId,
+        row.repoPath,
         row.timestamp,
         row.source,
         row.inputTokens,
@@ -161,6 +166,8 @@ test.beforeAll(async () => {
     // Claude, vendor-reported. $2.00 total.
     {
       contactId: claudeContact.id,
+      personaTemplateId: claude!.id,
+      repoPath: repoA,
       source: 'message',
       inputTokens: 1000,
       outputTokens: 500,
@@ -171,6 +178,8 @@ test.beforeAll(async () => {
     },
     {
       contactId: claudeContact.id,
+      personaTemplateId: claude!.id,
+      repoPath: repoA,
       source: 'summary',
       inputTokens: 200,
       outputTokens: 100,
@@ -183,6 +192,8 @@ test.beforeAll(async () => {
     // by-model split cannot be faked by reading the persona's current setting.
     {
       contactId: codexContact.id,
+      personaTemplateId: codex!.id,
+      repoPath: repoA,
       source: 'routine',
       inputTokens: 4000,
       outputTokens: 300,
@@ -193,6 +204,8 @@ test.beforeAll(async () => {
     },
     {
       contactId: codexContact.id,
+      personaTemplateId: codex!.id,
+      repoPath: repoA,
       source: 'routine',
       inputTokens: 2000,
       outputTokens: 100,
@@ -204,6 +217,8 @@ test.beforeAll(async () => {
     // A model with no row in CODEX_PRICES: real tokens, unknowable cost.
     {
       contactId: codexContact.id,
+      personaTemplateId: codex!.id,
+      repoPath: repoA,
       source: 'message',
       inputTokens: 900,
       outputTokens: 90,
@@ -215,6 +230,8 @@ test.beforeAll(async () => {
     // A row from before migration 0004, which added the model column.
     {
       contactId: betaContact.id,
+      personaTemplateId: claude!.id,
+      repoPath: repoB,
       source: 'message',
       inputTokens: 700,
       outputTokens: 70,
@@ -222,6 +239,21 @@ test.beforeAll(async () => {
       model: null,
       costSource: null,
       timestamp: daysAgo(3)
+    },
+    // Spend whose Contact has since been deleted: no contact to join against,
+    // but the persona and repo were stamped on the row when it was written.
+    // It must still count, and still be attributed.
+    {
+      contactId: null,
+      personaTemplateId: claude!.id,
+      repoPath: repoB,
+      source: 'message',
+      inputTokens: 500,
+      outputTokens: 50,
+      costUsd: 2.0,
+      model: 'claude-opus-5',
+      costSource: 'sdk',
+      timestamp: daysAgo(2)
     }
   ])
 
@@ -237,9 +269,10 @@ test.afterAll(async () => {
 })
 
 test('a total that excludes an unpriced turn is visibly partial', async () => {
-  // 1.50 + 0.50 + 1.00 + 0.25 + 0.75 = 4.00, and one turn is unpriced. The `+`
-  // is the entire point: without it this reads as the whole bill.
-  await expect(reportedSpend()).toContainText('$4.00+')
+  // 1.50 + 0.50 + 1.00 + 0.25 + 0.75 + 2.00 (orphaned) = 6.00, and one turn is
+  // unpriced. The `+` is the entire point: without it this reads as the whole
+  // bill.
+  await expect(reportedSpend()).toContainText('$6.00+')
   await expect(launched.window.getByText(/turn.*no published price/i).first()).toBeVisible()
 })
 
@@ -276,13 +309,25 @@ test('filtering to routines isolates unsupervised spend', async () => {
   await expect(reportedSpend()).not.toContainText('+')
 
   await sourceFilter().getByText('All').click()
-  await expect(reportedSpend()).toContainText('$4.00+')
+  await expect(reportedSpend()).toContainText('$6.00+')
+})
+
+test('spend outlives the contact that made it', async () => {
+  // The $2.00 row has no contact to join against — its Contact was deleted —
+  // and it still counts toward the headline and still knows whose it was.
+  // Before this, deleting a Contact cascaded its spend away, so a total
+  // covering last month shrank when somebody tidied up a Contact this month.
+  await expect(reportedSpend()).toContainText('$6.00+')
+  await expect(launched.window.getByText('Totals by persona')).toBeVisible()
+  await expect(launched.window.getByText(claudePersonaName).first()).toBeVisible()
 })
 
 test('scoping to one repo excludes the other', async () => {
   await launched.window.getByRole('button', { name: /beta/ }).click()
 
-  // Only the beta contact's single $0.75 turn, and nothing unpriced.
-  await expect(reportedSpend()).toContainText('$0.75')
+  // The beta contact's $0.75 turn plus the $2.00 orphan, which was spent on
+  // beta and still says so even though its Contact is gone. Scoping by contact
+  // id would have dropped it while the by-repo breakdown still listed the repo.
+  await expect(reportedSpend()).toContainText('$2.75')
   await expect(reportedSpend()).not.toContainText('+')
 })

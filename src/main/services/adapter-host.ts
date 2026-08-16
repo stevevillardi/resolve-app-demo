@@ -1,6 +1,6 @@
 import { adapterFor, type AdapterConfig, type AgentAdapter } from '../adapters'
 import { resolveCodexBinary } from './codex-auth'
-import { getSecret } from './secrets'
+import { getSecret, secretsPathForDenyList } from './secrets'
 import type { PersonaBackend } from '../../shared/domain'
 
 /**
@@ -47,7 +47,15 @@ function backendEnv(): NodeJS.ProcessEnv {
  * it as config instead of importing it.
  */
 export function adapterConfig(): AdapterConfig {
-  return { codexBinaryPath: resolveCodexBinary(), env: backendEnv() }
+  return {
+    codexBinaryPath: resolveCodexBinary(),
+    env: backendEnv(),
+    // The field has existed since Phase 5, is plumbed all the way into the
+    // Claude OS sandbox, and until now nothing ever filled it — so the one
+    // directory its own doc comment names was reachable by every persona. A
+    // declared guard with no producer reads as a guard.
+    denyReadPaths: [secretsPathForDenyList()]
+  }
 }
 
 export function adapterForBackend(backend: PersonaBackend): AgentAdapter {

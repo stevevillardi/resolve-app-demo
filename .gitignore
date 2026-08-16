@@ -26,3 +26,4 @@ test-results/
 *.log*
 .eslintcache
 .DS_Store
+*.tsbuildinfo

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { and, desc, eq } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toUsageEvent } from '../db/mappers'
-import { usageEvents } from '../db/schema'
+import { contacts, usageEvents } from '../db/schema'
 import { emitUsageChanged } from './agent-events'
 import type { AgentUsage } from '../../shared/agent'
 import type { UsageEvent, UsageSource } from '../../shared/domain'
@@ -44,9 +44,18 @@ export function recordUsage(
   usage: AgentUsage,
   sessionId?: string | null
 ): UsageEvent {
+  // Read once and copied onto the row, so the two questions the dashboard asks
+  // of historical spend — whose, and on which repo — outlive the Contact.
+  // Resolved here rather than at read time precisely because a join cannot
+  // answer them once the Contact is gone.
+  const contact = initDb().select().from(contacts).where(eq(contacts.id, contactId)).get()
+
   const event: UsageEvent = {
     id: randomUUID(),
     contactId,
+    ...(contact
+      ? { personaTemplateId: contact.personaTemplateId, repoPath: contact.repoPath }
+      : {}),
     timestamp: Date.now(),
     source,
     ...(sessionId ? { sessionId } : {}),

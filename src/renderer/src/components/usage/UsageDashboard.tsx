@@ -28,7 +28,7 @@ import {
   byPersona,
   byRepo,
   bySource,
-  contactIdsForScope,
+  scopeFilter,
   filterUsage,
   groupUsage,
   rangeStart,
@@ -182,12 +182,11 @@ export function UsageDashboard(): React.JSX.Element {
   const [now] = useState(() => Date.now())
 
   const shown = useMemo(() => {
-    const contactIds = contactIdsForScope(contacts, scope)
+    const inScope = scopeFilter(contacts, scope)
     return filterUsage(events, {
       ...(range !== 'all' && { from: rangeStart(Number(range), now) }),
-      ...(source !== 'all' && { sources: [source as UsageSource] }),
-      ...(contactIds !== null && { contactIds })
-    })
+      ...(source !== 'all' && { sources: [source as UsageSource] })
+    }).filter(inScope)
   }, [events, contacts, scope, range, source, now])
 
   const totals = useMemo(() => aggregateUsage(shown), [shown])

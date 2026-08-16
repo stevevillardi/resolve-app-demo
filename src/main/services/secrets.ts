@@ -25,6 +25,26 @@ function secretPath(key: SecretKey): string {
 }
 
 /**
+ * Where the ciphertext lives, so the OS sandbox can be told to keep agents out
+ * of it — `AdapterConfig.denyReadPaths`, resolved in adapter-host.ts.
+ *
+ * safeStorage encrypts against the OS keychain, so reading one of these files
+ * is not the same as reading a token. But an agent has no business in this
+ * directory at all, and "encrypted at rest" is a weaker guarantee than "not
+ * reachable": on a Linux box with no keyring, `setSecret` refuses to write
+ * rather than writing plaintext, which is exactly the case where a stray read
+ * would matter most if that rule ever slipped.
+ *
+ * Does not create the directory. Every other path helper here does, because
+ * they are about to write to it; this one is asked at session start, and
+ * conjuring an empty directory just to name it in a deny list is a side effect
+ * no caller wants.
+ */
+export function secretsPathForDenyList(): string {
+  return join(app.getPath('userData'), 'secrets')
+}
+
+/**
  * False on Linux without an available keyring. Callers must surface this to the
  * user rather than silently degrading to plaintext — we would sooner store
  * nothing than store a token in the clear.

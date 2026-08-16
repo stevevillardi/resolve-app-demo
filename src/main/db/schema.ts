@@ -189,9 +189,28 @@ export const usageEvents = sqliteTable(
   'usage_events',
   {
     id: text('id').primaryKey(),
-    contactId: text('contact_id')
-      .notNull()
-      .references(() => contacts.id, { onDelete: 'cascade' }),
+    /**
+     * Nullable, and `set null` rather than `cascade` — the same choice
+     * group_messages makes, for a stronger reason. Deleting a Contact used to
+     * take its spend with it, so a total covering last month shrank when
+     * somebody tidied up a Contact this month. Spend is a financial record: it
+     * describes money that was actually spent, and no later bookkeeping makes
+     * that untrue.
+     */
+    contactId: text('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    /**
+     * Copied from the Contact when the row is written, and deliberately **not**
+     * foreign keys.
+     *
+     * Their whole purpose is to outlive the rows they were copied from: a FK
+     * would reintroduce exactly the coupling that made deletion destructive,
+     * and a `restrict` one would make a persona undeletable for as long as any
+     * turn had ever run on it. So these are plain text and may name a persona
+     * or a repo that no longer exists — which is the point, because "what was
+     * this spent on" stays answerable either way.
+     */
+    personaTemplateId: text('persona_template_id'),
+    repoPath: text('repo_path'),
     timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
     /**
      * What spent the tokens. `mention` and `summary` joined the original two

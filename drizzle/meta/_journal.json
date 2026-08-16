@@ -57,6 +57,13 @@
       "when": 1786906896770,
       "tag": "0007_add_contact_worktree_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786919167777,
+      "tag": "0008_add_usage_survives_contact_delete",
+      "breakpoints": true
     }
   ]
 }

@@ -17,7 +17,7 @@ import type { PersonaBackend } from '../../shared/domain'
  * as a menu of plausible choices, not a promise.
  */
 
-export const MODELS_LAST_VERIFIED = '2026-08-16'
+export const MODELS_LAST_VERIFIED = '2026-08-17'
 
 /**
  * Ordered most- to least-capable, because that is how the picker reads.
@@ -27,9 +27,25 @@ export const MODELS_LAST_VERIFIED = '2026-08-16'
  * honest but useless on the usage dashboard.
  */
 const MODELS: Record<PersonaBackend, string[]> = {
-  claude: ['claude-opus-5', 'claude-sonnet-5', 'claude-fable-5', 'claude-haiku-4-5-20251001'],
+  // Undated aliases throughout: `claude-haiku-4-5-20251001` is a valid id, but
+  // the alias is the documented form and does not need editing when a new
+  // snapshot ships.
+  claude: [
+    'claude-fable-5',
+    'claude-opus-5',
+    'claude-opus-4-8',
+    'claude-opus-4-7',
+    'claude-opus-4-6',
+    'claude-sonnet-5',
+    'claude-sonnet-4-6',
+    'claude-haiku-4-5'
+  ],
+  // Generation-descending, then descending within a generation.
   codex: [
+    'gpt-5.6-cyber',
     'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     'gpt-5.5',
     'gpt-5.4',
     'gpt-5.4-mini',
@@ -60,23 +76,21 @@ export function modelsForBackend(backend: PersonaBackend): string[] {
  * broken conversation.
  */
 export const SUMMARY_MODELS: Record<PersonaBackend, string> = {
-  claude: 'claude-haiku-4-5-20251001',
-  // gpt-5.4-mini is the cheapest entry that CODEX_PRICES also knows, which
-  // matters because summary turns are recorded as usage_events like any other.
+  claude: 'claude-haiku-4-5',
+  /**
+   * No longer the cheapest entry CODEX_PRICES knows, and left alone anyway.
+   *
+   * `gpt-5.6-luna` now undercuts it 3.75x on both input and output
+   * (0.20/1.20 against 0.75/4.50), which across a summary after every turn is
+   * real money. But the summariser's output is load-bearing rather than
+   * decorative — Phase 7 found a mis-categorised summary silently drops a
+   * turn's work out of every colleague's context — and nothing here can
+   * measure summary *quality*. So this is a decision to make behind a live
+   * check, not a side effect of refreshing a list.
+   */
   codex: 'gpt-5.4-mini'
 }
 
 export function summaryModelFor(backend: PersonaBackend): string {
   return SUMMARY_MODELS[backend]
-}
-
-/**
- * Whether a persisted model still belongs to its backend.
- *
- * The editor uses this to clear a stale choice when the backend is switched —
- * a Claude persona holding `gpt-5.5` would fail every turn, and failing at send
- * time is a worse place to find out than at edit time.
- */
-export function isModelForBackend(backend: PersonaBackend, model: string): boolean {
-  return MODELS[backend].includes(model)
 }

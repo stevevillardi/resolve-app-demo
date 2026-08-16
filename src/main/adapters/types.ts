@@ -73,6 +73,20 @@ export interface SessionSpec {
   /** Already resolved from persona.skillIds by the caller (blueprint §5). */
   skills: Skill[]
   /**
+   * The names of the *repository's own* skills this Contact has been given.
+   *
+   * A different thing from `skills` above, and the two are easy to confuse: a
+   * `Skill` here is the app's own injected prose (blueprint §4), while these
+   * are `SKILL.md` documents the repo ships and the backend discovers by
+   * itself. Anything a backend would find and that is not named here is
+   * disabled by name before the turn starts — see codexConfigFor().
+   *
+   * Empty or unset means "none", which is what every Contact gets until a
+   * human opts in. It is an allowlist rather than a boolean so that a skill
+   * committed to the repo after the approval does not inherit it.
+   */
+  repoSkills?: string[]
+  /**
    * The repo's recent Group summaries, oldest first — blueprint §5's second
    * injection source and the mechanism behind §16 Journey 2.
    *

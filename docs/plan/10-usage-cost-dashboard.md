@@ -110,20 +110,60 @@ billed twice. `LAST_VERIFIED = '2026-08-16'` re-checked and current as of this p
 
 ## Known gaps, deliberately left
 
-- **The 272K-context tier under-reports, and the `+` does not warn about it.** `pricing.ts` has no
-  context dimension, so a long `gpt-5.5`/`gpt-5.4` session is priced at the sub-272K tier. Those
-  rows _have_ a price — just the wrong one — so they render as fact rather than as a floor. All
-  three rows above are far under the threshold, which makes this untested rather than disproven.
-- **`contacts.delete` cascades its usage rows away** (`schema.ts:194`). Deleting a Contact silently
-  shrinks every historical total that included it — the same class of dishonesty this phase set out
-  to fix. Not fixable in scope: it needs `ON DELETE SET NULL` plus persona/repo denormalised onto
-  `usage_events`, and a migration.
+- ~~**The 272K-context tier under-reports, and the `+` does not warn about it.**~~ **Closed
+  2026-08-17.** `pricing.ts` grew a `longContext` dimension with the vendor's real rates, selected
+  on a turn's own input tokens. Scaled from the observed turn above, the gap was 47% — $0.4272
+  reported against $0.8103 actually billed.
+- ~~**`contacts.delete` cascades its usage rows away.**~~ **Closed 2026-08-17.** Migration `0008`
+  rebuilt `usage_events` with `ON DELETE SET NULL` and denormalised `persona_template_id` /
+  `repo_path`, backfilling every historical row as it copied.
 - **`usage.list` is unbounded** and the renderer pulls every event. Fine at hundreds, a problem long
   before it is a correctness issue. The fix is a server-side aggregate procedure, which would mean
-  editing `ipc-contract.ts` — deliberately avoided while Phase 9 owned that file.
+  editing `ipc-contract.ts` — deliberately avoided while Phase 9 owned that file. **Still open.**
 - **`sdk` vs `computed` is not surfaced**, by the user's decision (2026-08-16), overriding scope
   item 3's "label estimates honestly". The column is still recorded per row, so the distinction is
   available whenever it is wanted.
+
+## Follow-up pass — cost fidelity and the model menu (2026-08-17)
+
+Two of the three gaps above are closed, and both model menus were refreshed against live vendor
+pricing. Recorded here because the numbers are the kind that go stale silently.
+
+**Long-context pricing.** Only some models are tiered, and the long rates are transcribed rather
+than derived — input and cached double, output rises by half:
+
+| model           | ≤272K in/cached/out  | >272K in/cached/out  |
+| --------------- | -------------------- | -------------------- |
+| `gpt-5.6-cyber` | 12.50 / 1.25 / 75.00 | single tier          |
+| `gpt-5.6-sol`   | 5.00 / 0.50 / 30.00  | 10.00 / 1.00 / 45.00 |
+| `gpt-5.6-terra` | 2.00 / 0.20 / 12.00  | 4.00 / 0.40 / 18.00  |
+| `gpt-5.6-luna`  | 0.20 / 0.02 / 1.20   | 0.40 / 0.04 / 1.80   |
+| `gpt-5.5`       | 5.00 / 0.50 / 30.00  | 10.00 / 1.00 / 45.00 |
+| `gpt-5.4`       | 2.50 / 0.25 / 15.00  | 5.00 / 0.50 / 22.50  |
+
+The threshold is compared against **one turn's own input tokens** — the delta, after the Codex
+baseline is subtracted — because cumulative input is the running sum of each request's prompt, which
+makes the delta that request's prompt. Consequence worth knowing: a long conversation whose
+individual turns each stay under the threshold is priced short throughout. The tier is a property of
+a request, not of a conversation.
+
+**Model menus.** Claude went from four models to eight (the whole 4.6/4.7/4.8 generation was
+missing) and moved to undated aliases. Codex gained the three `gpt-5.6` models it was missing
+(`terra`, `luna`, `cyber`) beside `sol`. A new `models.test.ts` pins the invariant models.ts only
+asserted in a comment: every Codex model offered has a price row, and so does the summariser.
+
+**Deliberately not done:** `SUMMARY_MODELS.codex` stays `gpt-5.4-mini` even though `gpt-5.6-luna`
+now undercuts it 3.75× on both input and output (0.20/1.20 against 0.75/4.50). A summariser runs
+after every turn so the saving is real, but its output is load-bearing — Phase 7 found a
+mis-categorised summary silently drops a turn's work out of every colleague's context — and nothing
+here can measure summary quality. **This is the open decision worth a live check**, not a change to
+make while refreshing a list.
+
+**One thing the follow-up found rather than fixed.** Adding an orphaned-spend row to the E2E
+exposed that the dashboard's scope filter still worked by contact id, so a deleted Contact's spend
+vanished when you scoped to the very repo the by-repo breakdown listed it under — two totals on one
+screen disagreeing about the same money. `scopeFilter` now resolves attribution the same way the
+breakdowns do. The fix was half-finished until a test asked the awkward question.
 
 ## Left for the live pass
 

@@ -16,8 +16,9 @@ import type { Contact, ContactDraft } from '../../shared/domain'
  * Read and create only until Phase 12, which added delete because a Contact now
  * owns something outside the database — its worktree — and nothing else can
  * clean that up. Deleting is not symmetrical with creating: the FK cascades take
- * the 1:1 thread, routines and usage with it, while `group_messages.contact_id`
- * is `set null` so the Group's history survives its author.
+ * the 1:1 thread and routines with it, while `group_messages.contact_id` and
+ * `usage_events.contact_id` are `set null` so the Group's history and the record
+ * of what was spent both survive their author.
  */
 
 export function listContacts(): Contact[] {
@@ -99,10 +100,13 @@ export async function deleteContact(id: string, discardUncommitted = false): Pro
     await worktreeRemove(contact.repoPath, contact.worktreePath, discardUncommitted)
   }
 
-  // The FK cascades take this contact's thread, routines and usage with it;
-  // group_messages.contact_id is `set null`, so the Group's history survives its
-  // author (schema.ts). Both are enforced only because initDb() turns foreign
-  // keys on.
+  // The FK cascades take this contact's thread and routines with it. Two
+  // tables deliberately survive it: group_messages.contact_id is `set null`, so
+  // the Group's history outlives its author, and so is usage_events, because
+  // spend is a record of money that was actually spent and deleting a Contact
+  // does not make that untrue. Those rows keep their persona and repo, which
+  // were copied onto them when they were written. All of it is enforced only
+  // because initDb() turns foreign keys on.
   const result = initDb().delete(contacts).where(eq(contacts.id, id)).run()
   return result.changes > 0
 }
