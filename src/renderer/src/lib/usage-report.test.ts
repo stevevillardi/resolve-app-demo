@@ -11,7 +11,8 @@ import {
   filterUsage,
   groupUsage,
   metricValue,
-  rangeStart
+  rangeStart,
+  scopeFilter
 } from './usage-report'
 
 /**
@@ -109,6 +110,45 @@ describe('filterUsage', () => {
       event({ source: 'message', contactId: 'a' })
     ]
     expect(filterUsage(events, { sources: ['routine'], contactIds: ['a'] })).toHaveLength(1)
+  })
+})
+
+describe('scopeFilter', () => {
+  const contacts = [contact({ id: 'a', personaTemplateId: 'p1', repoPath: '/code/alpha' })]
+
+  it('keeps everything under the all scope', () => {
+    expect(
+      [event({ contactId: null })].filter(scopeFilter(contacts, { kind: 'all' }))
+    ).toHaveLength(1)
+  })
+
+  it('keeps a deleted contact’s spend under the repo it was spent on', () => {
+    // The load-bearing case. Scoping by contact id would drop this row, while
+    // the by-repo breakdown beside it still listed the repo — two totals on one
+    // screen disagreeing about the same money.
+    const orphan = event({ contactId: null, repoPath: '/code/alpha' })
+    const kept = [orphan].filter(scopeFilter(contacts, { kind: 'repo', repoPath: '/code/alpha' }))
+    expect(kept).toHaveLength(1)
+  })
+
+  it('keeps a deleted contact’s spend under its persona', () => {
+    const orphan = event({ contactId: null, personaTemplateId: 'p1' })
+    const kept = [orphan].filter(scopeFilter(contacts, { kind: 'persona', id: 'p1' }))
+    expect(kept).toHaveLength(1)
+  })
+
+  it('still excludes spend from another scope', () => {
+    const orphan = event({ contactId: null, repoPath: '/code/beta' })
+    expect(
+      [orphan].filter(scopeFilter(contacts, { kind: 'repo', repoPath: '/code/alpha' }))
+    ).toHaveLength(0)
+  })
+
+  it('falls back to the contact for a row with no stamped attribution', () => {
+    const legacy = event({ contactId: 'a' })
+    expect(
+      [legacy].filter(scopeFilter(contacts, { kind: 'repo', repoPath: '/code/alpha' }))
+    ).toHaveLength(1)
   })
 })
 

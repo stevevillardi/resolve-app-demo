@@ -30,18 +30,27 @@ export interface UsageFilter {
 }
 
 /**
- * The contacts a scope covers, or `null` for "every contact" — which is not the
- * same as the empty array, and the difference is load-bearing: `filterUsage`
- * reads `[]` as "no contacts" so an empty scope shows nothing rather than
- * everything.
+ * Whether an event belongs to a scope.
+ *
+ * Matches on the event's own persona and repo, falling back to its Contact —
+ * the same resolution the breakdowns use, and for the same reason. Scoping by
+ * Contact id instead would drop a deleted Contact's spend out of the very repo
+ * it was spent on, while the by-repo breakdown beside it still listed that repo.
+ * The two must agree, or the totals contradict each other on screen.
  */
-export function contactIdsForScope(contacts: Contact[], scope: UsageScope): string[] | null {
-  if (scope.kind === 'all') return null
-  const match =
-    scope.kind === 'persona'
-      ? (contact: Contact): boolean => contact.personaTemplateId === scope.id
-      : (contact: Contact): boolean => contact.repoPath === scope.repoPath
-  return contacts.filter(match).map((contact) => contact.id)
+export function scopeFilter(
+  contacts: Contact[],
+  scope: UsageScope
+): (event: UsageEvent) => boolean {
+  if (scope.kind === 'all') return () => true
+  const contactById = new Map(contacts.map((contact) => [contact.id, contact]))
+
+  return (event) => {
+    const contact = contactOf(contactById, event.contactId)
+    return scope.kind === 'persona'
+      ? (event.personaTemplateId ?? contact?.personaTemplateId) === scope.id
+      : (event.repoPath ?? contact?.repoPath) === scope.repoPath
+  }
 }
 
 export function filterUsage(events: UsageEvent[], filter: UsageFilter = {}): UsageEvent[] {
