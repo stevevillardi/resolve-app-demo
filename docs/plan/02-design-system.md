@@ -1,6 +1,6 @@
 # Phase 2 — Design System
 
-**Status:** Not started
+**Status:** Done
 **Blueprint refs:** §10 (UI/UX component mapping), §11 (styling stack)
 **Depends on:** Phase 1 (bootstrap)
 
@@ -45,12 +45,12 @@ Doing this before auth/data/adapters is deliberate: it lets layout and visual de
 
 ## Acceptance checks
 
-- [ ] App launches into the sidebar + thread layout, matching iMessage's visual grammar (not a generic chat template).
-- [ ] Both light and dark mode render correctly with no unstyled/broken states.
-- [ ] All four `GroupMessage` type variants are visually distinct and legible.
-- [ ] Markdown + code block rendering works in a message bubble (headings, lists, fenced code with syntax highlighting).
-- [ ] Every component listed in blueprint §10's table exists as at least a static/mock-data shell.
-- [ ] Navigating between sidebar entries switches the main panel with no console errors.
+- [x] App launches into the sidebar + thread layout, matching iMessage's visual grammar (not a generic chat template).
+- [x] Both light and dark mode render correctly with no unstyled/broken states.
+- [x] All four `GroupMessage` type variants are visually distinct and legible.
+- [x] Markdown + code block rendering works in a message bubble (headings, lists, fenced code with syntax highlighting).
+- [x] Every component listed in blueprint §10's table exists as at least a static/mock-data shell (plus `GitHubConnectDialog`, pulled in early — see `00-progress.md` decision log).
+- [x] Navigating between sidebar entries switches the main panel with no console errors.
 
 ## Notes for whoever picks this up
 
