@@ -1,10 +1,10 @@
 import { dialog } from 'electron'
 import { existsSync } from 'fs'
 import { basename, join } from 'path'
-import { Octokit } from '@octokit/rest'
 import { getAppState, setAppState } from './app-state'
 import { cloneRepo, isGitRepo } from './git'
 import { getGitHubToken } from './github-auth'
+import { gitHubClient } from './github-client'
 
 /**
  * Binding a Contact to somewhere on disk (blueprint §9.1).
@@ -70,32 +70,24 @@ export async function chooseDirectory(title?: string): Promise<BoundRepo | null>
 /**
  * The user's repos, most recently pushed first.
  *
- * Sorted by push rather than by name because the repo you want to bind is
- * almost always one you touched recently. Capped at one page: this is a picker
- * with a filter box, not an inventory, and an account with hundreds of repos
- * would otherwise spend several seconds paginating before showing anything.
+ * The ordering and the one-page cap live in `github-client.ts` with the request;
+ * what belongs here is the only part that is about *binding* — which of them is
+ * already on disk under the workspace root.
  */
 export async function listRepos(): Promise<RepoOption[]> {
   const token = getGitHubToken()
   if (!token) throw new Error('Connect GitHub first to list your repositories.')
 
-  const octokit = new Octokit({ auth: token })
-  const { data } = await octokit.rest.repos.listForAuthenticatedUser({
-    sort: 'pushed',
-    direction: 'desc',
-    per_page: 100,
-    affiliation: 'owner,collaborator,organization_member'
-  })
-
+  const repos = await gitHubClient(token).listRepos()
   const root = getWorkspaceRoot()
 
-  return data.map((repo) => ({
-    id: String(repo.id),
-    fullName: repo.full_name,
-    cloneUrl: repo.clone_url ?? `https://github.com/${repo.full_name}.git`,
+  return repos.map((repo) => ({
+    id: repo.id,
+    fullName: repo.fullName,
+    cloneUrl: repo.cloneUrl,
     private: repo.private,
     localPath: root ? existingCheckout(root, repo.name) : null,
-    updatedAt: repo.pushed_at ? new Date(repo.pushed_at).getTime() : null
+    updatedAt: repo.pushedAt
   }))
 }
 
