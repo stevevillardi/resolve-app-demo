@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
+import { summaryModelFor } from '../adapters/models'
 import { contacts, groups, personaTemplates, usageEvents } from '../db/schema'
 import type { AppDatabase } from '../db'
 import type { AgentCapabilities } from '../../shared/agent'
@@ -96,7 +97,8 @@ const GOOD: StructuredResult = {
     cachedInputTokens: 0,
     costUsd: 0.0004,
     costSource: 'sdk',
-    model: 'claude-haiku-4-5-20251001'
+    // What the backend reports back is the model it was asked for.
+    model: summaryModelFor('claude')
   }
 }
 
@@ -196,13 +198,16 @@ describe('summarizeTurn', () => {
 
     const [event] = db.select().from(usageEvents).all()
     expect(event.source).toBe('summary')
-    expect(event.model).toBe('claude-haiku-4-5-20251001')
+    expect(event.model).toBe(summaryModelFor('claude'))
   })
 
   it('summarises on the cheap model, not the persona model', async () => {
     summarizeResult = GOOD
     await summarizeTurn('contact-1', 'q', 'a')
-    expect(lastSpec?.model).toBe('claude-haiku-4-5-20251001')
+    // Asserted against the constant, not a literal: the claim is "the summary
+    // model rather than the persona's", and pinning the id here would make
+    // every model-list refresh look like a compaction regression.
+    expect(lastSpec?.model).toBe(summaryModelFor('claude'))
     expect(lastSpec?.model).not.toBe('claude-opus-5')
   })
 

@@ -10,7 +10,7 @@ import type { Usage } from '@openai/codex-sdk'
  */
 
 /** ISO date this table was last checked against vendor pricing. */
-export const LAST_VERIFIED = '2026-08-16'
+export const LAST_VERIFIED = '2026-08-17'
 
 /**
  * The context size above which OpenAI charges its long-context rates.
