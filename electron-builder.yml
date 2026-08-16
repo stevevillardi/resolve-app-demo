@@ -11,6 +11,10 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - '**/node_modules/better-sqlite3/**'
+extraResources:
+  - from: drizzle
+    to: drizzle
 win:
   executableName: persona-router
 nsis:
@@ -19,6 +23,13 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  target: dir
+  # Signing/notarization are out of scope for Phase 1 (docs/plan/01-bootstrap.md)
+  # -- unsigned dir builds are enough to prove packaging works. The machine's
+  # keychain has an ambiguous duplicate "Developer ID Application" identity
+  # that breaks electron-builder's auto-signing; skip signing explicitly
+  # rather than fight that here.
+  identity: null
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
