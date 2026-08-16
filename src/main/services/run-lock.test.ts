@@ -98,9 +98,27 @@ describe('acquire', () => {
     expect(acquire(holder('exclusive'))).toBeNull()
   })
 
-  it('refuses a writer while a reader holds', () => {
+  // The other half of "only writer-vs-writer serializes". A reader cannot
+  // mutate the tree, so it has nothing to protect and nothing to protect it
+  // from — the worst case is the reader seeing a mid-write snapshot, which is
+  // already accepted when a reader starts under a writer.
+  it('admits a writer while a reader holds', () => {
     acquire(holder('shared'))
-    expect(acquire(holder('exclusive'))).toBeNull()
+    expect(acquire(holder('exclusive'))).not.toBeNull()
+    expect(holdersOf(REPO)).toHaveLength(2)
+  })
+
+  // Ordering matters here in a way the test above cannot show: with a reader
+  // acquired first, a blocking check that returns the *first* holder would name
+  // the reader and refuse on its account.
+  // It also decides who the refusal names, which the user actually reads.
+  it('refuses a second writer on account of the writer, not a reader ahead of it', () => {
+    acquire(holder('shared', REPO, 'Code Reviewer'))
+    acquire(holder('exclusive', REPO, 'Refactor Buddy'))
+
+    const blocker = blockingHolder(REPO, 'exclusive')
+    expect(blocker?.contactName).toBe('Refactor Buddy')
+    expect(blocker?.mode).toBe('exclusive')
   })
 
   // The property, stated directly: nothing on the path refuses a reader. A
@@ -122,15 +140,17 @@ describe('acquire', () => {
 })
 
 describe('release', () => {
-  it('admits a writer once the last reader leaves', () => {
-    const first = acquire(holder('shared'))
-    const second = acquire(holder('shared'))
+  // Readers never gated the writer, so the writer's own release is the only
+  // thing that admits the next one — however many readers are still around.
+  it('admits the next writer once the holding writer leaves, readers or not', () => {
+    acquire(holder('shared'))
+    const writer = acquire(holder('exclusive'))
 
-    first?.()
     expect(acquire(holder('exclusive'))).toBeNull()
 
-    second?.()
+    writer?.()
     expect(acquire(holder('exclusive'))).not.toBeNull()
+    expect(holdersOf(REPO)).toHaveLength(2)
   })
 
   it('admits the next writer once the first finishes', () => {
@@ -187,9 +207,9 @@ describe('blockingHolder', () => {
     expect(blockingHolder(REPO, 'shared')).toBeNull()
   })
 
-  it('names a reader that refuses a writer', () => {
+  it('names nobody when only readers hold the path', () => {
     acquire(holder('shared', REPO, 'Code Reviewer'))
-    expect(blockingHolder(REPO, 'exclusive')?.contactName).toBe('Code Reviewer')
+    expect(blockingHolder(REPO, 'exclusive')).toBeNull()
   })
 
   it('is null when nothing would refuse', () => {

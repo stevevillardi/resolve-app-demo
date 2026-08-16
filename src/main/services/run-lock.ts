@@ -76,24 +76,28 @@ export function lockModeFor(persona: PersonaTemplate): LockMode {
  * The holder that would refuse `mode` on `workingPath`, or null if nothing
  * would.
  *
- * An exclusive run is refused by any holder at all. **A shared run is never
- * refused** — a `read_only` persona cannot mutate the tree, so there is no
- * hazard to serialize against, and refusing it would stop a reviewer reading a
- * repo while a refactor runs. That pair is blueprint §16 Journey 2, and
- * `07-group-coordination.md`'s acceptance check on an @mentioned reader
- * requires it outright.
+ * **Only writer-vs-writer serializes** — `00-progress.md` and
+ * `07-group-coordination.md` both say so in those words. A shared run is never
+ * refused, and an exclusive run is refused only by another exclusive holder. A
+ * `read_only` persona cannot mutate the tree, so it is neither a hazard to
+ * others nor entitled to protection from them.
  *
- * Note the asymmetry that follows: a reader can start while a writer holds, and
- * a reader already running when a writer starts is not interrupted. Either way
- * a reader can observe a tree that is being written. That is a stale read
- * rather than corruption, and it is the price of the concurrency above —
- * interrupting a turn already in flight would be worse than the inconsistency.
+ * The symmetry is the point. A reader may start while a writer holds, and a
+ * writer may start while a reader holds; either way the reader can observe a
+ * tree mid-write. That is a stale read rather than corruption, and it is the
+ * price of the concurrency this exists to allow — a long `read_only` review
+ * blocking every writer on the repo would be exactly the serialization the
+ * write lock was narrowed to avoid.
+ *
+ * Shared holders are still *recorded*, because listActiveRuns() and the fleet
+ * indicator have to be able to name everyone running. They just never refuse
+ * anyone.
  */
 export function blockingHolder(workingPath: string, mode: LockMode): RunHolder | null {
   if (mode === 'shared') return null
 
   const current = holders.get(workingPath) ?? []
-  return current[0] ?? null
+  return current.find((holder) => holder.mode === 'exclusive') ?? null
 }
 
 /**
