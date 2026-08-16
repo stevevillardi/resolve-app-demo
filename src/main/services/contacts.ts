@@ -42,3 +42,21 @@ export function createContact(draft: ContactDraft): Contact {
 
   return contact
 }
+
+/**
+ * Records the backend's resume key after a turn (Phase 6).
+ *
+ * Called once, after the first turn on a contact: the adapters fill
+ * `AgentSession.sessionId` in mid-stream at `session_started`, so it has to be
+ * read after the run rather than before it. Every later turn resumes from what
+ * this wrote, which is what makes a conversation survive quitting the app.
+ */
+export function setBackendSessionId(id: string, backendSessionId: string): void {
+  const result = initDb()
+    .update(contacts)
+    .set({ backendSessionId })
+    .where(eq(contacts.id, id))
+    .run()
+
+  if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+}

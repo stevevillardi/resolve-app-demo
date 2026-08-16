@@ -64,6 +64,28 @@ export function deleteSkill(id: string): void {
   })
 }
 
+/**
+ * The skills a persona injects, resolved from its `skillIds` (blueprint §5).
+ *
+ * Adapters may not touch the database, so somebody has to turn ids into content
+ * before a session starts — this is that somebody, and the messaging service is
+ * its only caller. Ordering is not this function's job: composeInstructions()
+ * re-orders by `persona.skillIds` itself, so only completeness matters here.
+ *
+ * A dangling id is skipped rather than throwing. `skill_ids` is a JSON array
+ * with no foreign key behind it (see deleteSkill above), so a stale id is a
+ * degraded persona, not a broken one — and failing a turn over it would be a
+ * worse outcome than running with one fewer skill.
+ */
+export function skillsForPersona(persona: { skillIds: string[] }): Skill[] {
+  if (persona.skillIds.length === 0) return []
+
+  const byId = new Map(listSkills().map((skill) => [skill.id, skill]))
+  return persona.skillIds
+    .map((id) => byId.get(id))
+    .filter((skill): skill is Skill => skill !== undefined)
+}
+
 /** Personas whose `skill_ids` contain this skill — the "Used by" list. */
 export function personasUsingSkill(id: string): string[] {
   return initDb()

@@ -194,8 +194,6 @@ describe('activeRuns', () => {
     acquire(holder('exclusive', OTHER_REPO))
 
     expect(activeRuns()).toHaveLength(3)
-    expect(new Set(activeRuns().map((run) => run.workingPath))).toEqual(
-      new Set([REPO, OTHER_REPO])
-    )
+    expect(new Set(activeRuns().map((run) => run.workingPath))).toEqual(new Set([REPO, OTHER_REPO]))
   })
 })
