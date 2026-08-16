@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { BookOpen, Trash2 } from 'lucide-react'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { EmptyState } from '@/components/common/EmptyState'
+import { PaneHeader } from '@/components/common/PaneHeader'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { usePersonas } from '@/hooks/usePersonas'
@@ -13,6 +12,15 @@ import { useDeleteSkill, useSkills, useUpdateSkill } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
 import type { PersonaTemplate, Skill } from '@/types'
 
+/**
+ * The skill editor.
+ *
+ * Unlike every other workspace view this is not a form — it is one long-form
+ * writing surface with two metadata fields attached. So it deliberately opts
+ * out of PaneBody: the instructions field claims all remaining height instead
+ * of sitting at a fixed `rows` inside a scrolling column, which previously left
+ * a third of the pane empty on any reasonably sized window.
+ */
 function SkillForm({
   skill,
   personaTemplates
@@ -35,91 +43,96 @@ function SkillForm({
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
-      <header className="border-border drag-region flex h-12 shrink-0 items-center gap-2.5 border-b px-4">
-        <BookOpen className="text-muted-foreground size-4 shrink-0" />
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
-          {name || 'Untitled skill'}
-        </h1>
-        <div className="no-drag flex shrink-0 items-center gap-1.5">
-          <Button
-            variant="destructive"
-            size="sm"
-            className="gap-1.5"
-            disabled={deleting}
-            onClick={() => setConfirmingDelete(true)}
-          >
-            <Trash2 className="size-3.5" />
-            Delete
-          </Button>
-          <Button
-            size="sm"
-            disabled={!dirty || saving}
-            onClick={() => save({ ...skill, name, description, content })}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
+      <PaneHeader
+        leading={<BookOpen className="text-muted-foreground size-4 shrink-0" />}
+        title={name || 'Untitled skill'}
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Delete skill"
+              disabled={deleting}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              disabled={!dirty || saving}
+              onClick={() => save({ ...skill, name, description, content })}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        }
+      />
+
+      {(saveError ?? deleteError) && (
+        <p className="text-destructive border-border shrink-0 border-b px-5 py-2 text-xs">
+          {saveError ?? deleteError}
+        </p>
+      )}
+
+      {/* Metadata band. Name and description describe the skill; the
+          instructions below are the skill. Keeping them on one row stops two
+          short strings from consuming the top third of a writing surface. */}
+      <div className="border-border grid shrink-0 grid-cols-1 gap-4 border-b px-5 py-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="skill-name">Name</Label>
+          <Input id="skill-name" value={name} onChange={(event) => setName(event.target.value)} />
         </div>
-      </header>
-
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto flex max-w-2xl flex-col gap-5 p-5">
-          {(saveError ?? deleteError) && (
-            <p className="text-destructive text-xs">{saveError ?? deleteError}</p>
-          )}
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="skill-name">Name</Label>
-            <Input id="skill-name" value={name} onChange={(event) => setName(event.target.value)} />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="skill-description">Description</Label>
-            <Input
-              id="skill-description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-            <p className="text-muted-foreground text-xs">
-              Shown when picking skills for a persona. One line.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="skill-content">Instructions</Label>
-            <Textarea
-              id="skill-content"
-              rows={14}
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              className="font-mono text-[12.5px] leading-relaxed"
-            />
-            <p className="text-muted-foreground text-xs">
-              Markdown, injected verbatim into every session that attaches this skill.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <h2 className="text-sm font-semibold tracking-tight">Used by</h2>
-            {usedBy.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                No persona attaches this skill yet — editing it affects nothing.
-              </p>
-            ) : (
-              <ul className="flex flex-wrap gap-1.5">
-                {usedBy.map((persona) => (
-                  <li
-                    key={persona.id}
-                    className="border-border flex items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1"
-                  >
-                    <AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="xs" />
-                    <span className="text-xs">{persona.name}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="skill-description">Description</Label>
+          <Input
+            id="skill-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Shown when picking skills for a persona. One line."
+          />
         </div>
-      </ScrollArea>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-5 pt-4 pb-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <Label htmlFor="skill-content">Instructions</Label>
+          <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
+            {content.length.toLocaleString()} chars
+          </span>
+        </div>
+        <textarea
+          id="skill-content"
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          spellCheck={false}
+          placeholder="Write what this skill should tell a persona to do…"
+          className="border-input bg-background scrollbar-subtle focus-visible:border-ring focus-visible:ring-ring/40 placeholder:text-muted-foreground min-h-0 flex-1 resize-none rounded-lg border p-3 font-mono text-[12.5px] leading-relaxed outline-none focus-visible:ring-2"
+        />
+        <p className="text-muted-foreground text-xs">
+          Markdown, injected verbatim into every session that attaches this skill.
+        </p>
+      </div>
+
+      {/* Who is affected stays pinned in view while you edit — this is the only
+          place the consequence of a change is visible before it happens. */}
+      <div className="border-border flex shrink-0 flex-wrap items-center gap-1.5 border-t px-5 py-2.5">
+        <span className="text-muted-foreground text-xs">Used by</span>
+        {usedBy.length === 0 ? (
+          <span className="text-muted-foreground text-xs">
+            no persona yet — editing this affects nothing.
+          </span>
+        ) : (
+          usedBy.map((persona) => (
+            <span
+              key={persona.id}
+              className="border-border flex items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1"
+            >
+              <AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="xs" />
+              <span className="text-xs">{persona.name}</span>
+            </span>
+          ))
+        )}
+      </div>
 
       <ConfirmDeleteDialog
         open={confirmingDelete}

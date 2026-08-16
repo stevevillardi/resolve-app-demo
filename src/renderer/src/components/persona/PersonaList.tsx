@@ -2,7 +2,7 @@ import { Users2 } from 'lucide-react'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
-import { cn } from '@/lib/utils'
+import { ListRow } from '@/components/common/ListRow'
 import { useContacts } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useUiStore } from '@/store/useUiStore'
@@ -49,28 +49,21 @@ export function PersonaList({ query }: { query: string }): React.JSX.Element {
         const boundCount = contacts.filter((c) => c.personaTemplateId === persona.id).length
         const active = selectedId === persona.id
         return (
-          <button
+          <ListRow
             key={persona.id}
-            type="button"
-            onClick={() => setSelectedId(persona.id)}
-            className={cn(
-              'flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
-              'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-              active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-            )}
+            active={active}
+            onSelect={() => setSelectedId(persona.id)}
+            leading={<AvatarColorSwatch name={persona.name} color={persona.avatarColor} />}
           >
-            <AvatarColorSwatch name={persona.name} color={persona.avatarColor} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium">{persona.name}</span>
-              <span className="text-muted-foreground block text-xs">
-                {boundCount} {boundCount === 1 ? 'contact' : 'contacts'}
-              </span>
-              <span className="mt-1 flex flex-wrap gap-1">
-                <ScopeChip axis="sandbox" value={persona.sandbox} />
-                <ScopeChip axis="github" value={persona.githubScope} />
-              </span>
+            <span className="block truncate text-[13px] font-medium">{persona.name}</span>
+            <span className="text-muted-foreground block text-xs">
+              {boundCount} {boundCount === 1 ? 'contact' : 'contacts'}
             </span>
-          </button>
+            <span className="mt-1 flex flex-wrap gap-1">
+              <ScopeChip axis="sandbox" value={persona.sandbox} />
+              <ScopeChip axis="github" value={persona.githubScope} />
+            </span>
+          </ListRow>
         )
       })}
     </div>

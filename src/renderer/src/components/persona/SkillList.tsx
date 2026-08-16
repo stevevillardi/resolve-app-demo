@@ -1,6 +1,6 @@
 import { BookOpen } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { cn } from '@/lib/utils'
+import { ListRow } from '@/components/common/ListRow'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useSkills } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
@@ -47,22 +47,15 @@ export function SkillList({ query }: { query: string }): React.JSX.Element {
         const usedBy = personaTemplates.filter((persona) => persona.skillIds.includes(skill.id))
         const active = selectedId === skill.id
         return (
-          <button
-            key={skill.id}
-            type="button"
-            onClick={() => setSelectedId(skill.id)}
-            className={cn(
-              'flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors',
-              'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-              active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-            )}
-          >
-            <span className="truncate text-[13px] font-medium">{skill.name}</span>
-            <span className="text-muted-foreground line-clamp-2 text-xs">{skill.description}</span>
+          <ListRow key={skill.id} active={active} onSelect={() => setSelectedId(skill.id)}>
+            <span className="block truncate text-[13px] font-medium">{skill.name}</span>
+            <span className="text-muted-foreground mt-0.5 line-clamp-2 block text-xs">
+              {skill.description}
+            </span>
             {/* Which personas use a skill is what makes deleting it risky, so
                 it belongs on the row rather than one click deeper. */}
             {usedBy.length > 0 && (
-              <span className="flex items-center gap-1 pt-0.5">
+              <span className="mt-1 flex items-center gap-1">
                 {usedBy.map((persona) => (
                   <span
                     key={persona.id}
@@ -77,7 +70,7 @@ export function SkillList({ query }: { query: string }): React.JSX.Element {
                 </span>
               </span>
             )}
-          </button>
+          </ListRow>
         )
       })}
     </div>
