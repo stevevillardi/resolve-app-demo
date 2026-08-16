@@ -183,7 +183,19 @@ export const routineSchema = z.object({
  */
 export const usageEventSchema = z.object({
   id: z.string(),
-  contactId: z.string(),
+  /**
+   * Null once the Contact that spent this has been deleted. The spend itself is
+   * never deleted — see the column comment in db/schema.ts.
+   */
+  contactId: z.string().nullable(),
+  /**
+   * Copied off the Contact when the row is written, so the two questions the
+   * dashboard actually asks — whose spend, and on which repo — survive that
+   * Contact being deleted. Absent only on rows written before migration 0008,
+   * which backfilled every one it could reach.
+   */
+  personaTemplateId: z.string().optional(),
+  repoPath: z.string().optional(),
   timestamp: z.number(),
   source: usageSourceSchema,
   inputTokens: z.number(),

@@ -54,7 +54,12 @@ export function usageForContact(events: UsageEvent[], contactId: string): UsageS
 
 export function usageForContacts(events: UsageEvent[], contactIds: string[]): UsageSummary {
   const ids = new Set(contactIds)
-  return aggregateUsage(events.filter((event) => ids.has(event.contactId)))
+  // A deleted Contact's spend has no id to match and so is not counted here.
+  // These two functions answer "what did this Contact cost"; the dashboard's
+  // unscoped totals are where orphaned spend stays visible.
+  return aggregateUsage(
+    events.filter((event) => event.contactId !== null && ids.has(event.contactId))
+  )
 }
 
 /**

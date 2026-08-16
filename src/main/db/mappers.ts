@@ -128,7 +128,11 @@ export function toRoutine(row: RoutineRow): Routine {
 export function toUsageEvent(row: UsageEventRow): UsageEvent {
   return {
     id: row.id,
+    // Passed through as null rather than omitted: "belonged to a Contact that
+    // no longer exists" is a meaning, the same way costUsd's null is.
     contactId: row.contactId,
+    ...optional('personaTemplateId', row.personaTemplateId),
+    ...optional('repoPath', row.repoPath),
     timestamp: row.timestamp.getTime(),
     source: row.source,
     inputTokens: row.inputTokens,

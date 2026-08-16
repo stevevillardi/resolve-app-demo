@@ -190,7 +190,9 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
         const memberIds = contacts
           .filter((contact) => contact.repoPath === group.repoPath)
           .map((contact) => contact.id)
-        const memberUsage = usageEvents.some((event) => memberIds.includes(event.contactId))
+        const memberUsage = usageEvents.some(
+          (event) => event.contactId !== null && memberIds.includes(event.contactId)
+        )
           ? usageForContacts(usageEvents, memberIds)
           : undefined
         // The group's own log, not its members' 1:1 threads — a group row

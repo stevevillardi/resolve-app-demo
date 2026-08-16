@@ -53,7 +53,12 @@ export function filterUsage(events: UsageEvent[], filter: UsageFilter = {}): Usa
     if (from !== undefined && event.timestamp < from) return false
     if (to !== undefined && event.timestamp >= to) return false
     if (allowedSources && !allowedSources.has(event.source)) return false
-    if (allowedContacts && !allowedContacts.has(event.contactId)) return false
+    // Orphaned spend has no contact to match, so a contact-scoped filter
+    // excludes it. That is the right reading: scoping to a Contact asks about
+    // that Contact, and the unscoped view is where the money still shows up.
+    if (allowedContacts && (event.contactId === null || !allowedContacts.has(event.contactId))) {
+      return false
+    }
     return true
   })
 }
@@ -130,14 +135,37 @@ export function groupUsage(
 // Each returns a selector. The contact-derived ones need the join, so they take
 // it once and close over it rather than re-scanning per event.
 
+/**
+ * The event's own attribution, falling back to the Contact it came from.
+ *
+ * Order matters: the event is asked first, because it is the only source that
+ * still answers once the Contact has been deleted. The join is the fallback for
+ * rows written before migration 0008 stamped these fields — of which there
+ * should be none, since that migration backfilled every row it could reach, but
+ * the fallback costs one `??`.
+ */
+function contactOf(
+  contactById: Map<string, Contact>,
+  contactId: string | null
+): Contact | undefined {
+  return contactId === null ? undefined : contactById.get(contactId)
+}
+
 export function byPersona(contacts: Contact[], personas: PersonaTemplate[]): UsageSelector {
   const contactById = new Map(contacts.map((contact) => [contact.id, contact]))
   const personaById = new Map(personas.map((persona) => [persona.id, persona]))
 
   return (event) => {
-    const persona = personaById.get(contactById.get(event.contactId)?.personaTemplateId ?? '')
-    // A deleted persona still has spend, and it is not nobody's.
-    if (!persona) return { key: 'unknown-persona', label: 'Unknown persona' }
+    const personaId =
+      event.personaTemplateId ?? contactOf(contactById, event.contactId)?.personaTemplateId
+    if (personaId === undefined) return { key: 'unknown-persona', label: 'Unknown persona' }
+
+    const persona = personaById.get(personaId)
+    // Two different facts, and worth telling apart. A persona we cannot name is
+    // one that was itself deleted — only possible after its last Contact went,
+    // since contacts.persona_template_id is RESTRICT. Spend with no persona id
+    // at all is a pre-0008 row the backfill could not reach.
+    if (!persona) return { key: personaId, label: 'Deleted persona' }
     return { key: persona.id, label: persona.name, color: persona.avatarColor }
   }
 }
@@ -146,7 +174,9 @@ export function byRepo(contacts: Contact[]): UsageSelector {
   const contactById = new Map(contacts.map((contact) => [contact.id, contact]))
 
   return (event) => {
-    const repoPath = contactById.get(event.contactId)?.repoPath
+    // Self-contained once stamped: repoName needs no lookup, so a deleted
+    // Contact's spend still reads under its real repo rather than "Unknown".
+    const repoPath = event.repoPath ?? contactOf(contactById, event.contactId)?.repoPath
     if (!repoPath) return { key: 'unknown-repo', label: 'Unknown repo' }
     // Keyed by full path, labelled by basename: two checkouts can share a name.
     return { key: repoPath, label: repoName(repoPath) }

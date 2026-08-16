@@ -110,6 +110,78 @@ describe('migrating a populated database', () => {
     expect(contact.worktree_path).toBeNull()
     expect(contact.branch).toBeNull()
     expect(contact.isolation).toBeNull()
+
+    // 0008 rebuilt the table and backfilled attribution from the contact as it
+    // copied. A row written years before those columns existed still knows
+    // whose spend it was and which repo it was spent on — which is the whole
+    // point, since the contact is what stops being able to answer that.
+    const attribution = upgraded.get(
+      `SELECT contact_id, persona_template_id, repo_path FROM usage_events WHERE id = 'u1'` as never
+    ) as Record<string, unknown>
+    expect(attribution.contact_id).toBe('c1')
+    expect(attribution.persona_template_id).toBe('p1')
+    expect(attribution.repo_path).toBe('/Users/dev/my-app')
+  })
+
+  it('leaves a deleted contact’s spend behind, still attributed', () => {
+    // Written from the claim rather than from the schema: deleting a Contact
+    // used to cascade its usage away, so a total covering last month shrank
+    // when somebody tidied up a Contact this month. Spend is a record of money
+    // that was actually spent; no later bookkeeping makes that untrue.
+    const path = scratchDbPath()
+    const db = createDb(path, DRIZZLE)
+
+    db.run(
+      `INSERT INTO persona_templates (id, name, avatar_color, backend, system_prompt, skill_ids, sandbox, github_scope)
+       VALUES ('p1', 'Code Reviewer', '#2a78d6', 'claude', 'Review carefully.', '["s1"]', 'read_only', 'read_only')` as never
+    )
+    db.run(
+      `INSERT INTO contacts (id, persona_template_id, repo_path, display_name)
+       VALUES ('c1', 'p1', '/Users/dev/my-app', 'Code Reviewer · my-app')` as never
+    )
+    db.run(
+      `INSERT INTO usage_events (id, contact_id, persona_template_id, repo_path, timestamp, source, input_tokens, output_tokens, cost_usd)
+       VALUES ('u1', 'c1', 'p1', '/Users/dev/my-app', 1786800000000, 'message', 120, 45, 0.0031)` as never
+    )
+
+    db.run(`DELETE FROM contacts WHERE id = 'c1'` as never)
+
+    const usage = db.get(
+      `SELECT contact_id, persona_template_id, repo_path, cost_usd FROM usage_events WHERE id = 'u1'` as never
+    ) as Record<string, unknown>
+    // The row survives its Contact...
+    expect(usage).toBeDefined()
+    expect(usage.cost_usd).toBe(0.0031)
+    // ...with the link severed rather than the row removed...
+    expect(usage.contact_id).toBeNull()
+    // ...and still able to say whose spend it was and where.
+    expect(usage.persona_template_id).toBe('p1')
+    expect(usage.repo_path).toBe('/Users/dev/my-app')
+  })
+
+  it('still cascades the conversation away with the contact', () => {
+    // The other half of the same claim: messages are conversation state and
+    // *should* go. Asserting it here stops "keep the spend" quietly becoming
+    // "keep everything".
+    const path = scratchDbPath()
+    const db = createDb(path, DRIZZLE)
+
+    db.run(
+      `INSERT INTO persona_templates (id, name, avatar_color, backend, system_prompt, skill_ids, sandbox, github_scope)
+       VALUES ('p1', 'Code Reviewer', '#2a78d6', 'claude', 'Review carefully.', '["s1"]', 'read_only', 'read_only')` as never
+    )
+    db.run(
+      `INSERT INTO contacts (id, persona_template_id, repo_path, display_name)
+       VALUES ('c1', 'p1', '/Users/dev/my-app', 'Code Reviewer · my-app')` as never
+    )
+    db.run(
+      `INSERT INTO messages (id, contact_id, role, content, timestamp)
+       VALUES ('m1', 'c1', 'user', 'hello', 1786800000000)` as never
+    )
+
+    db.run(`DELETE FROM contacts WHERE id = 'c1'` as never)
+
+    expect(db.get(`SELECT count(*) AS n FROM messages` as never)).toEqual({ n: 0 })
   })
 
   it('is idempotent — a second launch applies nothing and loses nothing', () => {
