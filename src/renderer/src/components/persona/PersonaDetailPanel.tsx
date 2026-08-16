@@ -268,7 +268,7 @@ function PersonaForm({
                     {checked && <Check className="size-3" />}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-medium">{skill.name}</span>
+                    <span className="block text-row font-medium">{skill.name}</span>
                     <span className="text-muted-foreground block text-xs">{skill.description}</span>
                   </span>
                 </button>
@@ -290,7 +290,7 @@ function PersonaForm({
                   className="border-border flex items-center justify-between gap-2 rounded-lg border px-3 py-2"
                 >
                   <span className="truncate font-mono text-xs">{contact.repoPath}</span>
-                  <span className="text-muted-foreground shrink-0 font-mono text-[11px]">
+                  <span className="text-muted-foreground shrink-0 font-mono text-meta">
                     {contact.backendSessionId ?? 'no session yet'}
                   </span>
                 </li>

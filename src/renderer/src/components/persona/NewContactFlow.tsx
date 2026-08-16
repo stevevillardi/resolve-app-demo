@@ -230,7 +230,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                 <AvatarColorSwatch name={template.name} color={template.avatarColor} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
-                    <span className="truncate text-[13px] font-medium">{template.name}</span>
+                    <span className="truncate text-row font-medium">{template.name}</span>
                     <BackendBadge backend={template.backend} />
                   </span>
                   <span className="mt-1 flex flex-wrap gap-1">
@@ -331,7 +331,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                       {option.fullName}
                     </span>
                     {!option.localPath && (
-                      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-[11px]">
+                      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-meta">
                         <CloudDownload className="size-3" />
                         clone
                       </span>
@@ -363,7 +363,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                     <p className="flex items-center gap-1.5 text-sm font-medium">
                       {option.label}
                       {option.value === suggestedIsolation && !unavailable && (
-                        <span className="text-muted-foreground text-[11px] font-normal">
+                        <span className="text-muted-foreground text-meta font-normal">
                           Recommended
                         </span>
                       )}

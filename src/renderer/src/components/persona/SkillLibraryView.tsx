@@ -96,7 +96,7 @@ function SkillForm({
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-5 pt-4 pb-3">
         <div className="flex items-baseline justify-between gap-3">
           <Label htmlFor="skill-content">Instructions</Label>
-          <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
+          <span className="text-muted-foreground font-mono text-meta tabular-nums">
             {content.length.toLocaleString()} chars
           </span>
         </div>
@@ -106,7 +106,7 @@ function SkillForm({
           onChange={(event) => setContent(event.target.value)}
           spellCheck={false}
           placeholder="Write what this skill should tell a persona to do…"
-          className="border-input bg-background scrollbar-subtle focus-visible:border-ring focus-visible:ring-ring/40 placeholder:text-muted-foreground min-h-0 flex-1 resize-none rounded-lg border p-3 font-mono text-[12.5px] leading-relaxed outline-none focus-visible:ring-2"
+          className="border-input bg-background scrollbar-subtle focus-visible:border-ring focus-visible:ring-ring/40 placeholder:text-muted-foreground min-h-0 flex-1 resize-none rounded-lg border p-3 font-mono text-code leading-relaxed outline-none focus-visible:ring-2"
         />
         <p className="text-muted-foreground text-xs">
           Markdown, injected verbatim into every session that attaches this skill.

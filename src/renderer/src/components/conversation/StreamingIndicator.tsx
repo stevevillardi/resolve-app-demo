@@ -30,7 +30,7 @@ export function StreamingIndicator({
         className={cn('flex items-center gap-2 text-xs', className)}
       >
         <span className="bg-current/70 size-1.5 shrink-0 animate-pulse rounded-full motion-reduce:animate-none" />
-        <span className="min-w-0 truncate font-mono text-[11px] opacity-80">
+        <span className="min-w-0 truncate font-mono text-meta opacity-80">
           {activity ?? 'working…'}
         </span>
       </div>

@@ -107,7 +107,7 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
       <PaneBody>
         <div className="border-border flex items-center justify-between gap-4 rounded-lg border px-3 py-2.5">
           <div>
-            <p className="text-[13px] font-medium">Enabled</p>
+            <p className="text-row font-medium">Enabled</p>
             <p className="text-muted-foreground text-xs">
               {enabled
                 ? 'Fires on schedule even when the window is closed.'
@@ -200,10 +200,10 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
         <Section title="Last run">
           {routine.lastRunAt ? (
             <div className="border-border rounded-lg border p-3">
-              <p className="text-muted-foreground font-mono text-[11px]">
+              <p className="text-muted-foreground font-mono text-meta">
                 {formatRelative(routine.lastRunAt)}
               </p>
-              <p className="mt-1 text-[13px]">{routine.lastRunSummary}</p>
+              <p className="mt-1 text-row">{routine.lastRunSummary}</p>
             </div>
           ) : (
             <p className="text-muted-foreground text-xs">Hasn&apos;t run yet.</p>

@@ -21,7 +21,7 @@ export function UsageBadge({
     <Tooltip>
       <TooltipTrigger
         className={cn(
-          'text-muted-foreground shrink-0 rounded-md font-mono text-[11px] tabular-nums',
+          'text-muted-foreground shrink-0 rounded-md font-mono text-meta tabular-nums',
           variant === 'default' && 'bg-muted px-1.5 py-0.5',
           className
         )}

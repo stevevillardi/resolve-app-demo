@@ -235,6 +235,30 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
+  /* The type scale, named rather than accumulated.
+   *
+   * The renderer held 76 arbitrary `text-[Npx]` values interleaved with
+   * `text-xs`/`text-sm`, so "what size is a list-row title" was answered by
+   * whichever file you happened to open — and `text-sm` and `text-sm` were
+   * the same size written two different ways. These five steps sit between and
+   * below Tailwind's own and cover every one of those values.
+   *
+   * Each size here is unchanged from what already shipped: this names what was
+   * there rather than restyling anything, so the argument about whether 11px
+   * metadata should be 12px is now one token instead of 38 class strings.
+   *
+   * Font size only: no paired `--text-*--line-height`, deliberately. Adding one
+   * would make these utilities set leading, which `text-[Npx]` never did, and
+   * would turn a 32-file mechanical rename into a silent spacing change across
+   * every dense surface in the app. Callers that care already say `leading-*`
+   * next to the size. A decided leading ramp is a real argument and belongs in
+   * its own commit, with screenshots — not smuggled in under a rename. */
+  --text-micro: 0.625rem; /* 10px — timestamps, table column heads */
+  --text-meta: 0.6875rem; /* 11px — the app's caption size, mono metadata */
+  --text-code: 0.78125rem; /* 12.5px — mono writing surfaces and code fences */
+  --text-row: 0.8125rem; /* 13px — list-row and option-row titles */
+  --text-title: 0.9375rem; /* 15px — empty-state and pane titles, above text-sm */
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

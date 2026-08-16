@@ -74,17 +74,17 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
             </span>
             <span className={cn('min-w-0 flex-1', !routine.enabled && 'opacity-60')}>
               <span className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-[13px] font-medium">
+                <span className="truncate text-row font-medium">
                   {persona?.name ?? 'Unknown persona'}
                 </span>
-                <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
+                <span className="text-muted-foreground shrink-0 font-mono text-micro">
                   {routine.schedule}
                 </span>
               </span>
               <span className="text-muted-foreground mt-0.5 block truncate text-xs">
                 {routine.prompt}
               </span>
-              <span className="text-muted-foreground mt-0.5 block text-[11px]">
+              <span className="text-muted-foreground mt-0.5 block text-meta">
                 {routine.enabled
                   ? routine.lastRunAt
                     ? `Last run ${formatRelative(routine.lastRunAt)}`

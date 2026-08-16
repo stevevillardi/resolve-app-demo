@@ -55,7 +55,7 @@ export function PersonaList({ query }: { query: string }): React.JSX.Element {
             onSelect={() => setSelectedId(persona.id)}
             leading={<AvatarColorSwatch name={persona.name} color={persona.avatarColor} />}
           >
-            <span className="block truncate text-[13px] font-medium">{persona.name}</span>
+            <span className="block truncate text-row font-medium">{persona.name}</span>
             <span className="text-muted-foreground block text-xs">
               {boundCount} {boundCount === 1 ? 'contact' : 'contacts'}
             </span>

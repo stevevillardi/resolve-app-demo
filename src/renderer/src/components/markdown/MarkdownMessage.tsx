@@ -28,7 +28,7 @@ const components: Components = {
   table({ children }) {
     return (
       <div className="scrollbar-subtle border-border my-2 overflow-x-auto rounded-lg border">
-        <table className="w-full border-collapse text-[13px]">{children}</table>
+        <table className="w-full border-collapse text-row">{children}</table>
       </div>
     )
   }
@@ -46,10 +46,10 @@ export function MarkdownMessage({ content, className }: MarkdownMessageProps): R
       className={cn(
         'max-w-none text-sm leading-relaxed',
         '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
-        '[&_h1]:mt-4 [&_h1]:mb-1.5 [&_h1]:text-[15px] [&_h1]:font-semibold [&_h1]:tracking-tight',
-        '[&_h2]:mt-4 [&_h2]:mb-1.5 [&_h2]:text-[14px] [&_h2]:font-semibold [&_h2]:tracking-tight',
-        '[&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold',
-        '[&_h4]:mt-3 [&_h4]:mb-1 [&_h4]:text-[13px] [&_h4]:font-semibold [&_h4]:opacity-80',
+        '[&_h1]:mt-4 [&_h1]:mb-1.5 [&_h1]:text-title [&_h1]:font-semibold [&_h1]:tracking-tight',
+        '[&_h2]:mt-4 [&_h2]:mb-1.5 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:tracking-tight',
+        '[&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-row [&_h3]:font-semibold',
+        '[&_h4]:mt-3 [&_h4]:mb-1 [&_h4]:text-row [&_h4]:font-semibold [&_h4]:opacity-80',
         '[&_h5]:mt-2 [&_h5]:mb-1 [&_h5]:text-xs [&_h5]:font-semibold [&_h5]:opacity-80',
         '[&_h6]:mt-2 [&_h6]:mb-1 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:opacity-70',
         '[&_p]:my-2',

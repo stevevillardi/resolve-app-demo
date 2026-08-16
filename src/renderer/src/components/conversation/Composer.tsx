@@ -117,7 +117,7 @@ export function Composer({
       {(notice ?? hint) && (
         <div
           className={cn(
-            'mt-1.5 flex items-center gap-1.5 px-1 text-[11px]',
+            'mt-1.5 flex items-center gap-1.5 px-1 text-meta',
             notice ? 'text-destructive' : 'text-muted-foreground'
           )}
         >

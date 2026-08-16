@@ -20,7 +20,7 @@ export function BackendBadge({ backend, className }: BackendBadgeProps): React.J
   return (
     <span
       className={cn(
-        'text-muted-foreground border-border inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] leading-none',
+        'text-muted-foreground border-border inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-meta leading-none',
         className
       )}
     >

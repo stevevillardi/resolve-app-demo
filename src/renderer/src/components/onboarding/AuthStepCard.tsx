@@ -38,7 +38,7 @@ export function AuthStepCard({
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <p className="text-[15px] font-medium">{title}</p>
+            <p className="text-title font-medium">{title}</p>
             {connected && <CheckCircle2 className="text-scope-elevated size-4 shrink-0" />}
           </div>
           <p className="text-muted-foreground text-sm text-pretty">

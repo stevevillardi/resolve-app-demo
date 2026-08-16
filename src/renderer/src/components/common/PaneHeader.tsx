@@ -41,7 +41,7 @@ export function PaneHeader({
       <div className="flex min-w-0 flex-1 items-baseline gap-2">
         <h1 className="truncate text-sm font-semibold tracking-tight">{title}</h1>
         {subtitle && (
-          <span className="text-muted-foreground truncate font-mono text-[11px]">{subtitle}</span>
+          <span className="text-muted-foreground truncate font-mono text-meta">{subtitle}</span>
         )}
       </div>
       {actions && <div className="no-drag flex shrink-0 items-center gap-1.5">{actions}</div>}

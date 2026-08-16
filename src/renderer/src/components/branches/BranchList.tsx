@@ -58,7 +58,7 @@ export function BranchList({ query }: BranchListProps): React.JSX.Element {
     <div className="flex flex-col gap-3">
       {[...byRepo.entries()].map(([repoPath, repoBranches]) => (
         <div key={repoPath} className="flex flex-col gap-0.5">
-          <p className="text-muted-foreground px-2 pt-1 text-[11px] font-medium tracking-wide uppercase">
+          <p className="text-muted-foreground px-2 pt-1 text-meta font-medium tracking-wide uppercase">
             {repoName(repoPath)}
           </p>
           {repoBranches.map((branch) => {
@@ -73,7 +73,7 @@ export function BranchList({ query }: BranchListProps): React.JSX.Element {
                   active ? 'bg-accent' : 'hover:bg-accent/50'
                 )}
               >
-                <span className="w-full truncate font-mono text-[13px]">{branch.branch}</span>
+                <span className="w-full truncate font-mono text-row">{branch.branch}</span>
                 <span className="text-muted-foreground truncate text-xs">
                   {/* Named rather than left blank: a branch whose Contact was
                       deleted is the one most likely to be forgotten, so it says

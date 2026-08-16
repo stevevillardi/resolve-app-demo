@@ -8,9 +8,9 @@ interface AvatarColorSwatchProps {
 }
 
 const SIZE_CLASS: Record<NonNullable<AvatarColorSwatchProps['size']>, string> = {
-  xs: 'size-5 rounded-[5px] text-[9px]',
-  sm: 'size-6 rounded-md text-[10px]',
-  default: 'size-8 rounded-lg text-[11px]',
+  xs: 'size-5 rounded-[5px] text-micro',
+  sm: 'size-6 rounded-md text-micro',
+  default: 'size-8 rounded-lg text-meta',
   lg: 'size-11 rounded-xl text-sm'
 }
 

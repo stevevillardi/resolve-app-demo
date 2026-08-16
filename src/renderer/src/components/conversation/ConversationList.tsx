@@ -26,7 +26,7 @@ import type { Contact, PersonaTemplate } from '@/types'
 
 function SectionLabel({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <p className="text-muted-foreground px-2 pt-3 pb-1 text-[11px] font-medium tracking-wide uppercase first:pt-1">
+    <p className="text-muted-foreground px-2 pt-3 pb-1 text-meta font-medium tracking-wide uppercase first:pt-1">
       {children}
     </p>
   )

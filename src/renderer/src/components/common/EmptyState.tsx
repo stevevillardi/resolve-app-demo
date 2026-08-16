@@ -45,7 +45,7 @@ export function EmptyState({
         </span>
       )}
       <div className="flex flex-col gap-1">
-        <p className={cn('font-medium', compact ? 'text-sm' : 'text-[15px]')}>{title}</p>
+        <p className={cn('font-medium', compact ? 'text-sm' : 'text-title')}>{title}</p>
         {description && (
           <p className="text-muted-foreground mx-auto max-w-sm text-sm text-pretty">
             {description}

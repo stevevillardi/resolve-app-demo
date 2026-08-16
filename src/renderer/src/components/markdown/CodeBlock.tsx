@@ -92,7 +92,7 @@ export function CodeBlock({
       )}
     >
       <div className="border-border bg-muted/40 flex h-7 items-center justify-between border-b pr-1 pl-2.5">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-wide uppercase">
+        <span className="text-muted-foreground font-mono text-micro tracking-wide uppercase">
           {language}
         </span>
         <Button
@@ -106,11 +106,11 @@ export function CodeBlock({
       </div>
       {html ? (
         <div
-          className="scrollbar-subtle [&_pre]:overflow-x-auto [&_pre]:bg-transparent! [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-[12.5px] [&_pre]:leading-relaxed"
+          className="scrollbar-subtle [&_pre]:overflow-x-auto [&_pre]:bg-transparent! [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-code [&_pre]:leading-relaxed"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       ) : (
-        <pre className="scrollbar-subtle overflow-x-auto p-3 font-mono text-[12.5px] leading-relaxed">
+        <pre className="scrollbar-subtle overflow-x-auto p-3 font-mono text-code leading-relaxed">
           <code>{code}</code>
         </pre>
       )}

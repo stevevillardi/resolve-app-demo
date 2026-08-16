@@ -44,7 +44,7 @@ export function UsageScopeList(): React.JSX.Element {
     )
 
   const heading = (text: string): React.JSX.Element => (
-    <p className="text-muted-foreground px-2 pt-3 pb-1 text-[11px] font-medium tracking-wide uppercase">
+    <p className="text-muted-foreground px-2 pt-3 pb-1 text-meta font-medium tracking-wide uppercase">
       {text}
     </p>
   )
@@ -59,8 +59,8 @@ export function UsageScopeList(): React.JSX.Element {
         <span className="border-border flex size-8 shrink-0 items-center justify-center rounded-lg border">
           <Layers className="text-muted-foreground size-4" />
         </span>
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">All personas</span>
-        <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
+        <span className="min-w-0 flex-1 truncate text-row font-medium">All personas</span>
+        <span className="text-muted-foreground shrink-0 font-mono text-meta tabular-nums">
           {costFor(contacts.map((contact) => contact.id))}
         </span>
       </button>
@@ -89,12 +89,12 @@ export function UsageScopeList(): React.JSX.Element {
           >
             <AvatarColorSwatch name={persona.name} color={persona.avatarColor} />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium">{persona.name}</span>
+              <span className="block truncate text-row font-medium">{persona.name}</span>
               <span className="text-muted-foreground block text-xs">
                 {contactIds.length} {contactIds.length === 1 ? 'contact' : 'contacts'}
               </span>
             </span>
-            <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
+            <span className="text-muted-foreground shrink-0 font-mono text-meta tabular-nums">
               {costFor(contactIds)}
             </span>
           </button>
@@ -119,14 +119,14 @@ export function UsageScopeList(): React.JSX.Element {
               <FolderGit2 className="text-muted-foreground size-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate font-mono text-[13px] font-medium">
+              <span className="block truncate font-mono text-row font-medium">
                 {repoName(repoPath)}
               </span>
               <span className="text-muted-foreground block text-xs">
                 {contactIds.length} {contactIds.length === 1 ? 'contact' : 'contacts'}
               </span>
             </span>
-            <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
+            <span className="text-muted-foreground shrink-0 font-mono text-meta tabular-nums">
               {costFor(contactIds)}
             </span>
           </button>

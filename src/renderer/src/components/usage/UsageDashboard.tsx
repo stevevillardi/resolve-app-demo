@@ -93,11 +93,9 @@ function StatTile({
 }): React.JSX.Element {
   return (
     <div className="border-border rounded-lg border p-3">
-      <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-        {label}
-      </p>
+      <p className="text-muted-foreground text-meta font-medium tracking-wide uppercase">{label}</p>
       <p className="mt-1 font-mono text-xl tabular-nums">{value}</p>
-      {note && <p className="text-muted-foreground mt-0.5 text-[11px]">{note}</p>}
+      {note && <p className="text-muted-foreground mt-0.5 text-meta">{note}</p>}
     </div>
   )
 }
@@ -127,7 +125,7 @@ function BreakdownRows({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="text-muted-foreground flex items-center gap-2.5 text-[10px] font-medium tracking-wide uppercase">
+      <div className="text-muted-foreground flex items-center gap-2.5 text-micro font-medium tracking-wide uppercase">
         <span className="size-5 shrink-0" aria-hidden />
         <span className="w-28 shrink-0">Name</span>
         <span className="min-w-0 flex-1" aria-hidden />
@@ -151,10 +149,10 @@ function BreakdownRows({
                 }}
               />
             </div>
-            <span className="text-muted-foreground w-16 shrink-0 text-right font-mono text-[11px] tabular-nums">
+            <span className="text-muted-foreground w-16 shrink-0 text-right font-mono text-meta tabular-nums">
               {formatTokens(row.tokens)}
             </span>
-            <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums">
+            <span className="w-16 shrink-0 text-right font-mono text-meta tabular-nums">
               {formatCostSummary(row.summary)}
             </span>
           </div>
@@ -294,7 +292,7 @@ export function UsageDashboard(): React.JSX.Element {
 
       <PaneBody measure="wide">
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground shrink-0 text-[11px] font-medium tracking-wide uppercase">
+          <span className="text-muted-foreground shrink-0 text-meta font-medium tracking-wide uppercase">
             Source
           </span>
           <SegmentedControl

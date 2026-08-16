@@ -48,7 +48,7 @@ export function SkillList({ query }: { query: string }): React.JSX.Element {
         const active = selectedId === skill.id
         return (
           <ListRow key={skill.id} active={active} onSelect={() => setSelectedId(skill.id)}>
-            <span className="block truncate text-[13px] font-medium">{skill.name}</span>
+            <span className="block truncate text-row font-medium">{skill.name}</span>
             <span className="text-muted-foreground mt-0.5 line-clamp-2 block text-xs">
               {skill.description}
             </span>
@@ -65,7 +65,7 @@ export function SkillList({ query }: { query: string }): React.JSX.Element {
                     style={{ backgroundColor: persona.avatarColor }}
                   />
                 ))}
-                <span className="text-muted-foreground text-[11px]">
+                <span className="text-muted-foreground text-meta">
                   {usedBy.length} {usedBy.length === 1 ? 'persona' : 'personas'}
                 </span>
               </span>

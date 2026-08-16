@@ -62,7 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
         </span>
 
         <div className="flex flex-col gap-1">
-          <p className="text-[15px] font-medium">Something broke while drawing this screen</p>
+          <p className="text-title font-medium">Something broke while drawing this screen</p>
           <p className="text-muted-foreground mx-auto max-w-md text-sm text-pretty">
             Your personas, skills and conversations are stored on disk and are unaffected. Reloading
             starts the window again from the same data.
