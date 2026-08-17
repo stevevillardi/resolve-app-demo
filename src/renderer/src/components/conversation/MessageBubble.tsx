@@ -1,7 +1,14 @@
-import { AlertTriangle, RotateCw } from 'lucide-react'
+import { AlertTriangle, Copy, RotateCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { MarkdownMessage } from '@/components/markdown/MarkdownMessage'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { Button } from '@/components/ui/button'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
 import { StreamingIndicator } from './StreamingIndicator'
 import { ToolCallTimeline } from './ToolCallTimeline'
 import { formatTime } from '@/lib/format'
@@ -120,37 +127,58 @@ export function MessageBubble({
           )}
         </div>
       )}
-      <div
-        className={cn(
-          'max-w-[min(46rem,88%)] px-3.5 py-2.5 text-sm',
-          // Asymmetric corner: the bubble's inner-bottom corner tightens toward
-          // its author, which is what makes direction readable without a tail.
-          isOutbound
-            ? 'bg-bubble-outbound text-bubble-outbound-foreground rounded-[var(--radius-bubble)] rounded-br-md'
-            : 'bg-bubble-inbound text-bubble-inbound-foreground rounded-[var(--radius-bubble)] rounded-bl-md'
-        )}
-      >
-        {isOutbound ? (
-          <p className="whitespace-pre-wrap">{content}</p>
-        ) : (
-          <MarkdownMessage content={content} />
-        )}
-        {status === 'streaming' && (
-          <>
-            {/* Above the indicator: what has happened reads top-down, and what
-                is happening now stays last, where the eye already is. */}
-            <ToolCallTimeline
-              calls={toolCalls ?? []}
-              className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
-            />
-            <StreamingIndicator
-              backend={backend}
-              className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
-              activity={activity ?? undefined}
-            />
-          </>
-        )}
-      </div>
+      <ContextMenu>
+        <ContextMenuTrigger
+          render={
+            <div
+              className={cn(
+                'max-w-[min(46rem,88%)] px-3.5 py-2.5 text-sm',
+                // Asymmetric corner: the bubble's inner-bottom corner tightens toward
+                // its author, which is what makes direction readable without a tail.
+                isOutbound
+                  ? 'bg-bubble-outbound text-bubble-outbound-foreground rounded-[var(--radius-bubble)] rounded-br-md'
+                  : 'bg-bubble-inbound text-bubble-inbound-foreground rounded-[var(--radius-bubble)] rounded-bl-md'
+              )}
+            >
+              {isOutbound ? (
+                <p className="whitespace-pre-wrap">{content}</p>
+              ) : (
+                <MarkdownMessage content={content} />
+              )}
+              {status === 'streaming' && (
+                <>
+                  {/* Above the indicator: what has happened reads top-down, and what
+                      is happening now stays last, where the eye already is. */}
+                  <ToolCallTimeline
+                    calls={toolCalls ?? []}
+                    className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
+                  />
+                  <StreamingIndicator
+                    backend={backend}
+                    className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
+                    activity={activity ?? undefined}
+                  />
+                </>
+              )}
+            </div>
+          }
+        />
+        <ContextMenuContent>
+          {/* The whole message, not the DOM selection — "copy what this said"
+              is the request a bubble menu answers; partial copy stays with
+              ordinary text selection. Toasted because a clipboard write has no
+              visible effect of its own. */}
+          <ContextMenuItem
+            onClick={() => {
+              void navigator.clipboard.writeText(content)
+              toast('Copied')
+            }}
+          >
+            <Copy />
+            Copy text
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
       {isOutbound && timestamp !== undefined && (
         <span className="text-muted-foreground mr-1 font-mono text-micro tabular-nums">
           {formatTime(timestamp)}

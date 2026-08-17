@@ -15,6 +15,8 @@ interface ConversationListItemProps {
   running?: boolean
   /** Avatar for a contact; a stacked cluster of member avatars for a group. */
   leading: React.ReactNode
+  /** Right-click actions for this row — see ListRow's prop of the same name. */
+  contextMenu?: React.ReactNode
   onSelect: () => void
 }
 
@@ -27,6 +29,7 @@ export function ConversationListItem({
   usage,
   running = false,
   leading,
+  contextMenu,
   onSelect
 }: ConversationListItemProps): React.JSX.Element {
   // A group row is already titled with its repo, so repeating it below would
@@ -35,7 +38,12 @@ export function ConversationListItem({
   const showRepo = shortRepo !== name
 
   return (
-    <ListRow active={active} onSelect={onSelect} leading={leading}>
+    <ListRow
+      active={active}
+      onSelect={onSelect}
+      leading={leading}
+      {...(contextMenu ? { contextMenu } : {})}
+    >
       <span className="block">
         <span className="flex items-baseline justify-between gap-2">
           <span className="truncate text-row font-medium">{name}</span>
