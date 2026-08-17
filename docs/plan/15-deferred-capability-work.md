@@ -18,6 +18,36 @@ drawn on purpose.
 
 ---
 
+## 0. `scripts/probe-mcp.ts` — the instrument the rest of this depends on
+
+Deferred out of Phase 14 after step 4. It was planned as step 5 and is the
+prerequisite for items 2 and 3 below, so it is the first thing to build here
+rather than one entry among several.
+
+Three jobs, in the order they matter:
+
+1. **Confirm the Codex `mcp_servers` block against a real run.** Today its key
+   names come from `codex mcp add --help` and from the binary's own serde field
+   list, read with `strings`. `CodexOptions.config` is an open index signature,
+   so a wrong key is *silently ignored* — the failure is a server that looks
+   configured, is not there, or worse is there without its deny list. Unit tests
+   assert the object we build; nothing yet asserts Codex accepts it.
+2. **Refresh `src/main/adapters/github-mcp-tools.ts`** from both endpoints and
+   report drift. The file is a snapshot taken 2026-08-16 (27 read, 17 write, 44
+   total) and its arithmetic is asserted, but that tripwire only fires when this
+   is run. Item 3 below is the cost of not running it.
+3. **Probe `McpServerToolPolicy.permission_policy` under `bypassPermissions`.**
+   If `always_deny` survives, it is a genuine third gate — per-server and
+   per-tool, enforced by the CLI rather than by a name blacklist — worth adopting
+   *alongside* `disallowedTools`, never instead of it.
+
+It belongs beside `probe:adapters` and `probe:structured` and runs outside
+Electron for the same reason they do: nothing under `src/main/adapters/` may
+import `electron` or the database, so the probe drives the real SDKs directly.
+
+Until it exists, the honest statement about the Codex MCP path is **written and
+unit-tested, unproven end to end**.
+
 ## 1. `capabilities.unavailable` has no consumer
 
 `capabilitiesFor()` returns an `unavailable` list — servers a persona was
