@@ -66,7 +66,7 @@ export function useDeleteRoutine(): {
 }
 
 export function useRunRoutineNow(): {
-  runNow: (id: string) => void
+  runNow: (id: string, onResult?: (result: { skipped: string | null }) => void) => void
   isPending: boolean
   /** The lock refusal, when a fire was skipped rather than started. */
   skipped: string | null
@@ -82,7 +82,9 @@ export function useRunRoutineNow(): {
   })
 
   return {
-    runNow: (id) => mutation.mutate(id),
+    // The callback exists for callers with no pane to show `skipped` in — the
+    // routine row's context menu answers with a toast instead.
+    runNow: (id, onResult) => mutation.mutate(id, { onSuccess: (result) => onResult?.(result) }),
     isPending: mutation.isPending,
     skipped: mutation.data?.skipped ?? null,
     error: mutation.error ? ipcErrorMessage(mutation.error) : null

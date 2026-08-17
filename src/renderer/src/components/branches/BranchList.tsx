@@ -1,13 +1,77 @@
-import { GitBranch } from 'lucide-react'
+import { useState } from 'react'
+import { GitBranch, Trash2 } from 'lucide-react'
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ListRow } from '@/components/common/ListRow'
-import { useBranches } from '@/hooks/useBranches'
+import { ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
+import { useBranches, useDiscardBranch } from '@/hooks/useBranches'
 import { repoName } from '@/lib/format'
 import { useUiStore } from '@/store/useUiStore'
 import type { BranchSummary } from '../../../../shared/ipc-contract'
 
 interface BranchListProps {
   query: string
+}
+
+/**
+ * Right-click discard for a branch row — the same dialog and file-list
+ * consequence as the detail pane's button. Discard is the only action here on
+ * purpose: merging and opening a PR both need the detail pane's context (a
+ * target to choose, a conflict preview to read), and offering them from a menu
+ * without that context would make the irreversible path the most casual one.
+ */
+function BranchRowMenu({ branch }: { branch: BranchSummary }): React.JSX.Element {
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  const selected = useUiStore((state) => state.selectedBranch)
+  const setSelected = useUiStore((state) => state.setSelectedBranch)
+  const { discard, isPending: discarding } = useDiscardBranch()
+
+  return (
+    <>
+      <ContextMenuContent>
+        <ContextMenuItem variant="destructive" onClick={() => setConfirmingDiscard(true)}>
+          <Trash2 />
+          Discard branch…
+        </ContextMenuItem>
+      </ContextMenuContent>
+
+      {confirmingDiscard && (
+        <ConfirmDeleteDialog
+          open
+          onOpenChange={(next) => !next && setConfirmingDiscard(false)}
+          title={`Discard ${branch.branch}?`}
+          description="The branch and its checkout go. Anything committed only here goes with them."
+          consequence={
+            branch.files.length > 0 ? (
+              <>
+                <p className="mb-1 font-medium">
+                  {branch.files.length === 1
+                    ? '1 file would be lost:'
+                    : `${branch.files.length} files would be lost:`}
+                </p>
+                <ul className="flex flex-col gap-0.5">
+                  {branch.files.map((file) => (
+                    <li key={file} className="truncate font-mono">
+                      {file}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : undefined
+          }
+          confirmLabel={discarding ? 'Discarding…' : 'Discard permanently'}
+          onConfirm={() =>
+            discard({ repoPath: branch.repoPath, branch: branch.branch, force: true }, () => {
+              setConfirmingDiscard(false)
+              if (selected?.repoPath === branch.repoPath && selected.branch === branch.branch) {
+                setSelected(null)
+              }
+            })
+          }
+        />
+      )}
+    </>
+  )
 }
 
 /**
@@ -72,6 +136,7 @@ export function BranchList({ query }: BranchListProps): React.JSX.Element {
                 key={branch.branch}
                 active={active}
                 onSelect={() => setSelected({ repoPath, branch: branch.branch })}
+                contextMenu={<BranchRowMenu branch={branch} />}
               >
                 <span className="block w-full truncate font-mono text-row">{branch.branch}</span>
                 <span className="text-muted-foreground mt-0.5 block truncate text-xs">

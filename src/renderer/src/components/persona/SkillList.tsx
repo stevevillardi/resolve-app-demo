@@ -1,9 +1,59 @@
-import { BookOpen } from 'lucide-react'
+import { useState } from 'react'
+import { BookOpen, Trash2 } from 'lucide-react'
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ListRow } from '@/components/common/ListRow'
+import { ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
 import { usePersonas } from '@/hooks/usePersonas'
-import { useSkills } from '@/hooks/useSkills'
+import { useDeleteSkill, useSkills } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
+import type { PersonaTemplate, Skill } from '@/types'
+
+/** Right-click delete for a skill row — the same dialog and copy as the
+ * library editor's trash icon, consequence included: deleting a skill doesn't
+ * block, it silently detaches, so the affected personas are named up front. */
+function SkillRowMenu({
+  skill,
+  usedBy
+}: {
+  skill: Skill
+  usedBy: PersonaTemplate[]
+}): React.JSX.Element {
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const selectedId = useUiStore((state) => state.selectedSkillId)
+  const setSelectedId = useUiStore((state) => state.setSelectedSkillId)
+  const { remove } = useDeleteSkill()
+
+  return (
+    <>
+      <ContextMenuContent>
+        <ContextMenuItem variant="destructive" onClick={() => setConfirmingDelete(true)}>
+          <Trash2 />
+          Delete skill…
+        </ContextMenuItem>
+      </ContextMenuContent>
+
+      {confirmingDelete && (
+        <ConfirmDeleteDialog
+          open
+          onOpenChange={(next) => !next && setConfirmingDelete(false)}
+          title={`Delete “${skill.name}”?`}
+          description={
+            usedBy.length === 0
+              ? 'No persona attaches this skill, so nothing else changes.'
+              : `${usedBy.length === 1 ? 'This persona attaches' : 'These personas attach'} it and will lose those instructions: ${usedBy.map((p) => p.name).join(', ')}.`
+          }
+          onConfirm={() =>
+            remove(skill.id, () => {
+              setConfirmingDelete(false)
+              if (selectedId === skill.id) setSelectedId(null)
+            })
+          }
+        />
+      )}
+    </>
+  )
+}
 
 export function SkillList({ query }: { query: string }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedSkillId)
@@ -47,7 +97,12 @@ export function SkillList({ query }: { query: string }): React.JSX.Element {
         const usedBy = personaTemplates.filter((persona) => persona.skillIds.includes(skill.id))
         const active = selectedId === skill.id
         return (
-          <ListRow key={skill.id} active={active} onSelect={() => setSelectedId(skill.id)}>
+          <ListRow
+            key={skill.id}
+            active={active}
+            onSelect={() => setSelectedId(skill.id)}
+            contextMenu={<SkillRowMenu skill={skill} usedBy={usedBy} />}
+          >
             <span className="block truncate text-row font-medium">{skill.name}</span>
             <span className="text-muted-foreground mt-0.5 line-clamp-2 block text-xs">
               {skill.description}
