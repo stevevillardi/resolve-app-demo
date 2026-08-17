@@ -778,6 +778,35 @@ export const ipcContract = {
   },
 
   /** No create: a group is implied by its repo, never made directly (§4). */
+  /**
+   * Per-conversation unread counts, both kinds in one call (Phase 20). The
+   * renderer refetches on messages-changed, so this is the single authority
+   * the sidebar badges, thread dividers, and dock badge all agree with.
+   */
+  'unread.counts': {
+    input: z.void(),
+    output: z.array(
+      z.object({
+        kind: z.enum(['contact', 'group']),
+        id: z.string(),
+        count: z.number()
+      })
+    )
+  },
+  /**
+   * Stamps the unread boundary. Narrow single-purpose writers on the
+   * setRepoTrust pattern; monotonic in the service, so a stale caller cannot
+   * un-read anything.
+   */
+  'contacts.markRead': {
+    input: z.object({ id: z.string() }),
+    output: contactSchema
+  },
+  'groups.markRead': {
+    input: z.object({ id: z.string() }),
+    output: groupSchema
+  },
+
   'groups.list': {
     input: z.void(),
     output: z.array(groupSchema)
