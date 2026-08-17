@@ -106,8 +106,8 @@ test('right-clicking a conversation row offers the contact actions', async () =>
   const { window } = launched
 
   // Everything before this drove the bridge under the onboarding screen; this
-  // one needs the shell, so leave onboarding through its own button.
-  await window.getByRole('button', { name: /Continue to Persona Router|Skip for now/ }).click()
+  // one needs the shell, so leave onboarding through its skip affordance.
+  await window.getByRole('button', { name: 'Skip setup for now' }).click()
 
   // The contact bound in the previous test gives the list its first row.
   await window.getByRole('button', { name: 'Chats', exact: true }).click()

@@ -8,6 +8,7 @@ import './procedures/data'
 import './procedures/messaging'
 import './procedures/repos'
 import './procedures/routines'
+import './procedures/seed'
 import './procedures/branches'
 
 /** Import every procedure module for its registration side effect, then wire the channel. */

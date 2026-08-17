@@ -303,6 +303,38 @@ export const ipcContract = {
     output: authStatusSchema
   },
 
+  /**
+   * The starter catalog (Phase 17): everything the app *can* seed, flagged
+   * recommended (the tier startup installs by itself) and installed (a row
+   * with that id exists right now). Feeds the onboarding picker and the
+   * starter library dialog.
+   */
+  'seed.catalog': {
+    input: z.void(),
+    output: z.object({
+      personas: z.array(
+        z.object({
+          entry: personaTemplateSchema,
+          recommended: z.boolean(),
+          installed: z.boolean()
+        })
+      ),
+      skills: z.array(
+        z.object({ entry: skillSchema, recommended: z.boolean(), installed: z.boolean() })
+      )
+    })
+  },
+  /**
+   * Aligns installed starter content with a selection. Catalog ids only —
+   * user-created rows are untouchable through this, unknown ids are an error,
+   * and removal is refused where it would strand a contact or strip an
+   * attached skill (see services/seed.ts).
+   */
+  'seed.applySelection': {
+    input: z.object({ personaIds: z.array(z.string()), skillIds: z.array(z.string()) }),
+    output: z.object({ personas: z.number(), skills: z.number() })
+  },
+
   'codex.startLogin': {
     input: z.void(),
     output: deviceFlowStateSchema
