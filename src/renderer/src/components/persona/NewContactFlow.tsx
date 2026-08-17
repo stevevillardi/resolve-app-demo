@@ -9,6 +9,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
@@ -24,6 +25,7 @@ import { useUiStore } from '@/store/useUiStore'
 import { ipcErrorMessage } from '@/lib/ipc-client'
 import { repoName } from '@/lib/format'
 import { NON_REPO_NOTE, repoBindingProblem } from '@/lib/repo-binding'
+import { filterRepos, isPossiblyTruncated, REPO_PAGE_SIZE } from '@/lib/repo-filter'
 import { cn } from '@/lib/utils'
 import { defaultIsolation } from '../../../../shared/domain'
 import type { Isolation } from '@/types'
@@ -145,6 +147,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
     if (repos.isError) verifyGitHub()
   }, [repos.isError, verifyGitHub])
 
+  const [repoQuery, setRepoQuery] = useState('')
+  const visibleRepos = filterRepos(repos.data ?? [], repoQuery)
+
   const { choose, isPending: choosing } = useChooseDirectory()
   const { clone, isPending: cloning, error: cloneError } = useCloneRepo()
   const { create, isPending: creating, error: createError } = useCreateContact()
@@ -160,6 +165,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       setLocalRepo(null)
       setIsolation(null)
       setSource('github')
+      setRepoQuery('')
     }, 200)
     return () => window.clearTimeout(timer)
   }, [open])
@@ -216,7 +222,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{STEP_COPY[step].title}</DialogTitle>
           <DialogDescription>{STEP_COPY[step].description}</DialogDescription>
@@ -306,8 +312,24 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               />
             )}
 
+            {source === 'github' && githubConnected && repos.isSuccess && repos.data.length > 0 && (
+              <InputGroup className="bg-background dark:bg-background border-border h-8 rounded-md">
+                <InputGroupAddon className="pl-2">
+                  <Search className="text-muted-foreground size-3.5" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  value={repoQuery}
+                  onChange={(event) => setRepoQuery(event.target.value)}
+                  placeholder="Filter repositories"
+                  aria-label="Filter repositories"
+                  className="h-8 text-xs [&::-webkit-search-cancel-button]:appearance-none"
+                />
+              </InputGroup>
+            )}
+
             {source === 'github' && githubConnected && (
-              <div className="scrollbar-subtle flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+              <div className="scrollbar-subtle flex max-h-96 flex-col gap-1.5 overflow-y-auto">
                 {repos.isPending && <EmptyState compact loading title="Loading repositories…" />}
                 {/*
                   Main's own words, not a paraphrase. It distinguishes a
@@ -345,7 +367,22 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                     description="This account has no repositories we can see."
                   />
                 )}
-                {repos.data?.map((option: RepoOption) => (
+                {repos.isSuccess && repos.data.length > 0 && visibleRepos.length === 0 && (
+                  <EmptyState
+                    compact
+                    icon={Search}
+                    title={`Nothing matches “${repoQuery.trim()}”`}
+                    // Names the cap, because "nothing matches" and "nothing
+                    // matches in the hundred we fetched" are different facts and
+                    // only one of them is a reason to give up.
+                    description={
+                      isPossiblyTruncated(repos.data)
+                        ? `Only the ${REPO_PAGE_SIZE} most recently pushed repositories are listed. If yours is older, clone it and bind the folder instead.`
+                        : 'Try the owner or the repository name.'
+                    }
+                  />
+                )}
+                {visibleRepos.map((option: RepoOption) => (
                   <ListRow
                     key={option.id}
                     active={repoId === option.id}
