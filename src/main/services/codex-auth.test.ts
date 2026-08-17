@@ -212,6 +212,24 @@ describe('getCodexAuthStatus', () => {
     })
   })
 
+  it('skips WARNING noise and reports the substantive line', () => {
+    // The real CLI front-loads warnings (a CODEX_HOME path dump was reaching
+    // the Home banner verbatim); the line a person can act on comes after.
+    spawnSyncResult = {
+      status: 2,
+      stderr:
+        'WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "/tmp/x", but that path does not exist.\nError checking login status: no config found'
+    }
+    const status = codex.getCodexAuthStatus()
+    expect(status.error).toMatch(/no config found/)
+    expect(status.error).not.toMatch(/CODEX_HOME/)
+  })
+
+  it('falls back to the exit code when stderr is nothing but warnings', () => {
+    spawnSyncResult = { status: 2, stderr: 'WARNING: something ignorable' }
+    expect(codex.getCodexAuthStatus().error).toMatch(/exited with code 2/)
+  })
+
   it('caches the answer until a refresh is forced', () => {
     spawnSyncResult = { status: 0, stdout: 'Logged in using ChatGPT' }
     codex.getCodexAuthStatus()

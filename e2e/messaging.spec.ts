@@ -35,7 +35,7 @@ function git(args: string[], cwd: string): void {
 
 test.beforeAll(async () => {
   // A real git repo, so `isGitRepo` has something true to answer about.
-  repo = mkdtempSync(join(tmpdir(), 'persona-router-repo-'))
+  repo = mkdtempSync(join(tmpdir(), 'switchboard-repo-'))
   writeFileSync(join(repo, 'auth.ts'), 'export function signIn(): void {}\n')
   git(['init'], repo)
   git(['-c', 'user.email=e2e@test', '-c', 'user.name=E2E', 'add', '.'], repo)

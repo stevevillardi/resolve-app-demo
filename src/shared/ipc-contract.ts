@@ -81,7 +81,7 @@ const githubStatusSchema = z.object({
    * and one wants to be left alone — and deciding that by regex on prose is the
    * failure this whole change is fixing one layer down.
    */
-  tokenState: z.enum(['unverified', 'good', 'rejected', 'unreachable']).optional(),
+  tokenState: z.enum(['unverified', 'good', 'rejected', 'unreachable', 'locked']).optional(),
   error: z.string().optional()
 })
 
@@ -354,7 +354,24 @@ export const ipcContract = {
 
   'appInfo.get': {
     input: z.void(),
-    output: z.object({ version: z.string(), platform: z.string() })
+    output: z.object({
+      version: z.string(),
+      platform: z.string(),
+      /** True in `npm run dev` — gates the Settings Developer section. */
+      dev: z.boolean()
+    })
+  },
+
+  /**
+   * Wipes the app back to a fresh install and relaunches (Phase 18). Dev
+   * tooling: profile, secrets, worktrees and persona branches all go; the
+   * user's backend logins and cloned repositories are never touched. The
+   * response races the relaunch and may never arrive — callers must not wait
+   * on it for UI state.
+   */
+  'dev.resetApp': {
+    input: z.void(),
+    output: z.object({ ok: z.boolean() })
   },
 
   /**

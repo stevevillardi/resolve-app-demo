@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   ExternalLink,
+  FlaskConical,
   FolderOpen,
   KeyRound,
   LibraryBig,
@@ -10,6 +11,7 @@ import {
   Sun
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import {
   Dialog,
   DialogContent,
@@ -34,7 +36,12 @@ import {
   useSetAnthropicApiKey,
   useSetOpenAiApiKey
 } from '@/hooks/useAuth'
-import { useAppInfo, useChooseWorkspaceRoot, useWorkspaceRoot } from '@/hooks/useSettings'
+import {
+  useAppInfo,
+  useChooseWorkspaceRoot,
+  useResetApp,
+  useWorkspaceRoot
+} from '@/hooks/useSettings'
 import { useUiStore, type ThemePreference } from '@/store/useUiStore'
 
 const THEME_OPTIONS = [
@@ -88,6 +95,8 @@ function SettingsContent(): React.JSX.Element {
   const { choose, isPending: choosing } = useChooseWorkspaceRoot()
   const { data: appInfo } = useAppInfo()
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [confirmingReset, setConfirmingReset] = useState(false)
+  const { reset, isPending: resetting } = useResetApp()
   const [showCodexKey, setShowCodexKey] = useState(false)
 
   const claude = status?.claude
@@ -295,12 +304,29 @@ function SettingsContent(): React.JSX.Element {
           </div>
         </section>
 
+        {/* --- Developer ------------------------------------------------ */}
+        {appInfo?.dev && (
+          <section className="flex flex-col gap-2.5">
+            <SectionLabel>Developer</SectionLabel>
+            <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border p-4">
+              <FlaskConical className="text-muted-foreground size-5 shrink-0" />
+              <p className="text-muted-foreground min-w-0 flex-1 text-sm text-pretty">
+                Wipe everything and relaunch as a fresh install — for testing onboarding and
+                seeding.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => setConfirmingReset(true)}>
+                Reset app…
+              </Button>
+            </div>
+          </section>
+        )}
+
         {/* --- About ---------------------------------------------------- */}
         <section className="flex flex-col gap-2.5">
           <SectionLabel>About</SectionLabel>
           <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-6 gap-y-1 text-xs">
             <span>
-              Persona Router{' '}
+              Switchboard{' '}
               <span className="text-foreground font-mono tabular-nums">{appInfo?.version}</span>
             </span>
             <span className="font-mono">{appInfo?.platform}</span>
@@ -317,6 +343,34 @@ function SettingsContent(): React.JSX.Element {
       </div>
 
       <StarterLibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} />
+
+      {confirmingReset && (
+        <ConfirmDeleteDialog
+          open
+          onOpenChange={(next) => !next && setConfirmingReset(false)}
+          closeOnConfirm={false}
+          busy={resetting}
+          title="Reset Switchboard to a fresh install?"
+          description="The app relaunches straight into onboarding, exactly like a first run."
+          consequence={
+            <>
+              <p className="mb-1 font-medium">Deleted:</p>
+              <ul className="flex flex-col gap-0.5">
+                <li>Every contact, conversation, routine, and usage record</li>
+                <li>All personas and Skills (the starter catalog re-seeds)</li>
+                <li>Stored credentials (GitHub token, API keys)</li>
+                <li>Agent worktrees and their persona/* branches</li>
+                <li>UI preferences</li>
+              </ul>
+              <p className="mt-2">
+                Kept: your Claude Code and Codex logins, and every cloned repository on disk.
+              </p>
+            </>
+          }
+          confirmLabel={resetting ? 'Resetting…' : 'Reset and relaunch'}
+          onConfirm={reset}
+        />
+      )}
     </DialogContent>
   )
 }

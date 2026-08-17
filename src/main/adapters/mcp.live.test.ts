@@ -27,7 +27,7 @@ import type { ResolvedServer, SessionSpec } from './types'
  * tried would pass a text-matching test and prove nothing.
  *
  * **Skipped unless `LIVE_MCP=1`.** Costs a few cents per run and needs:
- *   - a GitHub token in PERSONA_ROUTER_GITHUB_MCP_TOKEN or GITHUB_TOKEN
+ *   - a GitHub token in SWITCHBOARD_GITHUB_MCP_TOKEN or GITHUB_TOKEN
  *     (`gh auth token` works)
  *   - credentials for whichever backend is being exercised
  *   - a throwaway repo in PERSONA_ROUTER_LIVE_REPO, `owner/name`
@@ -225,7 +225,7 @@ describe.skipIf(!LIVE)('what a persona can do on GitHub, live', () => {
         params: {
           protocolVersion: '2025-06-18',
           capabilities: {},
-          clientInfo: { name: 'persona-router-live', version: '0.1.0' }
+          clientInfo: { name: 'switchboard-live', version: '0.1.0' }
         }
       })
     })

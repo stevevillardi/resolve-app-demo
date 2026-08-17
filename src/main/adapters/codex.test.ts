@@ -416,7 +416,7 @@ describe('MCP wiring', () => {
     id: 'github',
     url: 'https://api.githubcopilot.com/mcp/',
     token: TOKEN,
-    tokenEnvVar: 'PERSONA_ROUTER_GITHUB_MCP_TOKEN',
+    tokenEnvVar: 'SWITCHBOARD_GITHUB_MCP_TOKEN',
     deniedTools: ['merge_pull_request', 'push_files'],
     disallowedTools: ['mcp__github__merge_pull_request', 'mcp__github__push_files']
   }
@@ -450,7 +450,7 @@ describe('MCP wiring', () => {
     // puts the value where the named variable can find it.
     const servers = await runWith({ ...SPEC, mcpServers: [server] })
     expect((servers.github as Record<string, string>).bearer_token_env_var).toBe(
-      'PERSONA_ROUTER_GITHUB_MCP_TOKEN'
+      'SWITCHBOARD_GITHUB_MCP_TOKEN'
     )
     expect(JSON.stringify(lastClientOptions?.config)).not.toContain(TOKEN)
   })

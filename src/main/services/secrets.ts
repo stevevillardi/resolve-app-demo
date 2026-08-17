@@ -57,18 +57,41 @@ export function hasSecret(key: SecretKey): boolean {
   return existsSync(secretPath(key))
 }
 
+/**
+ * Keys whose ciphertext exists but could not be decrypted by *this* process.
+ *
+ * Module-level memory, not persisted: the verdict belongs to the running
+ * build. On macOS, safeStorage binds ciphertext to the app's code signature —
+ * every rebuilt dev Electron is a new ad-hoc signature, so a secret written by
+ * one build is routinely unreadable by the next *and readable again by the
+ * first*. Which is exactly why this must never delete: the previous behavior
+ * (drop the file on decrypt failure) converted that recoverable mismatch into
+ * a permanent loss, and presented to the user as "my GitHub token keeps
+ * getting invalidated" with GitHub never involved.
+ */
+const unreadable = new Set<SecretKey>()
+
+/** True while the stored ciphertext defeats this build's keychain access. */
+export function secretUnreadable(key: SecretKey): boolean {
+  return unreadable.has(key)
+}
+
 export function getSecret(key: SecretKey): string | null {
   const path = secretPath(key)
   if (!existsSync(path)) return null
   if (!isSecretStorageAvailable()) return null
 
   try {
-    return safeStorage.decryptString(readFileSync(path))
+    const value = safeStorage.decryptString(readFileSync(path))
+    unreadable.delete(key)
+    return value
   } catch {
-    // Wrong keychain (restored backup, copied profile) or a corrupt file.
-    // Drop it so the user is re-prompted instead of hitting an auth error on
-    // every subsequent call with no way to recover from the UI.
-    deleteSecret(key)
+    // Wrong keychain identity (a rebuilt dev binary, a restored backup, a
+    // copied profile) or a corrupt file. The file is deliberately KEPT — the
+    // build that wrote it can still read it — and the failure is recorded so
+    // status surfaces can say "reconnect to re-save under this build" instead
+    // of pretending nothing was ever stored.
+    unreadable.add(key)
     return null
   }
 }
@@ -78,8 +101,11 @@ export function setSecret(key: SecretKey, value: string): void {
     throw new Error('OS secret storage is unavailable; refusing to store credentials in plaintext.')
   }
   writeFileSync(secretPath(key), safeStorage.encryptString(value), { mode: 0o600 })
+  // Freshly written by this build, so this build can read it again.
+  unreadable.delete(key)
 }
 
 export function deleteSecret(key: SecretKey): void {
   rmSync(secretPath(key), { force: true })
+  unreadable.delete(key)
 }

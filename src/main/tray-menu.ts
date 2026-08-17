@@ -14,8 +14,8 @@ export interface TrayMenuItem {
   enabled: boolean
 }
 
-export const SHOW_LABEL = 'Show Persona Router'
-export const QUIT_LABEL = 'Quit Persona Router'
+export const SHOW_LABEL = 'Show Switchboard'
+export const QUIT_LABEL = 'Quit Switchboard'
 const EMPTY_LABEL = 'No routines scheduled'
 
 /**

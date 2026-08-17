@@ -87,7 +87,7 @@ interface SeedRow {
  * while main is alive.
  */
 function seedUsage(rows: SeedRow[]): void {
-  const db = new DatabaseSync(join(profile, 'userData', 'persona-router.db'))
+  const db = new DatabaseSync(join(profile, 'userData', 'switchboard.db'))
   try {
     const insert = db.prepare(
       `insert into usage_events

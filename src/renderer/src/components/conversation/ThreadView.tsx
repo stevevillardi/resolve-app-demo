@@ -238,6 +238,12 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
           // want to know at the moment you hand it work.
           <>
             <span>Runs as</span>
+            <AvatarColorSwatch
+              name={persona.name}
+              color={persona.avatarColor}
+              seed={persona.id}
+              size="xs"
+            />
             <span className="text-foreground font-medium">{persona.name}</span>
             <ScopeChip axis="sandbox" value={persona.sandbox} />
             <ScopeChip axis="github" value={persona.githubScope} />

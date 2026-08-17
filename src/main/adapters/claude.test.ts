@@ -499,7 +499,7 @@ describe('MCP wiring', () => {
     id: 'github',
     url: 'https://api.githubcopilot.com/mcp/',
     token: 'ghp_secret_value',
-    tokenEnvVar: 'PERSONA_ROUTER_GITHUB_MCP_TOKEN',
+    tokenEnvVar: 'SWITCHBOARD_GITHUB_MCP_TOKEN',
     deniedTools: ['merge_pull_request'],
     disallowedTools: ['mcp__github__merge_pull_request']
   }
@@ -716,7 +716,7 @@ describe('summarize', () => {
           id: 'github',
           url: 'https://api.githubcopilot.com/mcp/',
           token: 'ghp_secret_value',
-          tokenEnvVar: 'PERSONA_ROUTER_GITHUB_MCP_TOKEN',
+          tokenEnvVar: 'SWITCHBOARD_GITHUB_MCP_TOKEN',
           deniedTools: [],
           disallowedTools: []
         }

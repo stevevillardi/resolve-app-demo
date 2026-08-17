@@ -250,7 +250,7 @@ function openingBody(context: PrContext, commits: string[] | null, summary: stri
   const { contact, persona, branch } = context
 
   return [
-    `Opened by **${contact.displayName}** from Persona Router.`,
+    `Opened by **${contact.displayName}** from Switchboard.`,
     summary ? `> ${summary.replace(/\n+/g, '\n> ')}` : null,
     commitList(commits),
     `<sub>Persona: ${persona.name} · backend: ${persona.backend} · sandbox: ${persona.sandbox} · ` +

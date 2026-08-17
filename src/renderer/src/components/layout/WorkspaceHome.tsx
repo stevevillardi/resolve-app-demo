@@ -10,7 +10,7 @@ import {
 import { Bar, BarChart } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
-import { ChartContainer } from '@/components/ui/chart'
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { EmptyPane } from '@/components/common/EmptyPane'
 import { ListRow } from '@/components/common/ListRow'
 import { PaneBody } from '@/components/common/PaneBody'
@@ -334,6 +334,27 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
               className="mb-2 aspect-auto h-12 w-full max-w-md"
             >
               <BarChart data={spendByDay} margin={{ left: 0, right: 0, top: 0, bottom: 0 }}>
+                {/* The one interaction the sparkline supports: which day was
+                    that spike. Label comes from the bucket, value formatted as
+                    money — the same formatter the summary line uses. */}
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      labelFormatter={(_label, payload) =>
+                        new Date(
+                          (payload?.[0]?.payload as { day?: number })?.day ?? 0
+                        ).toLocaleDateString(undefined, {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                      }
+                      formatter={(value) => `$${Number(value).toFixed(2)}`}
+                      indicator="dot"
+                    />
+                  }
+                />
                 <Bar dataKey="cost" fill="var(--color-cost)" radius={2} isAnimationActive={false} />
               </BarChart>
             </ChartContainer>

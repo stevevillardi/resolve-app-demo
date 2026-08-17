@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
  * was not, which is exactly the shape of hole an integration point leaves.
  */
 
-const USER_DATA = '/tmp/persona-router-test-userdata'
+const USER_DATA = '/tmp/switchboard-test-userdata'
 
 vi.mock('electron', () => ({
   app: { getPath: () => USER_DATA },
@@ -55,7 +55,7 @@ describe('adapterConfig', () => {
     // The first version set this whenever an account was connected, reasoning
     // that a session with no server has nothing that would read it and no
     // shell that could echo it. The second half was measured false:
-    // `echo $PERSONA_ROUTER_GITHUB_MCP_TOKEN` is allowed at workspace_write, so
+    // `echo $SWITCHBOARD_GITHUB_MCP_TOKEN` is allowed at workspace_write, so
     // every persona at that level could read the app's GitHub token out of its
     // own environment — including ones granted no MCP server at all.
     expect(GITHUB_MCP_TOKEN_ENV in (adapterConfig('codex').env ?? {})).toBe(false)

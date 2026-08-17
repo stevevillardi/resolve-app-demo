@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, FolderGit2, Trash2, Users2 } from 'lucide-react'
+import { Check, FolderGit2, Trash2, Users2, Dices } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,6 +32,7 @@ import { useDeletePersona, usePersonas, useUpdatePersona } from '@/hooks/usePers
 import { useModels } from '@/hooks/useModels'
 import { useSkills } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
+import { cn } from '@/lib/utils'
 import type {
   Contact,
   GithubScope,
@@ -42,6 +43,37 @@ import type {
 } from '@/types'
 
 /** Stands in for `model: null` — Select can't carry null as a value. */
+/** The seed palette (chart colours + the optional tier's hues). */
+const PALETTE_COLORS = [
+  '#2a78d6',
+  '#eb6834',
+  '#1baf7a',
+  '#eda100',
+  '#e87ba4',
+  '#8a63d2',
+  '#0f9bab',
+  '#c14953'
+] as const
+
+/**
+ * A random hue at fixed saturation/lightness, so the die never rolls a colour
+ * the initials/bot tint can't survive — full-random RGB lands on near-white
+ * and near-black often enough to matter.
+ */
+function randomAvatarColor(): string {
+  const h = Math.floor(Math.random() * 360)
+  const s = 0.62
+  const l = 0.5
+  const k = (n: number): number => (n + h / 30) % 12
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number): number => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
+  const toHex = (v: number): string =>
+    Math.round(v * 255)
+      .toString(16)
+      .padStart(2, '0')
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`
+}
+
 const DEFAULT_MODEL = '__default__'
 
 // The only segmented control in the app whose options name a *thing* rather
@@ -185,13 +217,43 @@ function PersonaForm({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="persona-color">Colour</Label>
-              <input
-                id="persona-color"
-                type="color"
-                value={avatarColor}
-                onChange={(event) => setAvatarColor(event.target.value)}
-                className="border-input h-8 w-12 cursor-pointer rounded-lg border bg-transparent p-1"
-              />
+              <div className="flex items-center gap-1.5">
+                {/* The seed palette, one click each — it is CVD-validated as a
+                    set, and reaching it should not require a colour picker.
+                    The native input stays for anything off-palette, and the
+                    die rolls a random tasteful hue. The bot in the header
+                    re-tints live either way. */}
+                {PALETTE_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    aria-label={`Use ${color}`}
+                    onClick={() => setAvatarColor(color)}
+                    className={cn(
+                      'size-5 rounded-md border transition-transform hover:scale-110',
+                      avatarColor.toLowerCase() === color
+                        ? 'border-foreground'
+                        : 'border-transparent'
+                    )}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Random colour"
+                  onClick={() => setAvatarColor(randomAvatarColor())}
+                >
+                  <Dices className="size-4" />
+                </Button>
+                <input
+                  id="persona-color"
+                  type="color"
+                  value={avatarColor}
+                  onChange={(event) => setAvatarColor(event.target.value)}
+                  className="border-input h-8 w-12 cursor-pointer rounded-lg border bg-transparent p-1"
+                />
+              </div>
             </div>
           </div>
 

@@ -39,7 +39,8 @@ export function GitHubConnectDialog({
    * the flow now keys on `healthy` instead.
    */
   const rejected = Boolean(github?.connected) && github?.tokenState === 'rejected'
-  const healthy = Boolean(github?.connected) && !rejected
+  const locked = Boolean(github?.connected) && github?.tokenState === 'locked'
+  const healthy = Boolean(github?.connected) && !rejected && !locked
   const configured = github?.configured ?? true
   const awaiting = flow.state.status === 'awaiting_authorization'
   const starting = flow.state.status === 'starting' || flow.isStarting
@@ -119,6 +120,27 @@ export function GitHubConnectDialog({
           </div>
         )}
 
+        {/* Not a revocation and not GitHub's doing: the ciphertext outlived
+            the build that wrote it. Reconnecting just re-saves the credential
+            under the current binary. */}
+        {locked && !awaiting && !starting && (
+          <div className="border-scope-elevated/40 bg-scope-elevated/5 flex items-start gap-2.5 rounded-lg border p-3 text-sm">
+            <AlertTriangle className="text-scope-elevated mt-0.5 size-4 shrink-0" />
+            <span>
+              The stored token
+              {github?.login ? (
+                <>
+                  {' '}
+                  for <span className="font-mono font-medium">{github.login}</span>
+                </>
+              ) : null}{' '}
+              can&apos;t be unlocked by this build of the app — the binary changed, and the OS
+              keychain ties the credential to it. Nothing was revoked; connect again once to re-save
+              it.
+            </span>
+          </div>
+        )}
+
         {!configured && (
           <p className="text-destructive text-sm text-pretty">
             No GitHub client ID is configured. Set MAIN_VITE_GITHUB_CLIENT_ID in .env — see
@@ -134,7 +156,7 @@ export function GitHubConnectDialog({
           {!healthy && !awaiting && !starting && (
             <Button onClick={flow.start} disabled={!configured} className="gap-2">
               <Github />
-              {rejected ? 'Reconnect GitHub' : 'Connect with GitHub'}
+              {rejected || locked ? 'Reconnect GitHub' : 'Connect with GitHub'}
             </Button>
           )}
           {!healthy && (awaiting || starting) && (

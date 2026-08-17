@@ -36,7 +36,7 @@ function git(args: string[], cwd: string): void {
 }
 
 test.beforeAll(async () => {
-  repo = mkdtempSync(join(tmpdir(), 'persona-router-group-'))
+  repo = mkdtempSync(join(tmpdir(), 'switchboard-group-'))
   writeFileSync(join(repo, 'auth.ts'), 'export function signIn(): void {}\n')
   git(['init'], repo)
   git(['-c', 'user.email=e2e@test', '-c', 'user.name=E2E', 'add', '.'], repo)

@@ -14,7 +14,7 @@ function flatten(items: AppMenuItem[]): AppMenuItem[] {
 describe('buildAppMenuTemplate', () => {
   it('leads with the app menu on macOS and not elsewhere', () => {
     const darwin = buildAppMenuTemplate({ platform: 'darwin', isDev: false })
-    expect(darwin[0].label).toBe('Persona Router')
+    expect(darwin[0].label).toBe('Switchboard')
     expect(darwin[0].submenu?.some((item) => item.role === 'about')).toBe(true)
     expect(darwin[0].submenu?.some((item) => item.role === 'quit')).toBe(true)
 

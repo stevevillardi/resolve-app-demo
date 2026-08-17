@@ -14,6 +14,16 @@ export type AppDatabase = BetterSQLite3Database<typeof schema>
  * instance instead of hand-copying DDL that then drifts from the real
  * migrations.
  */
+/**
+ * The raw better-sqlite3 handle behind each drizzle instance, so closeDb()
+ * can actually close the file — this drizzle version does not type $client.
+ */
+const rawHandles = new WeakMap<AppDatabase, InstanceType<typeof Database>>()
+
+export function rawHandle(db: AppDatabase): InstanceType<typeof Database> | undefined {
+  return rawHandles.get(db)
+}
+
 export function createDb(path: string, migrationsFolder: string): AppDatabase {
   const sqlite = new Database(path)
   sqlite.pragma('journal_mode = WAL')
@@ -24,5 +34,6 @@ export function createDb(path: string, migrationsFolder: string): AppDatabase {
 
   const instance = drizzle(sqlite, { schema })
   migrate(instance, { migrationsFolder })
+  rawHandles.set(instance, sqlite)
   return instance
 }
