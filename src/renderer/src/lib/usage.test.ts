@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { UsageEvent } from '@/types'
 import {
   aggregateUsage,
+  contextTokens,
   formatCost,
   formatCostSummary,
   formatTokens,
@@ -203,6 +204,95 @@ describe('formatCostSummary', () => {
   it('still separates free from unknown', () => {
     expect(formatCostSummary(aggregateUsage([event({ costUsd: 0 })]))).toBe('$0.00')
     expect(formatCostSummary(aggregateUsage([event({ costUsd: null })]))).toBe('—')
+  })
+})
+
+describe('contextTokens', () => {
+  /**
+   * The claim: the same rows mean different things depending on which backend
+   * wrote them, so the same input must produce different answers.
+   *
+   * Claude re-sends the whole conversation each turn, so the newest row *is*
+   * the prompt. Codex reports cumulatively and recordUsage stores the delta, so
+   * only the sum is. Getting this backwards yields a number that is plausible,
+   * wrong by a multiple, and impossible to spot on screen.
+   */
+  const turn = (
+    timestamp: number,
+    inputTokens: number,
+    extra: Partial<UsageEvent> = {}
+  ): UsageEvent => event({ timestamp, inputTokens, sessionId: 'session-1', model: 'm', ...extra })
+
+  it('takes the newest turn alone for Claude', () => {
+    const result = contextTokens([turn(1, 1000), turn(2, 5000)], 'session-1', 'claude')
+    expect(result?.promptTokens).toBe(5000)
+    expect(result?.reading).toBe('last-turn')
+    expect(result?.turns).toBe(2)
+  })
+
+  it('sums every turn for Codex', () => {
+    const result = contextTokens([turn(1, 1000), turn(2, 5000)], 'session-1', 'codex')
+    expect(result?.promptTokens).toBe(6000)
+    expect(result?.reading).toBe('session-sum')
+  })
+
+  it('finds the newest turn regardless of array order', () => {
+    // usage.list returns newest-first, but nothing here should depend on it —
+    // a caller that filtered or re-sorted would otherwise get the wrong turn
+    // and a number that still looked reasonable.
+    const ascending = contextTokens([turn(1, 1000), turn(2, 5000)], 'session-1', 'claude')
+    const descending = contextTokens([turn(2, 5000), turn(1, 1000)], 'session-1', 'claude')
+    expect(descending?.promptTokens).toBe(ascending?.promptTokens)
+    expect(descending?.at).toBe(2)
+  })
+
+  it('counts cached and cache-write tokens as part of the prompt', () => {
+    // All three were sent. Cached input is billed at a reduced rate, not
+    // excluded from the context — a prompt of 100 fresh and 19,000 cached
+    // tokens is a large prompt, and reporting 100 would say the opposite.
+    const result = contextTokens(
+      [turn(1, 100, { cachedInputTokens: 19_000, cacheWriteInputTokens: 400 })],
+      'session-1',
+      'claude'
+    )
+    expect(result?.promptTokens).toBe(19_500)
+  })
+
+  it('treats missing cached figures as zero rather than NaN', () => {
+    const result = contextTokens([turn(1, 100)], 'session-1', 'claude')
+    expect(result?.promptTokens).toBe(100)
+  })
+
+  it('ignores rows from a session that has ended', () => {
+    // A prompt belongs to a session. Rows from a previous one describe a
+    // conversation the backend has already forgotten.
+    const result = contextTokens(
+      [turn(1, 9000, { sessionId: 'session-0' }), turn(2, 100)],
+      'session-1',
+      'claude'
+    )
+    expect(result?.promptTokens).toBe(100)
+    expect(result?.turns).toBe(1)
+  })
+
+  it('is null before there is a session', () => {
+    // Not zero: zero would claim an empty prompt, and there is no prompt yet.
+    expect(contextTokens([turn(1, 100)], null, 'claude')).toBeNull()
+  })
+
+  it('is null when the session has no recorded turns', () => {
+    expect(contextTokens([], 'session-1', 'claude')).toBeNull()
+  })
+
+  it('reports the model that served the newest turn', () => {
+    // Per event, not off the persona: a persona's model can change at any time,
+    // and the context was built by whatever actually ran.
+    const result = contextTokens(
+      [turn(1, 100, { model: 'old' }), turn(2, 200, { model: 'new' })],
+      'session-1',
+      'claude'
+    )
+    expect(result?.model).toBe('new')
   })
 })
 

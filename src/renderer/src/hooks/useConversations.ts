@@ -4,6 +4,7 @@ import { branchesKey } from './useBranches'
 import { messagePreviewsKey, runsKey, usageRootKey } from './useMessages'
 import { routinesKey } from './useRoutines'
 import type { Contact, ContactDraft, Group } from '@/types'
+import type { ContactContext } from '../../../shared/ipc-contract'
 
 /**
  * The two entities the Chats list is built from (Phase 4).
@@ -23,6 +24,29 @@ export function useContacts(): UseQueryResult<Contact[]> {
   return useQuery({
     queryKey: contactsKey,
     queryFn: () => callProcedure('contacts.list', undefined)
+  })
+}
+
+/**
+ * What a turn on this contact would inject (blueprint §5).
+ *
+ * `enabled` because this stats the filesystem for sibling branches in main —
+ * cheap, but not free, and there is no reason to pay for it on every render of
+ * a thread nobody has asked this question about.
+ *
+ * Not cached across opens: the spec is resolved per turn, so the honest answer
+ * changes whenever a colleague writes a summary or opens a branch.
+ */
+export function useContactContext(
+  contactId: string,
+  enabled: boolean
+): UseQueryResult<ContactContext | null> {
+  return useQuery({
+    queryKey: ['contacts', 'context', contactId],
+    queryFn: () => callProcedure('contacts.context', { contactId }),
+    enabled,
+    staleTime: 0,
+    gcTime: 0
   })
 }
 

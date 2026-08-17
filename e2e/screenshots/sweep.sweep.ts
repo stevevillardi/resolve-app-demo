@@ -76,6 +76,27 @@ async function goTo(page: Page, section: string): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 200))
 }
 
+/**
+ * Selects the first row of the open section, and reports whether there was one.
+ *
+ * The empty-state check is the whole point, and it is a trap this sweep has
+ * fallen into twice: an empty list still has a button in its body, because the
+ * empty state's call to action lives there. Clicking it opens the new-contact
+ * dialog, whose backdrop then swallows every subsequent click — and the failure
+ * surfaces several steps later, as a timeout on something unrelated.
+ */
+async function selectFirstRow(page: Page): Promise<boolean> {
+  const empty = await page.locator('[data-slot="list-body"] [data-slot="empty-state"]').count()
+  if (empty > 0) return false
+
+  const rows = page.locator('[data-slot="list-body"] button')
+  if ((await rows.count()) === 0) return false
+
+  await rows.first().click()
+  await new Promise((resolve) => setTimeout(resolve, 350))
+  return true
+}
+
 async function sweep(page: Page, app: ElectronApplication, profileName: string): Promise<void> {
   for (const theme of ['Light', 'Dark'] as const) {
     await setTheme(page, theme)
@@ -102,23 +123,7 @@ async function sweep(page: Page, app: ElectronApplication, profileName: string):
 
         // Then the same section with its first row selected. Usage always has a
         // row ("All personas"); the others may legitimately have none.
-        //
-        // Addressed through the list body rather than by `data-testid=list-row`
-        // so this keeps working while the ListRow extraction is only half done
-        // — the whole point of the baseline run is to photograph the app as it
-        // is now, and four of the six lists still draw their own button.
-        //
-        // The empty-state check is not belt-and-braces: an empty list still has
-        // a button in its body, because the empty state's call to action lives
-        // there. Clicking it opens the new-contact dialog, whose backdrop then
-        // swallows every later click in the sweep.
-        const empty = await page
-          .locator('[data-slot="list-body"] [data-slot="empty-state"]')
-          .count()
-        const rows = page.locator('[data-slot="list-body"] button')
-        if (empty === 0 && (await rows.count()) > 0) {
-          await rows.first().click()
-          await new Promise((resolve) => setTimeout(resolve, 350))
+        if (await selectFirstRow(page)) {
           await shoot(page, `${stem}-${section.toLowerCase()}-selected`)
         }
       }
@@ -135,15 +140,28 @@ async function sweep(page: Page, app: ElectronApplication, profileName: string):
       await shoot(page, `${stem}-new-contact`)
       await page.keyboard.press('Escape')
 
+      // The contact menu and the context panel, both reached from a thread.
+      await goTo(page, 'Chats')
+      if (await selectFirstRow(page)) {
+        const menu = page.getByRole('button', { name: /^Manage / })
+        if (await menu.isVisible().catch(() => false)) {
+          await menu.click()
+          await new Promise((resolve) => setTimeout(resolve, 250))
+          await shoot(page, `${stem}-contact-menu`)
+          await page.getByRole('menuitem', { name: /works with/ }).click()
+          await new Promise((resolve) => setTimeout(resolve, 600))
+          await shoot(page, `${stem}-context-panel`)
+          await page.keyboard.press('Escape')
+          await new Promise((resolve) => setTimeout(resolve, 250))
+        }
+      }
+
       // The destructive confirm, reached through the skill editor because it is
       // the one section that always has rows (five ship as seed data) and its
       // delete needs no worktree. It is the surface most in need of looking at
       // and the sweep was missing it entirely.
       await goTo(page, 'Skills')
-      const skillRows = page.locator('[data-slot="list-body"] button')
-      if ((await skillRows.count()) > 0) {
-        await skillRows.first().click()
-        await new Promise((resolve) => setTimeout(resolve, 250))
+      if (await selectFirstRow(page)) {
         const remove = page.getByRole('button', { name: 'Delete skill' })
         if (await remove.isVisible().catch(() => false)) {
           await remove.click()

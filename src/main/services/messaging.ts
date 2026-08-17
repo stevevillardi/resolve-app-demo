@@ -7,7 +7,7 @@ import { adapterForBackend } from './adapter-host'
 import { emitAgentEvent, emitRunsChanged } from './agent-events'
 import { summarizeTurn } from './compaction'
 import { getContact, setBackendSessionId } from './contacts'
-import { contextForRepo, groupForRepo, insertGroupMessage } from './group-messages'
+import { groupForRepo, insertGroupMessage } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
 import {
   acquire,
@@ -17,10 +17,10 @@ import {
   workingPathFor,
   type Release
 } from './run-lock'
-import { skillsForPersona } from './skills'
 import type { TurnOrigin, TurnOutcome } from './turn-origin'
 import { baselineFor, recordUsage } from './usage-events'
-import { ensureWorktree, siblingBranchesFor } from './worktrees'
+import { buildSessionSpec } from './session-spec'
+import { ensureWorktree } from './worktrees'
 import type { SessionSpec } from '../adapters/types'
 import type { AgentEvent } from '../../shared/agent'
 import type { Contact, GroupMessage, PersistedMessage } from '../../shared/domain'
@@ -294,39 +294,15 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
     })
     runs.set(runId, { controller, release, contactId, origin, groupId, settle: settle! })
 
-    const spec = {
-      persona,
-      repoPath: workingPath,
-      skills: skillsForPersona(persona),
-      // Blueprint §5: what the rest of the fleet has decided on this repo.
-      // Resolved fresh per turn rather than per session, so a summary written
-      // by a colleague between two of this contact's turns is visible on the
-      // next one instead of at the next restart.
-      groupContext: contextForRepo(contact.repoPath),
-      // Blueprint §6 stops being literally true once a writer has its own
-      // checkout — its changes are on a branch nobody else has on disk. The
-      // object store is still shared, so they remain readable; this is how the
-      // session finds out there is anything to read. Resolved per turn like the
-      // group context, so a branch created between two turns is visible on the
-      // next one.
-      siblingBranches: siblingBranchesFor(contact),
-      // Only when it is not the repo: a Contact working in its own repo needs
-      // no explanation of where it is.
-      ...(contact.worktreePath && contact.branch
-        ? {
-            workingContext: {
-              workingPath: contact.worktreePath,
-              repoPath: contact.repoPath,
-              branch: contact.branch
-            }
-          }
-        : {}),
-      // What this session has already been billed for. Codex reports usage
-      // cumulatively across a thread, so without this every turn after the
-      // first over-reports — see baselineFor(). Claude ignores it.
-      usageBaseline: baselineFor(contactId, contact.backendSessionId),
-      ...(persona.model ? { model: persona.model } : {})
-    }
+    // Built by session-spec.ts rather than inline, so the "what's in my
+    // context" panel resolves the same thing this turn is about to send. The
+    // usage baseline stays a caller's concern: Codex reports cumulatively
+    // across a thread, so without it every turn after the first over-reports —
+    // see baselineFor(). Claude ignores it, and the panel has no use for it.
+    const spec = buildSessionSpec(contact, persona, {
+      workingPath,
+      usageBaseline: baselineFor(contactId, contact.backendSessionId)
+    })
 
     const adapter = adapterForBackend(persona.backend)
     const session = contact.backendSessionId

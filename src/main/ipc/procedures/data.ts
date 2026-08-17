@@ -6,6 +6,7 @@ import {
   listContacts,
   renameContact
 } from '../../services/contacts'
+import { contactContext } from '../../services/session-spec'
 import { listGroups } from '../../services/groups'
 import {
   createPersonaTemplate,
@@ -46,6 +47,7 @@ registerProcedure('contacts.list', () => listContacts())
 registerProcedure('contacts.get', ({ id }) => getContact(id))
 registerProcedure('contacts.create', (draft) => createContact(draft))
 registerProcedure('contacts.update', ({ id, displayName }) => renameContact(id, displayName))
+registerProcedure('contacts.context', ({ contactId }) => contactContext(contactId))
 registerProcedure('contacts.delete', async ({ id, discardUncommitted }) => ({
   deleted: await deleteContact(id, discardUncommitted ?? false)
 }))

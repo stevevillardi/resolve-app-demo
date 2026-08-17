@@ -14,6 +14,7 @@ import {
   routineUpdateSchema,
   skillDraftSchema,
   skillSchema,
+  systemSummaryCategorySchema,
   usageEventSchema
 } from './domain'
 
@@ -105,6 +106,45 @@ const boundRepoSchema = z.object({
   /** False for a plain directory: allowed, but it can never open a PR. */
   isGitRepo: z.boolean()
 })
+
+/**
+ * What a turn on a Contact would inject, broken into its parts.
+ *
+ * Every size is a **character count**. See `contacts.context` below for why
+ * there are no token figures here: the only honest ones live in usage_events,
+ * because they were measured by the backend rather than guessed at by us.
+ */
+const contactContextSchema = z.object({
+  persona: z.object({
+    id: z.string(),
+    name: z.string(),
+    backend: personaBackendSchema,
+    model: z.string().nullable()
+  }),
+  /** The resume key. Null until the first turn has run. */
+  sessionId: z.string().nullable(),
+  systemPromptChars: z.number(),
+  /** In the order composeInstructions writes them, which is persona.skillIds. */
+  skills: z.array(z.object({ id: z.string(), name: z.string(), chars: z.number() })),
+  /** The filtered, capped repo log — not everything groupMessages.list returns. */
+  groupContext: z.array(
+    z.object({
+      timestamp: z.number(),
+      category: systemSummaryCategorySchema.optional(),
+      durable: z.boolean().optional(),
+      chars: z.number()
+    })
+  ),
+  siblingBranches: z.array(z.object({ branch: z.string(), contactName: z.string() })),
+  workingContext: z
+    .object({ workingPath: z.string(), repoPath: z.string(), branch: z.string() })
+    .nullable(),
+  /** The literal string both adapters receive. */
+  instructions: z.string(),
+  instructionsChars: z.number()
+})
+
+export type ContactContext = z.infer<typeof contactContextSchema>
 
 const activeRunSchema = z.object({
   runId: z.string(),
@@ -384,6 +424,28 @@ export const ipcContract = {
   'contacts.update': {
     input: z.object({ id: z.string(), displayName: z.string().min(1) }),
     output: contactSchema
+  },
+  /**
+   * What the *next* turn on this contact would inject (blueprint §5).
+   *
+   * A snapshot of what would be sent now, not a record of what was sent last
+   * turn: the session spec is resolved per turn, so this moves as colleagues
+   * write summaries and open branches.
+   *
+   * Resolved in main because the renderer cannot see any of it — contextForRepo
+   * filters and caps the group log in ways `groupMessages.list` does not,
+   * siblingBranchesFor stats `.git` on disk, and the headings that wrap the
+   * whole thing are constants in adapters/context.ts. `instructions` is the
+   * literal string both adapters receive, which is the one thing worth showing
+   * and the one thing a renderer-side copy could never be trusted to reproduce.
+   *
+   * Sizes are **characters, not tokens**. Nothing in this process can tokenize
+   * for either backend, and a chars/4 guess printed beside a measured token
+   * count from usage_events would read as equally authoritative.
+   */
+  'contacts.context': {
+    input: z.object({ contactId: z.string() }),
+    output: contactContextSchema.nullable()
   },
   /**
    * Delete exists because a Contact now owns something outside the database —

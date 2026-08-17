@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Layers, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -18,10 +18,11 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
+import { ContextPanel } from './ContextPanel'
 import { Field } from '@/components/common/Field'
 import { useDeleteContact, useRenameContact } from '@/hooks/useConversations'
 import { useUiStore } from '@/store/useUiStore'
-import type { Contact } from '@/types'
+import type { Contact, PersonaBackend } from '@/types'
 
 /**
  * Rename and delete for the selected Contact.
@@ -34,9 +35,16 @@ import type { Contact } from '@/types'
  * taken about once per contact per lifetime, and a hover affordance on every
  * row of the densest list in the app is a poor trade for that.
  */
-export function ContactMenu({ contact }: { contact: Contact }): React.JSX.Element {
+export function ContactMenu({
+  contact,
+  backend
+}: {
+  contact: Contact
+  backend: PersonaBackend
+}): React.JSX.Element {
   const [renaming, setRenaming] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [showingContext, setShowingContext] = useState(false)
   const [draftName, setDraftName] = useState(contact.displayName)
   const setSelected = useUiStore((state) => state.setSelectedConversation)
   const { rename, isPending: saving, error: renameError, reset: resetRename } = useRenameContact()
@@ -66,6 +74,10 @@ export function ContactMenu({ contact }: { contact: Contact }): React.JSX.Elemen
           }
         />
         <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem onClick={() => setShowingContext(true)}>
+            <Layers />
+            What it works with…
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
               resetRename()
@@ -159,6 +171,13 @@ export function ContactMenu({ contact }: { contact: Contact }): React.JSX.Elemen
             setSelected(null)
           })
         }
+      />
+
+      <ContextPanel
+        contactId={contact.id}
+        backend={backend}
+        open={showingContext}
+        onOpenChange={setShowingContext}
       />
     </>
   )

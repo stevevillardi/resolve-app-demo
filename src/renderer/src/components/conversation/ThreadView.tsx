@@ -107,7 +107,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                 openPr(contactId)
               }}
             />
-            <ContactMenu contact={contact} />
+            <ContactMenu contact={contact} backend={persona.backend} />
           </>
         }
       />
