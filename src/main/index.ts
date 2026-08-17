@@ -23,6 +23,7 @@ import {
 } from './services/agent-events'
 import { refreshDockBadge } from './dock-badge'
 import { nodeCronEngine } from './services/cron-engine'
+import { sweepInterruptedToolCalls } from './services/reconcile'
 import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
 import { seedIfNeeded } from './services/seed'
@@ -126,6 +127,11 @@ app.whenReady().then(() => {
   setWindowFactory(createWindow)
 
   initDb()
+  // Synchronous and before setupIpc(): every tool_calls row still 'running'
+  // is a turn the last process took down with it (the run registry starts
+  // empty), and reconciling first means the renderer's first read already
+  // sees the truth instead of repainting it.
+  sweepInterruptedToolCalls()
   // Before setupIpc, so the renderer's first skills.list can never race an
   // empty library and render the "no skills" empty state on a fresh install.
   seedIfNeeded()
