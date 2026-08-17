@@ -1,4 +1,5 @@
 import { Octokit } from '@octokit/rest'
+import { markTokenGood, markTokenRejected } from './github-token-state'
 
 /**
  * The GitHub REST surface this app uses, as a port (blueprint §9.2).
@@ -48,6 +49,13 @@ export interface RepoListing {
 }
 
 export interface GitHubClient {
+  /**
+   * The cheapest authenticated call GitHub offers, used to find out whether the
+   * stored token still works. On the port rather than as a bare `new Octokit`
+   * so a test can make it fail — which is the only way the "offline is not
+   * rejected" branch can be asserted at all.
+   */
+  whoAmI(): Promise<{ login: string }>
   listRepos(): Promise<RepoListing[]>
   getRepo(owner: string, repo: string): Promise<RepoInfo>
   findOpenPr(owner: string, repo: string, head: string): Promise<PrRef | null>
@@ -69,16 +77,23 @@ export function gitHubClient(token: string): GitHubClient {
 }
 
 /**
- * The real client, and the only `new Octokit` for anything that writes.
+ * The real client, and now the only `new Octokit` in the app.
  *
- * `github-auth.ts` keeps its own instance for `users.getAuthenticated()` during
- * the device flow: that call happens before a token has been stored, so it
- * cannot go through a factory that takes one.
+ * `github-auth.ts` used to keep its own instance for `users.getAuthenticated()`
+ * during the device flow, on the grounds that the call happens before the token
+ * is stored. But the factory takes the token as an argument, so it never needed
+ * to — and keeping it outside the port meant the one call that could have told
+ * us whether a token works was the one call no test could substitute.
  */
 export function octokitClient(token: string): GitHubClient {
   const octokit = new Octokit({ auth: token })
 
   return {
+    async whoAmI() {
+      const { data } = await call(() => octokit.rest.users.getAuthenticated())
+      return { login: data.login }
+    },
+
     async listRepos() {
       // Sorted by push rather than by name because the repo you want to bind is
       // almost always one you touched recently. One page on purpose: this is a
@@ -151,8 +166,19 @@ export function octokitClient(token: string): GitHubClient {
  */
 async function call<T>(request: () => Promise<T>, subject?: string): Promise<T> {
   try {
-    return await request()
+    const result = await request()
+    // Every successful call is evidence the token works, so the status dot can
+    // recover on its own — reconnecting is not the only way back out of
+    // `rejected`.
+    markTokenGood()
+    return result
   } catch (error) {
+    // The status code is read here and nowhere else, and it is discarded on the
+    // way out: services rethrow a plain Error carrying only the human message,
+    // so nothing downstream could key off a 401 even if it wanted to. Recording
+    // it *now* is what lets the sidebar stop claiming connected.
+    const status = (error as { status?: number } | null)?.status
+    if (status === 401) markTokenRejected()
     throw new Error(describeGitHubError(error, subject))
   }
 }

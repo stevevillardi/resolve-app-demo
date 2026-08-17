@@ -11,6 +11,13 @@ export type AppStateKey =
   | 'onboarding_completed'
   | 'github_account_login'
   | 'github_scopes'
+  /**
+   * Whether the stored token still works. Set the moment GitHub answers, and
+   * sticky across restarts — a revoked token is revoked tomorrow too, and the
+   * app claiming otherwise until the next failed request is the defect this
+   * exists to close. See services/github-token-state.ts.
+   */
+  | 'github_token_state'
   /** Set once the first-run defaults have been inserted. See services/seed.ts. */
   | 'seed_version'
   /**

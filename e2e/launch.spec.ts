@@ -229,8 +229,12 @@ test.describe('completing onboarding', () => {
     // Skipping is a first-class exit; the app must not pretend otherwise.
     const status = await invoke<AuthStatus>(window, 'auth.getStatus')
     expect(status.github.connected).toBe(false)
+    // No stored token means no verdict on one, rather than a default verdict.
+    expect(status.github.tokenState).toBeUndefined()
     // The sidebar dot reflects it too, rather than only the IPC layer knowing.
-    await expect(window.locator('[data-connected="false"]').first()).toBeVisible()
+    // `absent` rather than a boolean: the dot has three states now, because a
+    // stored-but-rejected token is neither connected nor not.
+    await expect(window.locator('[data-dot="absent"]').first()).toBeVisible()
   })
 })
 

@@ -16,7 +16,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { ListRow } from '@/components/common/ListRow'
 import { Github } from '@/components/github/GithubMark'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
-import { useAuthStatus } from '@/hooks/useAuth'
+import { useAuthStatus, useVerifyGitHubNow } from '@/hooks/useAuth'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useCreateContact } from '@/hooks/useConversations'
 import { useChooseDirectory, useCloneRepo, useRepos } from '@/hooks/useRepos'
@@ -136,6 +136,15 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   // Only fetched once the user is actually on the GitHub step — it is a network
   // round trip that a local-folder binding never needs.
   const repos = useRepos(open && step === 'repo' && source === 'github' && githubConnected)
+  // A failed listing is often the first thing that notices a revoked token, and
+  // it would be absurd to show "couldn't load your repositories" here while the
+  // rail two inches away still shows a healthy dot. Re-checks once, on the edge
+  // into failure — not on every render of the error state.
+  const verifyGitHub = useVerifyGitHubNow()
+  useEffect(() => {
+    if (repos.isError) verifyGitHub()
+  }, [repos.isError, verifyGitHub])
+
   const { choose, isPending: choosing } = useChooseDirectory()
   const { clone, isPending: cloning, error: cloneError } = useCloneRepo()
   const { create, isPending: creating, error: createError } = useCreateContact()

@@ -96,6 +96,10 @@ describe('status', () => {
     expect(github.getGitHubStatus()).toEqual({
       connected: true,
       configured: true,
+      // A stored token nothing has used yet. Reports as connected — it probably
+      // is — but says so as a state that can later become `rejected`, rather
+      // than as a bare boolean that never could.
+      tokenState: 'unverified',
       login: 'stevevillardi',
       scopes: ['repo', 'read:user']
     })
@@ -104,6 +108,103 @@ describe('status', () => {
   it('never leaks the token itself into the status object', () => {
     secretStore.set('github_token', 'gho_supersecret')
     expect(JSON.stringify(github.getGitHubStatus())).not.toContain('gho_supersecret')
+  })
+})
+
+/**
+ * The defect these exist for: `connected` was computed from a token *file*
+ * existing, so a token revoked on github.com kept a healthy dot indefinitely
+ * and the connect dialog hid the button that would have fixed it.
+ *
+ * The third case is the one worth being strict about. It is easy to write this
+ * so that anything going wrong reads as "your token is bad", which would tell
+ * people to reconnect a perfectly good credential every time their wifi
+ * dropped. Being unable to ask is not an answer.
+ */
+describe('verifying the stored token', () => {
+  const rejection = Object.assign(new Error('Bad credentials'), { status: 401 })
+
+  beforeEach(() => {
+    secretStore.set('github_token', 'gho_x')
+  })
+
+  it('reports good, and refreshes the account label, when GitHub answers', async () => {
+    getAuthenticatedImpl = async () => ({ data: { login: 'renamed-account' } })
+
+    const status = await github.verifyGitHubToken()
+
+    expect(status).toMatchObject({ connected: true, tokenState: 'good', login: 'renamed-account' })
+    expect(status.error).toBeUndefined()
+  })
+
+  it('reports rejected when GitHub answers 401', async () => {
+    getAuthenticatedImpl = async () => {
+      throw rejection
+    }
+
+    const status = await github.verifyGitHubToken()
+
+    expect(status.tokenState).toBe('rejected')
+    expect(status.error).toMatch(/rejected the stored token/i)
+    // Still `connected`: a token is stored, and the remedy is Reconnect rather
+    // than Connect. Collapsing the two is what the dialog got wrong.
+    expect(status.connected).toBe(true)
+  })
+
+  it('does not call a token rejected because the network was unreachable', async () => {
+    getAuthenticatedImpl = async () => {
+      throw new Error('fetch failed')
+    }
+
+    const status = await github.verifyGitHubToken()
+
+    expect(status.tokenState).toBe('unreachable')
+    expect(status.error).toMatch(/could not reach/i)
+  })
+
+  it('keeps a known rejection through a later network failure', async () => {
+    getAuthenticatedImpl = async () => {
+      throw rejection
+    }
+    await github.verifyGitHubToken()
+
+    getAuthenticatedImpl = async () => {
+      throw new Error('fetch failed')
+    }
+    // Going offline must not downgrade a verdict GitHub already gave us to a
+    // softer "cannot say" — the token is still revoked.
+    expect((await github.verifyGitHubToken()).tokenState).toBe('rejected')
+  })
+
+  it('recovers on its own once a call succeeds again', async () => {
+    getAuthenticatedImpl = async () => {
+      throw rejection
+    }
+    await github.verifyGitHubToken()
+
+    getAuthenticatedImpl = async () => ({ data: { login: 'stevevillardi' } })
+
+    // Reconnecting is not the only way out. Any successful GitHub call clears
+    // it, which matters when the token was fine and GitHub was simply having a
+    // bad morning.
+    expect((await github.verifyGitHubToken()).tokenState).toBe('good')
+  })
+
+  it('forgets the old token’s verdict on disconnect', async () => {
+    getAuthenticatedImpl = async () => {
+      throw rejection
+    }
+    await github.verifyGitHubToken()
+
+    github.disconnectGitHub()
+    secretStore.set('github_token', 'gho_fresh')
+
+    expect(github.getGitHubStatus().tokenState).toBe('unverified')
+  })
+
+  it('says nothing about a token that is not there', async () => {
+    secretStore.delete('github_token')
+    expect(await github.verifyGitHubToken()).toMatchObject({ connected: false })
   })
 })
 

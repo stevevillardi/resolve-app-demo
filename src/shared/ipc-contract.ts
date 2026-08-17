@@ -62,11 +62,25 @@ const codexStatusSchema = z.object({
 })
 
 const githubStatusSchema = z.object({
+  /**
+   * A token is stored. Says nothing about whether it still works — that is
+   * `tokenState`, and conflating the two is what let a revoked token show a
+   * connected dot indefinitely.
+   */
   connected: z.boolean(),
   login: z.string().optional(),
   scopes: z.array(z.string()).optional(),
   /** False when MAIN_VITE_GITHUB_CLIENT_ID is missing — the flow can't start. */
   configured: z.boolean(),
+  /**
+   * What GitHub last said about the stored token. Absent when none is stored.
+   *
+   * A field rather than something inferred from `error`'s wording: the renderer
+   * has to treat "rejected" and "unreachable" differently — one wants Reconnect
+   * and one wants to be left alone — and deciding that by regex on prose is the
+   * failure this whole change is fixing one layer down.
+   */
+  tokenState: z.enum(['unverified', 'good', 'rejected', 'unreachable']).optional(),
   error: z.string().optional()
 })
 
@@ -283,6 +297,19 @@ export const ipcContract = {
     output: deviceFlowStateSchema
   },
   'github.disconnect': {
+    input: z.void(),
+    output: githubStatusSchema
+  },
+  /**
+   * Asks GitHub whether the stored token still works, and returns the status
+   * that answer produced.
+   *
+   * Separate from `auth.getStatus` because that one is synchronous and must
+   * stay so — it is called on every render path in the shell. This one makes a
+   * network request, so the renderer chooses when to pay for it: at launch, and
+   * when the window regains focus.
+   */
+  'github.verify': {
     input: z.void(),
     output: githubStatusSchema
   },

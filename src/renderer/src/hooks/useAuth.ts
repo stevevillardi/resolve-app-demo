@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { callProcedure } from '@/lib/ipc-client'
 import type { AuthStatus, DeviceFlowState } from '../../../shared/ipc-contract'
@@ -128,6 +128,54 @@ function useApiKeyMutation(procedure: 'auth.setAnthropicApiKey' | 'auth.setOpenA
       mutation.data?.error ??
       null
   }
+}
+
+/**
+ * Asks GitHub whether the stored token still works — at launch, and whenever
+ * the window regains focus.
+ *
+ * Focus is the right trigger and not an arbitrary one: revoking a token happens
+ * on github.com, in a browser, which means the user leaves this window and
+ * comes back. Polling on a timer would cost a request a minute to catch a thing
+ * that happens twice a year.
+ *
+ * `auth.getStatus` deliberately stays out of this. It is synchronous and shells
+ * out to probe Claude auth, which is why it carries `staleTime: Infinity`; this
+ * writes the fresh GitHub half into the same cache entry rather than
+ * invalidating it and paying for the other half again.
+ */
+export function useVerifyGitHub(): void {
+  const verify = useVerifyGitHubNow()
+
+  useEffect(() => {
+    verify()
+    window.addEventListener('focus', verify)
+    return () => window.removeEventListener('focus', verify)
+  }, [verify])
+}
+
+/**
+ * The same check, on demand — for the places that have just been told by a
+ * failing request that something is wrong.
+ *
+ * Without this the sidebar would keep its healthy dot until the next window
+ * focus, which is the wrong moment: the user is looking at "couldn't load your
+ * repositories" *now*, and the rail two inches away still says everything is
+ * fine.
+ */
+export function useVerifyGitHubNow(): () => void {
+  const queryClient = useQueryClient()
+
+  return useCallback(() => {
+    void callProcedure('github.verify', undefined).then((github) => {
+      // Patched into the existing entry rather than invalidated: `auth.getStatus`
+      // shells out to probe Claude auth, and there is no reason to pay for that
+      // because GitHub answered.
+      queryClient.setQueryData(authStatusKey, (previous: AuthStatus | undefined) =>
+        previous ? { ...previous, github } : previous
+      )
+    })
+  }, [queryClient])
 }
 
 export function useDisconnectGitHub(): { disconnect: () => void; isPending: boolean } {

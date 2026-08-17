@@ -8,6 +8,7 @@ import { NewContactFlow } from '@/components/persona/NewContactFlow'
 import { GitHubConnectDialog } from '@/components/github/GitHubConnectDialog'
 import { CommandPalette } from '@/components/common/CommandPalette'
 import { useThemeSync } from '@/hooks/useThemeSync'
+import { useVerifyGitHub } from '@/hooks/useAuth'
 import { useCommandPalette } from '@/hooks/useCommandPalette'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -19,6 +20,7 @@ const RAIL_WIDTH_EXPANDED = '13rem'
 
 export function AppShell(): React.JSX.Element {
   useThemeSync()
+  useVerifyGitHub()
   useCommandPalette()
   // Panel widths persist themselves to localStorage, so the shell reopens the
   // way you left it. react-resizable-panels v4 replaced the old `autoSaveId`
