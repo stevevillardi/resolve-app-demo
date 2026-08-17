@@ -7,6 +7,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem
 } from '@/components/ui/sidebar'
+import { Settings } from 'lucide-react'
 import { ThemeMenu } from './ThemeMenu'
 import { GitHubStatusButton } from '@/components/github/GitHubStatusButton'
 import { RunIndicator } from '@/components/common/RunIndicator'
@@ -63,8 +64,26 @@ export function NavRail(): React.JSX.Element {
           <SidebarMenuItem>
             <ThemeMenu />
           </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SettingsButton />
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
+  )
+}
+
+/** The gear. ⌘, and the application menu land in the same place. */
+function SettingsButton(): React.JSX.Element {
+  const setDialog = useUiStore((state) => state.setDialog)
+  return (
+    <SidebarMenuButton
+      aria-label="Settings"
+      onClick={() => setDialog('settings')}
+      className={RAIL_BUTTON}
+    >
+      <Settings />
+      <span className="group-data-[collapsible=icon]:hidden">Settings</span>
+    </SidebarMenuButton>
   )
 }

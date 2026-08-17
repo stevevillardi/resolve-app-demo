@@ -1,8 +1,17 @@
 import { cn } from '@/lib/utils'
+import { botttsDataUri } from '@/lib/avatar'
 
 interface AvatarColorSwatchProps {
   name: string
   color: string
+  /**
+   * The persona template id. With it, the swatch renders that persona's bot —
+   * a deterministic DiceBear robot tinted with `color` (see lib/avatar.ts).
+   * Without it there is no persona to depict, so it falls back to initials on
+   * the flat color: the right rendering for repos, groups, and anything else
+   * that is a place rather than an agent.
+   */
+  seed?: string
   size?: 'xs' | 'sm' | 'default' | 'lg'
   className?: string
 }
@@ -61,9 +70,34 @@ function readableForeground(color: string): string {
 export function AvatarColorSwatch({
   name,
   color,
+  seed,
   size = 'default',
   className
 }: AvatarColorSwatchProps): React.JSX.Element {
+  if (seed) {
+    return (
+      <span
+        aria-hidden
+        className={cn(
+          'inline-flex shrink-0 items-center justify-center overflow-hidden select-none',
+          SIZE_CLASS[size],
+          className
+        )}
+        // The bot itself carries the persona's color; the backdrop is a faint
+        // wash of the same so the tile reads as one mark, not a robot floating
+        // on the page background.
+        style={{ backgroundColor: `color-mix(in srgb, ${color} 16%, transparent)` }}
+      >
+        <img
+          src={botttsDataUri(seed, color)}
+          alt=""
+          draggable={false}
+          className="size-full p-0.5"
+        />
+      </span>
+    )
+  }
+
   return (
     <span
       aria-hidden

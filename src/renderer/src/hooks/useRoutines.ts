@@ -66,7 +66,7 @@ export function useDeleteRoutine(): {
 }
 
 export function useRunRoutineNow(): {
-  runNow: (id: string) => void
+  runNow: (id: string, onResult?: (result: { skipped: string | null }) => void) => void
   isPending: boolean
   /** The lock refusal, when a fire was skipped rather than started. */
   skipped: string | null
@@ -82,11 +82,35 @@ export function useRunRoutineNow(): {
   })
 
   return {
-    runNow: (id) => mutation.mutate(id),
+    // The callback exists for callers with no pane to show `skipped` in — the
+    // routine row's context menu answers with a toast instead.
+    runNow: (id, onResult) => mutation.mutate(id, { onSuccess: (result) => onResult?.(result) }),
     isPending: mutation.isPending,
     skipped: mutation.data?.skipped ?? null,
     error: mutation.error ? ipcErrorMessage(mutation.error) : null
   }
+}
+
+export interface NextRunRow {
+  routineId: string
+  prompt: string
+  contactName: string | null
+  nextRun: number | null
+}
+
+/**
+ * The scheduler's next-fire view for Home. Refetched on window focus and
+ * invalidated with routinesKey-adjacent mutations indirectly: fire times only
+ * move when a schedule changes or a routine fires, both of which land back on
+ * this screen through a refetch soon enough for a resting overview.
+ */
+export function useNextRuns(): UseQueryResult<NextRunRow[]> {
+  return useQuery({
+    queryKey: [...routinesKey, 'nextRuns'] as const,
+    queryFn: () => callProcedure('routines.nextRuns', undefined),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true
+  })
 }
 
 /**

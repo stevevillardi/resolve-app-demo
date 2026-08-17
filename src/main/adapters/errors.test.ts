@@ -25,6 +25,24 @@ describe('classifyErrorMessage', () => {
     expect(classifyErrorMessage('permission denied')).toBe('sandbox_denied')
   })
 
+  it('recognises a dead resume key on either backend', () => {
+    // Codex's vendored binary and the Claude CLI phrase the same failure
+    // differently; both must land on 'session' so messaging.ts can self-heal
+    // instead of surfacing a raw vendor string.
+    expect(classifyErrorMessage('Failed to resume session from /path/to/rollout.jsonl')).toBe(
+      'session'
+    )
+    expect(classifyErrorMessage('ThreadNotFound')).toBe('session')
+    expect(classifyErrorMessage('No conversation found with session ID: 0b8d5a…')).toBe('session')
+  })
+
+  it('does not let a session error be stolen by broader categories', () => {
+    // "…not found" must not read as network, and "session" alone must not —
+    // a fresh session is the remedy for exactly one of these.
+    expect(classifyErrorMessage('thread abc123 not found')).toBe('session')
+    expect(classifyErrorMessage('session storage unavailable')).toBe('unknown')
+  })
+
   it('recognises network failures', () => {
     expect(classifyErrorMessage('ECONNRESET')).toBe('network')
     expect(classifyErrorMessage('getaddrinfo ENOTFOUND api.example.com')).toBe('network')

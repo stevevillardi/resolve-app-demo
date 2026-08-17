@@ -123,7 +123,14 @@ function PersonaForm({
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
       <PaneHeader
-        leading={<AvatarColorSwatch name={name || persona.name} color={avatarColor} size="sm" />}
+        leading={
+          <AvatarColorSwatch
+            name={name || persona.name}
+            color={avatarColor}
+            seed={persona.id}
+            size="sm"
+          />
+        }
         title={name || 'Untitled persona'}
         actions={
           <>
@@ -250,18 +257,34 @@ function PersonaForm({
               <SegmentedControl
                 options={SANDBOX_OPTIONS}
                 value={sandbox}
-                onChange={setSandbox}
+                onChange={(value) => {
+                  setSandbox(value)
+                  // full_access bypasses the tools that enforce a narrower
+                  // GitHub scope, so main refuses the pair — mirror that here
+                  // rather than letting Save be the first thing that says so.
+                  if (value === 'full_access') setGithubScope('full_access')
+                }}
                 aria-label="Sandbox level"
               />
               <ScopeChip axis="sandbox" value={sandbox} className="self-start" />
             </Field>
             <Field label="GitHub scope">
-              <SegmentedControl
-                options={GITHUB_SCOPE_OPTIONS}
-                value={githubScope}
-                onChange={setGithubScope}
-                aria-label="GitHub scope"
-              />
+              {sandbox === 'full_access' ? (
+                /* Not a disabled control: there is no choice to make. With a
+                   full sandbox neither the MCP tool filter nor the shell guard
+                   runs, so any narrower scope would be a label, not a limit. */
+                <p className="text-muted-foreground text-xs text-pretty">
+                  Full sandbox access implies full GitHub scope — nothing narrower is enforceable
+                  there.
+                </p>
+              ) : (
+                <SegmentedControl
+                  options={GITHUB_SCOPE_OPTIONS}
+                  value={githubScope}
+                  onChange={setGithubScope}
+                  aria-label="GitHub scope"
+                />
+              )}
               <ScopeChip axis="github" value={githubScope} className="self-start" />
             </Field>
           </FieldGrid>
@@ -378,6 +401,21 @@ function PersonaForm({
             ? 'This removes the persona and its instructions. Skills it attaches are untouched.'
             : `${boundContacts.length} contact${boundContacts.length === 1 ? ' is' : 's are'} still bound to it, so this will be refused.`
         }
+        {...(boundContacts.length > 0
+          ? {
+              // The doc-16 side-by-side read: the skill dialog names what a
+              // delete touches, so this one names what blocks it.
+              consequence: (
+                <ul className="flex flex-col gap-0.5">
+                  {boundContacts.map((contact) => (
+                    <li key={contact.id} className="truncate">
+                      {contact.displayName}
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          : {})}
         onConfirm={() => remove(persona.id, () => setSelectedId(null))}
       />
     </div>

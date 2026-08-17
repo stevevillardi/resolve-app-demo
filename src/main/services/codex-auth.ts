@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import type { CodexAuthStatus, DeviceFlowState } from '../../shared/ipc-contract'
-import { getSecret, isSecretStorageAvailable, setSecret } from './secrets'
+import { deleteSecret, getSecret, isSecretStorageAvailable, setSecret } from './secrets'
 
 /**
  * Codex backend auth.
@@ -49,23 +49,24 @@ function targetTriple(): string | null {
   return null
 }
 
-let resolvedBinary: string | null | undefined
+let resolvedBinary: string | undefined
 
 /**
  * Mirrors the resolution in @openai/codex's bin/codex.js, but searches explicit
  * roots rather than using require.resolve: in a packaged build the binary lives
  * under app.asar.unpacked (see asarUnpack in electron-builder.yml), which bare
  * module resolution from inside the asar would miss.
+ *
+ * Only a successful resolution is memoized. A miss used to be cached forever,
+ * which turned one badly-timed stat during startup into "Codex is not
+ * installed" for the rest of the session.
  */
 export function resolveCodexBinary(): string | null {
   if (resolvedBinary !== undefined) return resolvedBinary
 
   const triple = targetTriple()
   const platformPackage = triple ? PLATFORM_PACKAGE_BY_TRIPLE[triple] : undefined
-  if (!triple || !platformPackage) {
-    resolvedBinary = null
-    return null
-  }
+  if (!triple || !platformPackage) return null
 
   const exe = process.platform === 'win32' ? 'codex.exe' : 'codex'
   const roots = [
@@ -82,7 +83,6 @@ export function resolveCodexBinary(): string | null {
     }
   }
 
-  resolvedBinary = null
   return null
 }
 
@@ -91,7 +91,20 @@ function childEnv(): NodeJS.ProcessEnv {
   return { ...process.env, ...(apiKey ? { OPENAI_API_KEY: apiKey } : {}) }
 }
 
-export function getCodexAuthStatus(): CodexAuthStatus {
+let cachedStatus: CodexAuthStatus | null = null
+
+/** A login flow just landed, so whatever the last probe said is stale. */
+function invalidateStatusCache(): void {
+  cachedStatus = null
+}
+
+export function getCodexAuthStatus(forceRefresh = false): CodexAuthStatus {
+  if (cachedStatus && !forceRefresh) return cachedStatus
+  cachedStatus = probeLoginStatus()
+  return cachedStatus
+}
+
+function probeLoginStatus(): CodexAuthStatus {
   const bin = resolveCodexBinary()
   if (!bin) {
     return {
@@ -108,7 +121,32 @@ export function getCodexAuthStatus(): CodexAuthStatus {
     const usingApiKey = /api key/i.test(result.stdout?.toString() ?? '')
     return { authenticated: true, source: usingApiKey ? 'api_key' : 'cli' }
   }
-  return { authenticated: false, source: null }
+
+  // Exit 1 with "Not logged in" is the CLI's clean answer, and the only outcome
+  // that should read as unauthenticated with no caveat.
+  const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+  if (result.status !== null && /not logged in/i.test(output)) {
+    return { authenticated: false, source: null }
+  }
+
+  // Everything else — a timeout (status === null), a spawn failure, a config
+  // parse error — is detection failing, which is not the same as being logged
+  // out. Chats run off the same credentials regardless of what this probe
+  // managed to observe, so say what actually happened instead of "connect
+  // Codex" to someone who already did. (This exact false negative is why the
+  // probe was reworked: a cold 220MB binary can outlive the timeout.)
+  const apiKey = getSecret('openai_api_key') ?? import.meta.env.MAIN_VITE_OPENAI_API_KEY ?? null
+  const reason = result.error
+    ? result.error.message.includes('ETIMEDOUT')
+      ? 'the check timed out'
+      : result.error.message
+    : (result.stderr?.toString().trim().split('\n')[0] ??
+      `the CLI exited with code ${result.status}`)
+  return {
+    authenticated: Boolean(apiKey),
+    source: apiKey ? 'api_key' : null,
+    error: `Couldn't check Codex login: ${reason}.`
+  }
 }
 
 // --- Device-code login ------------------------------------------------------
@@ -160,6 +198,7 @@ function reset(next: DeviceFlowState): DeviceFlowState {
   expiryTimer = null
   child = null
   state = next
+  if (next.status === 'success') invalidateStatusCache()
   return state
 }
 
@@ -216,6 +255,26 @@ export function cancelCodexLogin(): DeviceFlowState {
   return reset({ status: 'idle' })
 }
 
+/**
+ * Removes the stored key, and signs the CLI out only when the key was how it
+ * was signed in — a ChatGPT browser login is a separate credential the user
+ * did not ask to lose. Re-probes so the returned status is the new truth.
+ */
+export function clearOpenAiApiKey(): CodexAuthStatus {
+  const wasApiKey = getCodexAuthStatus().source === 'api_key'
+  deleteSecret('openai_api_key')
+
+  const bin = resolveCodexBinary()
+  if (bin && wasApiKey) {
+    // Best-effort: the CLI registered the key at set time (`login
+    // --with-api-key`), so without this, `login status` would keep saying
+    // api_key from ~/.codex/auth.json after the keychain copy is gone.
+    spawnSync(bin, ['logout'], { env: childEnv(), timeout: 15_000 })
+  }
+
+  return getCodexAuthStatus(true)
+}
+
 export function setOpenAiApiKey(apiKey: string): CodexAuthStatus {
   if (!isSecretStorageAvailable()) {
     return {
@@ -243,5 +302,5 @@ export function setOpenAiApiKey(apiKey: string): CodexAuthStatus {
     }
   }
 
-  return getCodexAuthStatus()
+  return getCodexAuthStatus(true)
 }

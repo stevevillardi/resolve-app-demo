@@ -55,14 +55,39 @@ describe('readRepoInstructions', () => {
     expect(readRepoInstructions(repo)?.fileName).toBe('AGENTS.md')
   })
 
-  it('takes CLAUDE.md alone when a repo ships both', () => {
-    // Nearly always the same content twice for two tools; concatenating would
-    // double it in the context window for no gain.
+  it('reads both when a repo ships both and they differ', () => {
+    // Doc 15 item 6: first-hit-wins silently dropped whichever file lost, and
+    // a repo whose two files disagree is exactly the repo whose second file
+    // matters. Headers keep the origin of each half legible to the model.
     write('CLAUDE.md', 'From Claude.')
     write('AGENTS.md', 'From Agents.')
     const result = readRepoInstructions(repo)
+    expect(result?.fileName).toBe('CLAUDE.md + AGENTS.md')
+    expect(result?.content).toContain('## CLAUDE.md')
+    expect(result?.content).toContain('From Claude.')
+    expect(result?.content).toContain('## AGENTS.md')
+    expect(result?.content).toContain('From Agents.')
+  })
+
+  it('reads identical twins once, named by the preferred file', () => {
+    // The common case: one file for each tool's convention, same content.
+    // Concatenating would double it in the context window for no gain.
+    write('CLAUDE.md', 'Shared instructions.')
+    write('AGENTS.md', 'Shared instructions.\n')
+    const result = readRepoInstructions(repo)
     expect(result?.fileName).toBe('CLAUDE.md')
-    expect(result?.content).not.toContain('From Agents.')
+    expect(result?.content.match(/Shared instructions/g)).toHaveLength(1)
+  })
+
+  it('applies one shared cap to the combined text', () => {
+    // The cap protects the persona's own prompt, which does not care how many
+    // files the excess arrived in.
+    write('CLAUDE.md', 'x'.repeat(20 * 1024))
+    write('AGENTS.md', 'y'.repeat(20 * 1024))
+    const result = readRepoInstructions(repo)
+    expect(result?.truncated).toBe(true)
+    expect(result?.content.length).toBeLessThan(40 * 1024)
+    expect(result?.content).toContain('[Truncated: CLAUDE.md + AGENTS.md')
   })
 
   it('skips an empty file rather than injecting a blank section', () => {

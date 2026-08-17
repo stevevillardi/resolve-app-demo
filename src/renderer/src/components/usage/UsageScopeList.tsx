@@ -89,7 +89,13 @@ export function UsageScopeList(): React.JSX.Element {
             active={active}
             onSelect={() => setScope({ kind: 'persona', id: persona.id })}
             align="center"
-            leading={<AvatarColorSwatch name={persona.name} color={persona.avatarColor} />}
+            leading={
+              <AvatarColorSwatch
+                name={persona.name}
+                color={persona.avatarColor}
+                seed={persona.id}
+              />
+            }
             trailing={cost(contactIds)}
           >
             <span className="block truncate text-row font-medium">{persona.name}</span>

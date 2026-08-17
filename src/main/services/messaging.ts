@@ -1,13 +1,13 @@
 import { randomUUID } from 'crypto'
-import { asc, desc, eq, sql } from 'drizzle-orm'
+import { asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toMessage } from '../db/mappers'
-import { messages } from '../db/schema'
+import { messages, toolCalls } from '../db/schema'
 import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
 import { emitAgentEvent, emitRunsChanged } from './agent-events'
 import { summarizeTurn } from './compaction'
-import { getContact, setBackendSessionId } from './contacts'
+import { clearBackendSessionId, getContact, setBackendSessionId } from './contacts'
 import { groupForRepo, insertGroupMessage } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
 import {
@@ -80,6 +80,33 @@ interface Run {
 const runs = new Map<string, Run>()
 
 // --- Reads ------------------------------------------------------------------
+
+/**
+ * The persisted tool record for a thread (Phase 17, doc 15 item 1): name and
+ * status per call, stamped with the message the turn ended in. Never
+ * arguments — see the table's comment in schema.ts.
+ */
+export function listToolCalls(contactId: string): {
+  id: string
+  messageId: string | null
+  name: string
+  status: 'running' | 'completed' | 'failed'
+  createdAt: number
+}[] {
+  return initDb()
+    .select()
+    .from(toolCalls)
+    .where(eq(toolCalls.contactId, contactId))
+    .orderBy(asc(toolCalls.createdAt))
+    .all()
+    .map((row) => ({
+      id: row.id,
+      messageId: row.messageId,
+      name: row.name,
+      status: row.status,
+      createdAt: row.createdAt.getTime()
+    }))
+}
 
 export function listMessages(contactId: string): PersistedMessage[] {
   return initDb()
@@ -348,12 +375,22 @@ async function runTurn(
   // reply. This is only ever a fallback: a turn that reaches `done` uses
   // `done.finalText`, which is the backend's own authoritative answer. It
   // matters when a turn is stopped mid-stream and never produces one.
+  let activeSession = session
   let streamed = ''
   let done: Extract<AgentEvent, { type: 'done' }> | null = null
   // Kept so a caller with nobody watching can say *why* it failed. A routine
   // whose lastRunSummary reads "produced nothing" is not actionable; one that
   // reads "Failed — not authenticated" is.
   let failure: string | null = null
+  // A resumed session whose resume key the backend refuses gets one fresh
+  // start. Only a resume can heal this way (a fresh session has no dead key to
+  // shed), and only before anything has streamed — past that point a restart
+  // would silently discard output the user already saw.
+  let canHealDeadResume = Boolean(contact.backendSessionId)
+  // Persisted per call as it happens — name and status only, never arguments
+  // (doc 15 item 1). Row ids kept so finish() can stamp them with the message
+  // this turn ends in; the backend's toolCallId is only unique per turn.
+  const toolRowIds = new Map<string, string>()
 
   try {
     // The first thing the turn does, because it decides where the turn runs.
@@ -362,17 +399,62 @@ async function runTurn(
     // than this, because startTurn() is synchronous and git is not.
     spec.writablePaths = await ensureWorktree(contact)
 
-    for await (const event of adapter.run(session, prompt, run.controller.signal)) {
-      if (event.type === 'error') failure = event.message
-      if (event.type === 'done') {
-        // Held back rather than forwarded here: the renderer treats `done` as
-        // its cue to refetch, so it must not arrive before the rows it will
-        // refetch have been written.
-        done = event
-        break
+    attempts: while (true) {
+      for await (const event of adapter.run(activeSession, prompt, run.controller.signal)) {
+        if (event.type === 'error') {
+          // Self-heal: the model/backend changed under this contact (or the
+          // vendor expired the thread), so the stored key points at a session
+          // that no longer exists. The transcript is ours, not the vendor's —
+          // dropping the key and starting fresh loses nothing visible, and
+          // beats surfacing a raw "failed to resume" string the user cannot
+          // act on. The dead attempt's error is deliberately not forwarded.
+          if (event.kind === 'session' && canHealDeadResume && streamed === '') {
+            canHealDeadResume = false
+            clearBackendSessionId(contact.id)
+            activeSession = adapter.createSession(spec)
+            failure = null
+            continue attempts
+          }
+          failure = event.message
+        }
+        if (event.type === 'done') {
+          // Held back rather than forwarded here: the renderer treats `done` as
+          // its cue to refetch, so it must not arrive before the rows it will
+          // refetch have been written.
+          done = event
+          break attempts
+        }
+        if (event.type === 'text_message') streamed += event.text
+        if (event.type === 'tool_start') {
+          const rowId = randomUUID()
+          toolRowIds.set(event.toolCallId, rowId)
+          initDb()
+            .insert(toolCalls)
+            .values({
+              id: rowId,
+              contactId: contact.id,
+              messageId: null,
+              toolCallId: event.toolCallId,
+              name: event.name,
+              status: 'running',
+              createdAt: new Date()
+            })
+            .run()
+        }
+        if (event.type === 'tool_end') {
+          const rowId = toolRowIds.get(event.toolCallId)
+          if (rowId) {
+            initDb()
+              .update(toolCalls)
+              .set({ status: event.status })
+              .where(eq(toolCalls.id, rowId))
+              .run()
+          }
+        }
+        emitAgentEvent(runId, event)
       }
-      if (event.type === 'text_message') streamed += event.text
-      emitAgentEvent(runId, event)
+      // The stream ended without a `done` (a cancelled turn); nothing to retry.
+      break
     }
   } catch (error) {
     // Both adapters wrap their streams and guarantee a `done`, so reaching here
@@ -381,7 +463,9 @@ async function runTurn(
     failure = error instanceof Error ? error.message : String(error)
     emitAgentEvent(runId, { type: 'error', kind: 'unknown', message: failure })
   } finally {
-    finish(runId, run, session, prompt, done?.finalText ?? streamed, done, failure)
+    finish(runId, run, activeSession, prompt, done?.finalText ?? streamed, done, failure, [
+      ...toolRowIds.values()
+    ])
   }
 }
 
@@ -400,7 +484,8 @@ function finish(
   prompt: string,
   finalText: string,
   done: Extract<AgentEvent, { type: 'done' }> | null,
-  failure: string | null
+  failure: string | null,
+  toolRowIds: string[] = []
 ): void {
   const { contactId, origin, groupId } = run
   try {
@@ -408,7 +493,19 @@ function finish(
     // billable tokens all the same — so the two are recorded independently
     // rather than one gating the other.
     if (finalText.trim()) {
-      insertMessage(contactId, 'assistant', finalText)
+      const reply = insertMessage(contactId, 'assistant', finalText)
+
+      // Stamp the turn's tool rows with the message it ended in, so history
+      // can render the calls with the reply they produced. A turn that dies
+      // before this leaves rows with a null messageId and status 'running' —
+      // rendered as interrupted, which is the truth.
+      if (toolRowIds.length > 0) {
+        initDb()
+          .update(toolCalls)
+          .set({ messageId: reply.id })
+          .where(inArray(toolCalls.id, toolRowIds))
+          .run()
+      }
 
       // The Group's copy of the same reply (§8). The `messages` row above is
       // the conversation; this is the Group's record that it happened, and the

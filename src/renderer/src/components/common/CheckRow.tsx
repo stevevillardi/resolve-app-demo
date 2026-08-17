@@ -7,6 +7,14 @@ interface CheckRowProps {
   title: string
   /** One line under the title. What picking this actually does. */
   description?: React.ReactNode
+  /** An avatar or icon ahead of the checkbox — the catalog picker's bot faces. */
+  leading?: React.ReactNode
+  /**
+   * Checked and not uncheckable, with the reason shown in place of the
+   * description — a skill a chosen persona requires. Distinct from a plain
+   * disabled row: the state is ON, and the user needs to know why.
+   */
+  lockedReason?: string
   className?: string
 }
 
@@ -29,33 +37,43 @@ export function CheckRow({
   onToggle,
   title,
   description,
+  leading,
+  lockedReason,
   className
 }: CheckRowProps): React.JSX.Element {
+  const locked = lockedReason !== undefined
   return (
     <button
       type="button"
       role="checkbox"
-      aria-checked={checked}
-      onClick={onToggle}
+      aria-checked={locked ? true : checked}
+      aria-disabled={locked || undefined}
+      onClick={locked ? undefined : onToggle}
       data-testid="check-row"
       className={cn(
         'border-border flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors',
         'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-        checked ? 'bg-accent border-accent' : 'hover:bg-accent/40',
+        checked || locked ? 'bg-accent border-accent' : 'hover:bg-accent/40',
+        locked && 'cursor-default opacity-80',
         className
       )}
     >
       <span
         className={cn(
           'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border',
-          checked ? 'bg-primary text-primary-foreground border-primary' : 'border-input'
+          checked || locked ? 'bg-primary text-primary-foreground border-primary' : 'border-input'
         )}
       >
-        {checked && <Check className="size-3" />}
+        {(checked || locked) && <Check className="size-3" />}
       </span>
+      {leading}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-row font-medium">{title}</span>
-        {description && <span className="text-muted-foreground block text-xs">{description}</span>}
+        {locked ? (
+          <span className="text-muted-foreground block text-xs">{lockedReason}</span>
+        ) : (
+          description && <span className="text-muted-foreground block text-xs">{description}</span>
+        )}
       </span>
     </button>
   )

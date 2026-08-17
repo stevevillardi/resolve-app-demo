@@ -10,7 +10,9 @@ import type { DeviceFlowState } from '../../shared/ipc-contract'
  * browser. What matters here is the parsing and the status mapping.
  */
 
-let spawnSyncResult: { status: number | null; stdout?: string } = { status: 1 }
+let spawnSyncResult: { status: number | null; stdout?: string; stderr?: string; error?: Error } = {
+  status: 1
+}
 const spawnSyncCalls: Array<{ args: string[]; input?: string }> = []
 /** Whether the vendored binary is present for this platform. */
 let binaryExists = true
@@ -22,7 +24,11 @@ vi.mock('fs', () => ({ existsSync: () => binaryExists }))
 vi.mock('child_process', () => ({
   spawnSync: (_bin: string, args: string[], opts?: { input?: string }) => {
     spawnSyncCalls.push({ args, input: opts?.input })
-    return { ...spawnSyncResult, stdout: Buffer.from(spawnSyncResult.stdout ?? '') }
+    return {
+      ...spawnSyncResult,
+      stdout: Buffer.from(spawnSyncResult.stdout ?? ''),
+      stderr: Buffer.from(spawnSyncResult.stderr ?? '')
+    }
   },
   spawn: () => ({ stdout: null, stderr: null, on: () => {}, kill: () => {} })
 }))
@@ -34,6 +40,7 @@ vi.mock('./secrets', () => ({
   getSecret: (k: string) => secretStore.get(k) ?? null,
   setSecret: (k: string, v: string) => void secretStore.set(k, v),
   hasSecret: (k: string) => secretStore.has(k),
+  deleteSecret: (k: string) => void secretStore.delete(k),
   isSecretStorageAvailable: () => encryptionAvailable
 }))
 
@@ -161,10 +168,70 @@ describe('getCodexAuthStatus', () => {
     expect(codex.getCodexAuthStatus()).toMatchObject({ authenticated: false, source: null })
   })
 
+  it('says "Not logged in" cleanly, with no error caveat', () => {
+    // The clean answer must stay clean: an error field here would put a scary
+    // "couldn't check" note on a card that checked just fine.
+    spawnSyncResult = { status: 1, stdout: 'Not logged in' }
+    expect(codex.getCodexAuthStatus().error).toBeUndefined()
+  })
+
   it('asks the CLI for status rather than reading the credential file', () => {
     spawnSyncResult = { status: 0, stdout: 'Logged in using ChatGPT' }
     codex.getCodexAuthStatus()
     expect(spawnSyncCalls.at(-1)?.args).toEqual(['login', 'status'])
+  })
+
+  it('reports a timeout as detection failure, not as logged out', () => {
+    // The regression this file exists to pin: a cold ~220MB binary can outlive
+    // the probe timeout, and that used to read as "connect Codex" while chats
+    // ran fine off the same credentials.
+    spawnSyncResult = { status: null, error: new Error('spawnSync codex ETIMEDOUT') }
+    expect(codex.getCodexAuthStatus()).toMatchObject({
+      authenticated: false,
+      error: expect.stringMatching(/timed out/i)
+    })
+  })
+
+  it('keeps a stored API key authenticated when detection fails', () => {
+    // Turns inject OPENAI_API_KEY themselves, so a stored key works regardless
+    // of what the probe managed to observe. Mirrors the Claude probe.
+    secretStore.set('openai_api_key', 'sk-stored')
+    spawnSyncResult = { status: null, error: new Error('spawnSync codex ETIMEDOUT') }
+    expect(codex.getCodexAuthStatus()).toMatchObject({
+      authenticated: true,
+      source: 'api_key',
+      error: expect.stringMatching(/timed out/i)
+    })
+  })
+
+  it('surfaces an unexpected non-zero exit instead of calling it logged out', () => {
+    spawnSyncResult = { status: 2, stderr: 'Error checking login status: config parse failed' }
+    expect(codex.getCodexAuthStatus()).toMatchObject({
+      authenticated: false,
+      error: expect.stringMatching(/config parse failed/)
+    })
+  })
+
+  it('caches the answer until a refresh is forced', () => {
+    spawnSyncResult = { status: 0, stdout: 'Logged in using ChatGPT' }
+    codex.getCodexAuthStatus()
+    codex.getCodexAuthStatus()
+    expect(spawnSyncCalls).toHaveLength(1)
+
+    codex.getCodexAuthStatus(true)
+    expect(spawnSyncCalls).toHaveLength(2)
+  })
+})
+
+describe('resolveCodexBinary', () => {
+  it('retries a missed resolution instead of memoizing the failure', () => {
+    // One badly-timed stat during startup must not become "Codex is not
+    // installed" for the rest of the session.
+    binaryExists = false
+    expect(codex.resolveCodexBinary()).toBeNull()
+
+    binaryExists = true
+    expect(codex.resolveCodexBinary()).not.toBeNull()
   })
 })
 
@@ -213,5 +280,28 @@ describe('missing platform binary', () => {
       error: expect.stringMatching(/no codex binary/i)
     })
     expect(isolated.startCodexLogin()).toMatchObject({ status: 'error' })
+  })
+})
+
+describe('clearOpenAiApiKey', () => {
+  it('removes the key and signs the CLI out when the key was the login', () => {
+    secretStore.set('openai_api_key', 'sk-stored')
+    spawnSyncResult = { status: 0, stdout: 'Logged in using an API key' }
+
+    codex.clearOpenAiApiKey()
+
+    expect(secretStore.has('openai_api_key')).toBe(false)
+    expect(spawnSyncCalls.some((call) => call.args[0] === 'logout')).toBe(true)
+  })
+
+  it('leaves a ChatGPT login alone', () => {
+    // The browser login is a separate credential the user did not ask to lose.
+    secretStore.set('openai_api_key', 'sk-stored')
+    spawnSyncResult = { status: 0, stdout: 'Logged in using ChatGPT' }
+
+    codex.clearOpenAiApiKey()
+
+    expect(secretStore.has('openai_api_key')).toBe(false)
+    expect(spawnSyncCalls.some((call) => call.args[0] === 'logout')).toBe(false)
   })
 })

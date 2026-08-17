@@ -1,5 +1,6 @@
 import type { IpcProcedureName, IpcInput, IpcOutput } from '../../../shared/ipc-contract'
 import type { AgentEvent } from '../../../shared/agent'
+import type { MenuActionId } from '../../../shared/menu'
 
 export function callProcedure<K extends IpcProcedureName>(
   name: K,
@@ -25,6 +26,10 @@ export function onRunsChanged(callback: () => void): () => void {
 
 export function onUsageChanged(callback: () => void): () => void {
   return window.api.onUsageChanged(callback)
+}
+
+export function onMenuAction(callback: (action: MenuActionId) => void): () => void {
+  return window.api.onMenuAction(callback)
 }
 
 /**

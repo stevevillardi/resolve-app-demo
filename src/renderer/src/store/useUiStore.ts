@@ -37,7 +37,7 @@ export type UsageScope =
  * `command` joins them because the palette is the same shape of thing: a short
  * decision you finish and dismiss, not a place you work.
  */
-export type ModalDialog = 'newContact' | 'github' | 'command' | null
+export type ModalDialog = 'newContact' | 'github' | 'command' | 'settings' | null
 
 interface UiState {
   section: Section
@@ -71,6 +71,15 @@ interface UiState {
 
   dialog: ModalDialog
   setDialog: (dialog: ModalDialog) => void
+
+  /**
+   * When set, the new-contact dialog opens prefilled from this contact — the
+   * guided recreate (Phase 17). Repo and isolation are immutable on a live
+   * contact, so "change" means "make a new one like it"; this makes that a
+   * thirty-second act instead of a memory test. Cleared when the dialog closes.
+   */
+  recreateContactId: string | null
+  setRecreateContactId: (id: string | null) => void
 
   themePreference: ThemePreference
   setThemePreference: (preference: ThemePreference) => void
@@ -112,6 +121,9 @@ export const useUiStore = create<UiState>()(
 
       dialog: null,
       setDialog: (dialog) => set({ dialog }),
+
+      recreateContactId: null,
+      setRecreateContactId: (recreateContactId) => set({ recreateContactId }),
 
       themePreference: 'system',
       setThemePreference: (themePreference) => set({ themePreference })

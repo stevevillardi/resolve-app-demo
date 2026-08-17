@@ -1,6 +1,6 @@
 # Phase 15 — Deferred capability work
 
-**Status:** Not started
+**Status:** Done — decisions recorded and code items executed in [Phase 17](17-v1-wrap.md); resolution per item noted in 00-progress.md
 **Blueprint refs:** §3 (adapters), §4 (governance axes), §5 (context injection)
 **Depends on:** Phase 14
 

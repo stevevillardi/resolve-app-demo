@@ -4,6 +4,7 @@ import {
   deleteContact,
   getContact,
   listContacts,
+  rebindContactPersona,
   renameContact,
   setRepoTrust
 } from '../../services/contacts'
@@ -48,6 +49,9 @@ registerProcedure('contacts.list', () => listContacts())
 registerProcedure('contacts.get', ({ id }) => getContact(id))
 registerProcedure('contacts.create', (draft) => createContact(draft))
 registerProcedure('contacts.update', ({ id, displayName }) => renameContact(id, displayName))
+registerProcedure('contacts.rebindPersona', ({ id, personaTemplateId }) =>
+  rebindContactPersona(id, personaTemplateId)
+)
 registerProcedure('contacts.context', ({ contactId }) => contactContext(contactId))
 // The only writer of repo_trust, and so the only way a repository's own
 // instructions or skills ever reach a persona.

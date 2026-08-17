@@ -19,7 +19,7 @@ export type MessageBubbleStatus = 'sent' | 'streaming' | 'error'
  * rendered was the common case rather than an edge one.
  */
 export interface MessageBubbleError {
-  kind: 'rate_limit' | 'sandbox_denied' | 'network' | 'auth' | 'unknown'
+  kind: 'rate_limit' | 'sandbox_denied' | 'network' | 'auth' | 'session' | 'unknown'
   message: string
 }
 

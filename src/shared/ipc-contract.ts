@@ -263,6 +263,25 @@ export type PrRef = z.infer<typeof prRefSchema>
 export type PrState = z.infer<typeof prStateSchema>
 export type PrResult = z.infer<typeof prResultSchema>
 
+/**
+ * See personas.create/update below. Shared so the two write paths cannot
+ * drift; the same rule is checked again in persona-templates.ts, because a
+ * Zod boundary someone routes around is a lock on a door with two doorways.
+ */
+function requireScopePairing(
+  persona: { sandbox: string; githubScope: string },
+  ctx: z.RefinementCtx
+): void {
+  if (persona.sandbox === 'full_access' && persona.githubScope !== 'full_access') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['githubScope'],
+      message:
+        'A persona with full sandbox access cannot carry a narrower GitHub scope — full access bypasses the tools that would enforce it.'
+    })
+  }
+}
+
 export const ipcContract = {
   ping: {
     input: z.void(),
@@ -279,6 +298,17 @@ export const ipcContract = {
     input: z.void(),
     output: authStatusSchema
   },
+  /**
+   * `auth.getStatus` with both backend probes forced. Separate procedure rather
+   * than a flag on getStatus so the cheap cached read stays the default and a
+   * forced double-probe (a Claude subprocess plus a Codex CLI spawn) is always
+   * a deliberate act: the Retry affordance on an auth card, or a window-focus
+   * recovery after a probe reported that it failed to check.
+   */
+  'auth.refresh': {
+    input: z.void(),
+    output: authStatusSchema
+  },
   'auth.setAnthropicApiKey': {
     input: apiKeyInputSchema,
     output: claudeStatusSchema
@@ -290,6 +320,73 @@ export const ipcContract = {
   'auth.completeOnboarding': {
     input: z.void(),
     output: authStatusSchema
+  },
+  /**
+   * Key removal (Phase 17 — the settings surface). Each returns the fresh
+   * per-backend status so the renderer can patch its cache slice without
+   * re-paying for the other probes. Neither is a sign-out of a CLI login:
+   * Claude Code's browser auth is not ours to revoke, and clearing the OpenAI
+   * key signs the codex CLI out only when the key was how it signed in.
+   */
+  'auth.clearAnthropicKey': {
+    input: z.void(),
+    output: claudeStatusSchema
+  },
+  'auth.clearOpenAiKey': {
+    input: z.void(),
+    output: codexStatusSchema
+  },
+
+  /** Where clones land — set implicitly on first clone, surfaced in settings. */
+  'workspace.getRoot': {
+    input: z.void(),
+    output: z.object({
+      path: z.string().nullable(),
+      /** False when the remembered directory is gone or unmounted. */
+      exists: z.boolean()
+    })
+  },
+  /** Native directory picker; persists the choice. Null when cancelled. */
+  'workspace.chooseRoot': {
+    input: z.void(),
+    output: z.object({ path: z.string().nullable() })
+  },
+
+  'appInfo.get': {
+    input: z.void(),
+    output: z.object({ version: z.string(), platform: z.string() })
+  },
+
+  /**
+   * The starter catalog (Phase 17): everything the app *can* seed, flagged
+   * recommended (the tier startup installs by itself) and installed (a row
+   * with that id exists right now). Feeds the onboarding picker and the
+   * starter library dialog.
+   */
+  'seed.catalog': {
+    input: z.void(),
+    output: z.object({
+      personas: z.array(
+        z.object({
+          entry: personaTemplateSchema,
+          recommended: z.boolean(),
+          installed: z.boolean()
+        })
+      ),
+      skills: z.array(
+        z.object({ entry: skillSchema, recommended: z.boolean(), installed: z.boolean() })
+      )
+    })
+  },
+  /**
+   * Aligns installed starter content with a selection. Catalog ids only —
+   * user-created rows are untouchable through this, unknown ids are an error,
+   * and removal is refused where it would strand a contact or strip an
+   * attached skill (see services/seed.ts).
+   */
+  'seed.applySelection': {
+    input: z.object({ personaIds: z.array(z.string()), skillIds: z.array(z.string()) }),
+    output: z.object({ personas: z.number(), skills: z.number() })
   },
 
   'codex.startLogin': {
@@ -386,12 +483,19 @@ export const ipcContract = {
     input: z.object({ id: z.string() }),
     output: personaTemplateSchema.nullable()
   },
+  /**
+   * Both write shapes refuse full_access sandbox + narrower githubScope
+   * (Phase 17, doc 15 item 2): under bypassPermissions / danger-full-access
+   * neither the MCP tool filter nor the shell guard runs, so a narrower scope
+   * there was a promise nothing could keep. Inputs only — the shared output
+   * schema stays permissive so rows predating migration 0010 still read.
+   */
   'personas.create': {
-    input: personaTemplateDraftSchema,
+    input: personaTemplateDraftSchema.superRefine(requireScopePairing),
     output: personaTemplateSchema
   },
   'personas.update': {
-    input: personaTemplateSchema,
+    input: personaTemplateSchema.superRefine(requireScopePairing),
     output: personaTemplateSchema
   },
   /** Rejects while contacts are bound — the error names them. */
@@ -458,6 +562,24 @@ export const ipcContract = {
     output: z.object({ runId: z.string().nullable(), skipped: z.string().nullable() })
   },
 
+  /**
+   * The scheduler's next-fire view, joined to contact names — the same data
+   * the tray menu draws, exposed so Home can answer "what happens next"
+   * without the user opening the Routines section.
+   */
+  'routines.nextRuns': {
+    input: z.void(),
+    output: z.array(
+      z.object({
+        routineId: z.string(),
+        prompt: z.string(),
+        contactName: z.string().nullable(),
+        /** Epoch ms, or null when the engine cannot say. */
+        nextRun: z.number().nullable()
+      })
+    )
+  },
+
   'contacts.list': {
     input: z.void(),
     output: z.array(contactSchema)
@@ -482,10 +604,26 @@ export const ipcContract = {
    * Zod boundary instead of relying on a service-level check.
    *
    * A Contact bound to the wrong repo is deleted and made again — which is what
-   * `contacts.delete`'s worktree cleanup below is for.
+   * `contacts.delete`'s worktree cleanup below is for. (Since Phase 17 the
+   * persona binding alone has a dedicated, safe path: `rebindPersona` below.)
    */
   'contacts.update': {
     input: z.object({ id: z.string(), displayName: z.string().min(1) }),
+    output: contactSchema
+  },
+  /**
+   * Moves a Contact to another persona (Phase 17) — the one binding change
+   * that CAN be made safe, so it is: the resume key is cleared in the same
+   * transaction (a session id is an index into one SDK's storage, and the new
+   * persona may be on the other backend), while the repo, worktree, branch and
+   * message history all stay. Refused while a turn is running — rebinding
+   * under a live stream would change who is speaking mid-sentence.
+   *
+   * repoPath and isolation remain immutable; their remedy is still
+   * delete-and-recreate, now guided by the prefilled NewContactFlow.
+   */
+  'contacts.rebindPersona': {
+    input: z.object({ id: z.string(), personaTemplateId: z.string() }),
     output: contactSchema
   },
   /**
@@ -623,6 +761,24 @@ export const ipcContract = {
   // reply arrives on the push channel (src/shared/agent.ts), keyed by the runId
   // returned here. A turn can take minutes, which is far too long to hold an
   // invoke open.
+  /**
+   * The persisted tool record for a thread (Phase 17, doc 15 item 1): which
+   * tools each turn ran and how each ended — name and status only, never
+   * arguments. messageId is null for calls whose turn died before its reply
+   * was written; the renderer shows those as interrupted.
+   */
+  'messages.toolCalls': {
+    input: z.object({ contactId: z.string() }),
+    output: z.array(
+      z.object({
+        id: z.string(),
+        messageId: z.string().nullable(),
+        name: z.string(),
+        status: z.enum(['running', 'completed', 'failed']),
+        createdAt: z.number()
+      })
+    )
+  },
   'messages.list': {
     input: z.object({ contactId: z.string() }),
     output: z.array(messageSchema)

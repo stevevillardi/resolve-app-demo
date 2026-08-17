@@ -1,6 +1,6 @@
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ClaudeAuthStatus } from '../../shared/ipc-contract'
-import { getSecret, isSecretStorageAvailable, setSecret } from './secrets'
+import { deleteSecret, getSecret, isSecretStorageAvailable, setSecret } from './secrets'
 
 /**
  * Claude backend auth (blueprint §15A): reuse existing Claude Code CLI auth on
@@ -101,6 +101,17 @@ export async function getClaudeAuthStatus(forceRefresh = false): Promise<ClaudeA
     }
   }
   return cached
+}
+
+/**
+ * Removes the stored key and re-probes. Deliberately narrow: a Claude Code CLI
+ * login is not ours to revoke, so after clearing, the probe may still come
+ * back authenticated via `cli` — which is correct, and the settings copy says
+ * so rather than pretending this is a sign-out.
+ */
+export async function clearAnthropicApiKey(): Promise<ClaudeAuthStatus> {
+  deleteSecret('anthropic_api_key')
+  return getClaudeAuthStatus(true)
 }
 
 export async function setAnthropicApiKey(apiKey: string): Promise<ClaudeAuthStatus> {

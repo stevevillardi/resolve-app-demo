@@ -93,6 +93,7 @@ function GroupEntry({
           timestamp={message.timestamp}
           senderName={authorPersona?.name}
           senderColor={authorPersona?.avatarColor}
+          senderSeed={authorPersona?.id}
           backend={authorPersona?.backend}
         />
       )
@@ -219,6 +220,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
                     key={contact.id}
                     name={persona?.name ?? contact.displayName}
                     color={persona?.avatarColor ?? 'var(--muted)'}
+                    seed={persona?.id}
                     size="xs"
                   />
                 )
@@ -270,6 +272,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               toolCalls={live.turn.stream.toolCalls}
               senderName={personaFor(live.contactId)?.name}
               senderColor={personaFor(live.contactId)?.avatarColor}
+              senderSeed={personaFor(live.contactId)?.id}
               backend={personaFor(live.contactId)?.backend}
             />
           )}
@@ -281,6 +284,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               error={live.turn.stream.error}
               senderName={personaFor(live.contactId)?.name}
               senderColor={personaFor(live.contactId)?.avatarColor}
+              senderSeed={personaFor(live.contactId)?.id}
             />
           )}
         </div>

@@ -6,10 +6,12 @@ import { ListPanel } from './ListPanel'
 import { WorkspaceView } from './WorkspaceView'
 import { NewContactFlow } from '@/components/persona/NewContactFlow'
 import { GitHubConnectDialog } from '@/components/github/GitHubConnectDialog'
+import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { CommandPalette } from '@/components/common/CommandPalette'
 import { useThemeSync } from '@/hooks/useThemeSync'
-import { useVerifyGitHub } from '@/hooks/useAuth'
+import { useAuthRecoveryOnFocus, useVerifyGitHub } from '@/hooks/useAuth'
 import { useCommandPalette } from '@/hooks/useCommandPalette'
+import { useMenuActions } from '@/hooks/useMenuActions'
 import { useUiStore } from '@/store/useUiStore'
 
 // 64px so the inset macOS traffic lights (x:14, 3 × 12px buttons) sit fully
@@ -21,7 +23,9 @@ const RAIL_WIDTH_EXPANDED = '13rem'
 export function AppShell(): React.JSX.Element {
   useThemeSync()
   useVerifyGitHub()
+  useAuthRecoveryOnFocus()
   useCommandPalette()
+  useMenuActions()
   // Panel widths persist themselves to localStorage, so the shell reopens the
   // way you left it. react-resizable-panels v4 replaced the old `autoSaveId`
   // prop with this hook.
@@ -79,8 +83,8 @@ export function AppShell(): React.JSX.Element {
         )}
       </SidebarInset>
 
-      {/* The only two surfaces that stay modal: both are short, decision-shaped
-          flows you finish and dismiss, not places you work. */}
+      {/* The modal surfaces: short, decision-shaped flows you finish and
+          dismiss, not places you work. */}
       <NewContactFlow
         open={dialog === 'newContact'}
         onOpenChange={(open) => setDialog(open ? 'newContact' : null)}
@@ -88,6 +92,10 @@ export function AppShell(): React.JSX.Element {
       <GitHubConnectDialog
         open={dialog === 'github'}
         onOpenChange={(open) => setDialog(open ? 'github' : null)}
+      />
+      <SettingsDialog
+        open={dialog === 'settings'}
+        onOpenChange={(open) => setDialog(open ? 'settings' : null)}
       />
       <CommandPalette />
     </SidebarProvider>

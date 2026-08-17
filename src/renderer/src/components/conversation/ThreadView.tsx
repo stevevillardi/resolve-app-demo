@@ -19,7 +19,8 @@ import {
   useAgentStream,
   useCancelRun,
   useMessages,
-  useSendMessage
+  useSendMessage,
+  useToolCalls
 } from '@/hooks/useMessages'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests'
@@ -37,6 +38,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   const { data: contacts = [] } = useContacts()
   const { data: personas = [] } = usePersonas()
   const { data: thread = [] } = useMessages(contactId)
+  const { data: persistedToolCalls = [] } = useToolCalls(contactId)
   const { data: usageEvents = [] } = useUsageEvents(contactId)
   const { data: runs = [] } = useActiveRuns()
 
@@ -97,7 +99,14 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
         about once a session.
       */}
       <ThreadHeader
-        leading={<AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="sm" />}
+        leading={
+          <AvatarColorSwatch
+            name={persona.name}
+            color={persona.avatarColor}
+            seed={persona.id}
+            size="sm"
+          />
+        }
         title={persona.name}
         subtitle={repoName(contact.repoPath)}
         subtitleTitle={contact.repoPath}
@@ -145,6 +154,19 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
             thread.map((message, index) => {
               const previous = thread[index - 1]
               const newDay = !previous || !isSameDay(previous.timestamp, message.timestamp)
+              // The turn's persisted tool record, mapped onto the live
+              // timeline's shape. A call still 'running' in history is a turn
+              // that died mid-call — shown failed and named interrupted,
+              // because pretending it finished would be worse than either.
+              const calls = persistedToolCalls
+                .filter((call) => call.messageId === message.id)
+                .map((call) => ({
+                  id: call.id,
+                  name: call.name,
+                  detail: call.status === 'running' ? 'interrupted' : '',
+                  status: (call.status === 'running' ? 'failed' : call.status) as
+                    'completed' | 'failed'
+                }))
               return (
                 <Fragment key={message.id}>
                   {newDay && <DaySeparator timestamp={message.timestamp} />}
@@ -153,6 +175,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                     content={message.content}
                     timestamp={message.timestamp}
                     backend={persona.backend}
+                    {...(calls.length > 0 ? { toolCalls: calls } : {})}
                   />
                 </Fragment>
               )

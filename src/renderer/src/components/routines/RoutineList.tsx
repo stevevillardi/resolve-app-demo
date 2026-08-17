@@ -1,13 +1,92 @@
-import { Clock } from 'lucide-react'
+import { useState } from 'react'
+import { Clock, Pause, Play, Trash2, Zap } from 'lucide-react'
+import { toast } from 'sonner'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ListRow } from '@/components/common/ListRow'
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator
+} from '@/components/ui/context-menu'
 import { formatRelative } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useContacts } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
-import { useRoutines } from '@/hooks/useRoutines'
+import {
+  useDeleteRoutine,
+  useRoutines,
+  useRunRoutineNow,
+  useUpdateRoutine
+} from '@/hooks/useRoutines'
 import { useUiStore } from '@/store/useUiStore'
+import type { Routine } from '@/types'
+
+/**
+ * Right-click actions for a routine row — the enable toggle, run-now and
+ * delete that otherwise require opening the editor. Run-now toasts its
+ * outcome because from the list there is no pane for the skip refusal to
+ * land in; pause/resume shows itself (the row dims), so it stays quiet.
+ */
+function RoutineRowMenu({ routine }: { routine: Routine }): React.JSX.Element {
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const selectedId = useUiStore((state) => state.selectedRoutineId)
+  const setSelectedId = useUiStore((state) => state.setSelectedRoutineId)
+  const { save } = useUpdateRoutine()
+  const { runNow } = useRunRoutineNow()
+  const { remove } = useDeleteRoutine()
+
+  const toggle = (): void =>
+    save({
+      id: routine.id,
+      contactId: routine.contactId,
+      schedule: routine.schedule,
+      prompt: routine.prompt,
+      enabled: !routine.enabled
+    })
+
+  return (
+    <>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={toggle}>
+          {routine.enabled ? <Pause /> : <Play />}
+          {routine.enabled ? 'Pause' : 'Resume'}
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() =>
+            runNow(routine.id, (result) =>
+              toast(result.skipped ? `Skipped — ${result.skipped}` : 'Run started')
+            )
+          }
+        >
+          <Zap />
+          Run now
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" onClick={() => setConfirmingDelete(true)}>
+          <Trash2 />
+          Delete routine…
+        </ContextMenuItem>
+      </ContextMenuContent>
+
+      {confirmingDelete && (
+        <ConfirmDeleteDialog
+          open
+          onOpenChange={(next) => !next && setConfirmingDelete(false)}
+          title="Delete this routine?"
+          description="It stops firing immediately. The conversation it has been having with its contact is kept."
+          onConfirm={() =>
+            remove(routine.id, () => {
+              setConfirmingDelete(false)
+              if (selectedId === routine.id) setSelectedId(null)
+            })
+          }
+        />
+      )}
+    </>
+  )
+}
 
 export function RoutineList({ query }: { query: string }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedRoutineId)
@@ -61,11 +140,13 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
             key={routine.id}
             active={active}
             onSelect={() => setSelectedId(routine.id)}
+            contextMenu={<RoutineRowMenu routine={routine} />}
             leading={
               <span className="relative shrink-0">
                 <AvatarColorSwatch
                   name={persona?.name ?? 'Routine'}
                   color={persona?.avatarColor ?? 'var(--muted)'}
+                  seed={persona?.id}
                 />
                 {/* Disabled routines are dimmed rather than hidden — a routine
                     that exists but isn't running is worth seeing. */}

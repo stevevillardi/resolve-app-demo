@@ -30,14 +30,14 @@ describe('adapterConfig', () => {
     // Written from the claim rather than from the code: the property is "a
     // persona cannot read where this app keeps its credentials", and it is the
     // producer that was missing, not the guard.
-    expect(adapterConfig().denyReadPaths).toEqual([`${USER_DATA}/secrets`])
+    expect(adapterConfig('codex').denyReadPaths).toEqual([`${USER_DATA}/secrets`])
   })
 
   it('still injects the binary path and the backend environment', () => {
     // Guards the whole return value, not just the new field. Forgetting
     // codexBinaryPath works in dev and breaks only inside a packaged app,
     // which is the worst place to find out.
-    const config = adapterConfig()
+    const config = adapterConfig('codex')
     expect(config.codexBinaryPath).toBe('/usr/local/bin/codex')
     expect(config.env?.PATH).toBe(process.env.PATH)
   })
@@ -46,7 +46,9 @@ describe('adapterConfig', () => {
     // Codex's MCP config takes `bearer_token_env_var` and nothing else — no
     // header option exists — so this variable is the only door. Claude sends
     // the same token as an Authorization header and never reads it.
-    expect(adapterConfig({ needsGithubToken: true }).env?.[GITHUB_MCP_TOKEN_ENV]).toBe('gho_test')
+    expect(adapterConfig('codex', { needsGithubToken: true }).env?.[GITHUB_MCP_TOKEN_ENV]).toBe(
+      'gho_test'
+    )
   })
 
   it('withholds it from a session that was never granted the server', () => {
@@ -56,11 +58,11 @@ describe('adapterConfig', () => {
     // `echo $PERSONA_ROUTER_GITHUB_MCP_TOKEN` is allowed at workspace_write, so
     // every persona at that level could read the app's GitHub token out of its
     // own environment — including ones granted no MCP server at all.
-    expect(GITHUB_MCP_TOKEN_ENV in (adapterConfig().env ?? {})).toBe(false)
+    expect(GITHUB_MCP_TOKEN_ENV in (adapterConfig('codex').env ?? {})).toBe(false)
   })
 
   it('defaults closed, so a caller that forgets the flag leaks nothing', () => {
-    expect(adapterConfig({}).env?.[GITHUB_MCP_TOKEN_ENV]).toBeUndefined()
+    expect(adapterConfig('codex', {}).env?.[GITHUB_MCP_TOKEN_ENV]).toBeUndefined()
   })
 
   it('leaves the variable unset rather than empty when no account is connected', () => {
@@ -69,11 +71,22 @@ describe('adapterConfig', () => {
     // none at all.
     githubToken.value = null
     try {
-      expect(GITHUB_MCP_TOKEN_ENV in (adapterConfig({ needsGithubToken: true }).env ?? {})).toBe(
-        false
-      )
+      expect(
+        GITHUB_MCP_TOKEN_ENV in (adapterConfig('codex', { needsGithubToken: true }).env ?? {})
+      ).toBe(false)
     } finally {
       githubToken.value = 'gho_test'
     }
+  })
+})
+
+describe('backend scoping of the token variable', () => {
+  it('never puts the GitHub token in a Claude subprocess environment', () => {
+    // Claude receives the token as an Authorization header on the server
+    // config (github-mcp) and has no reader for this variable — an env var
+    // with no reader is pure blast radius. Doc 15 item 6.
+    expect(
+      GITHUB_MCP_TOKEN_ENV in (adapterConfig('claude', { needsGithubToken: true }).env ?? {})
+    ).toBe(false)
   })
 })

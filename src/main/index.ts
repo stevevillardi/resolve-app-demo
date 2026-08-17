@@ -1,15 +1,37 @@
-import { app, shell, BrowserWindow, nativeTheme } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  type MenuItemConstructorOptions
+} from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { buildAppMenuTemplate, DOCS_URL, type AppMenuItem } from './app-menu'
+import { installEditableFieldMenu } from './context-menu'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { beginQuit, isQuitting } from './lifecycle'
+import { onRunsChangedInMain } from './services/agent-events'
 import { nodeCronEngine } from './services/cron-engine'
 import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
 import { seedIfNeeded } from './services/seed'
 import { createTray, destroyTray, hasTray, refreshTrayMenu } from './tray'
+import { MENU_ACTION_CHANNEL, type MenuActionId } from '../shared/menu'
+
+// The display name, fixed before anything reads app.name — but userData is
+// pinned to its pre-rename value FIRST, because setName() moves what
+// getPath('userData') resolves to and the database already lives under the old
+// path (package.json `name` in dev, productName in a packaged build). Without
+// the pin, renaming the app would silently orphan every existing profile.
+// In dev the bold macOS app-menu title still says "Electron" regardless —
+// macOS reads the running bundle's Info.plist; see app-menu.ts.
+app.setPath('userData', app.getPath('userData'))
+app.setName('Persona Router')
 
 function createWindow(): void {
   // Create the browser window.
@@ -48,6 +70,8 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
+
+  installEditableFieldMenu(mainWindow)
 
   // Hide rather than close, so the app stays resident and its routines keep
   // firing with no window on screen (blueprint §15E). Reopening is then instant
@@ -107,6 +131,17 @@ app.whenReady().then(() => {
   // because not depending on one is the entire point of the phase.
   startScheduler(nodeCronEngine(), refreshTrayMenu)
   createTray(showMainWindow)
+  // The tray's "N turns running" line goes stale exactly when the run set
+  // changes, which is also the only time it is worth redrawing.
+  onRunsChangedInMain(refreshTrayMenu)
+
+  installApplicationMenu()
+
+  // Dev only: the dock otherwise shows Electron's own icon, since the running
+  // bundle is node_modules/electron. A packaged build carries build/icon.icns.
+  if (is.dev && process.platform === 'darwin') {
+    app.dock?.setIcon(nativeImage.createFromPath(icon))
+  }
 
   createWindow()
 
@@ -114,6 +149,44 @@ app.whenReady().then(() => {
     showMainWindow()
   })
 })
+
+/**
+ * Maps the pure template (app-menu.ts) onto Electron and installs it.
+ *
+ * App actions travel to the renderer over MENU_ACTION_CHANNEL — the state they
+ * open (the new-contact flow, settings, the palette) lives there. The window
+ * is shown first: with tray residency the app can be focused while its window
+ * is hidden, and a menu action that lands in a hidden window looks like a
+ * menu that does nothing.
+ */
+function installApplicationMenu(): void {
+  const sendAction = (action: MenuActionId): void => {
+    showMainWindow()
+    BrowserWindow.getAllWindows()
+      .find((window) => !window.isDestroyed())
+      ?.webContents.send(MENU_ACTION_CHANNEL, action)
+  }
+
+  const toMenuItem = (item: AppMenuItem): MenuItemConstructorOptions => {
+    const action = item.action
+    return {
+      ...(item.type ? { type: item.type } : {}),
+      ...(item.role ? { role: item.role } : {}),
+      ...(item.label ? { label: item.label } : {}),
+      ...(item.accelerator ? { accelerator: item.accelerator } : {}),
+      ...(action
+        ? {
+            click: () =>
+              action === 'open-docs' ? void shell.openExternal(DOCS_URL) : sendAction(action)
+          }
+        : {}),
+      ...(item.submenu ? { submenu: item.submenu.map(toMenuItem) } : {})
+    }
+  }
+
+  const template = buildAppMenuTemplate({ platform: process.platform, isDev: is.dev })
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template.map(toMenuItem)))
+}
 
 /**
  * Brings the window back, whether it was hidden or never created.

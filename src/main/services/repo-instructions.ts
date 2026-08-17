@@ -28,9 +28,12 @@ import { join } from 'path'
 export const REPO_INSTRUCTIONS_MAX_BYTES = 32 * 1024
 
 /**
- * Checked in this order, and the first hit wins rather than both being
- * concatenated. A repo that ships both is nearly always shipping the same
- * content twice for two different tools.
+ * Checked in this order. A repo shipping both with identical content — the
+ * common case, one file for each tool's convention — is read once and named by
+ * the first. Two files that genuinely differ are BOTH read, concatenated under
+ * headers (doc 15 item 6): the first-hit-wins rule this replaced silently
+ * dropped whichever file lost, and a repo whose two files disagree is exactly
+ * the repo whose second file matters.
  */
 const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const
 
@@ -89,6 +92,7 @@ export interface RepoSkill {
  * a deliberate omission, recorded in docs/plan/14-agent-capability-surface.md.
  */
 export function readRepoInstructions(workingPath: string): RepoInstructions | null {
+  const found: { fileName: string; path: string; raw: string }[] = []
   for (const fileName of INSTRUCTION_FILES) {
     const path = join(workingPath, fileName)
     let raw: string
@@ -98,15 +102,33 @@ export function readRepoInstructions(workingPath: string): RepoInstructions | nu
       continue
     }
     if (raw.trim() === '') continue
-
-    const truncated = Buffer.byteLength(raw, 'utf8') > REPO_INSTRUCTIONS_MAX_BYTES
-    const content = truncated
-      ? `${raw.slice(0, REPO_INSTRUCTIONS_MAX_BYTES)}\n\n[Truncated: ${fileName} is longer than ${REPO_INSTRUCTIONS_MAX_BYTES} bytes and was cut off here.]`
-      : raw
-
-    return { fileName, path, content, truncated }
+    found.push({ fileName, path, raw })
   }
-  return null
+
+  if (found.length === 0) return null
+
+  // Identical content shipped twice for two tools' conventions: one read,
+  // named by the preferred file.
+  const distinct =
+    found.length === 2 && found[0].raw.trim() === found[1].raw.trim() ? [found[0]] : found
+
+  const fileName = distinct.map((file) => file.fileName).join(' + ')
+  const raw =
+    distinct.length === 1
+      ? distinct[0].raw
+      : distinct.map((file) => `## ${file.fileName}\n\n${file.raw.trim()}`).join('\n\n')
+
+  // One shared cap, whether the text came from one file or two — the cap
+  // exists to protect the persona's own prompt, which does not care how many
+  // files the excess arrived in.
+  const truncated = Buffer.byteLength(raw, 'utf8') > REPO_INSTRUCTIONS_MAX_BYTES
+  const content = truncated
+    ? `${raw.slice(0, REPO_INSTRUCTIONS_MAX_BYTES)}\n\n[Truncated: ${fileName} is longer than ${REPO_INSTRUCTIONS_MAX_BYTES} bytes and was cut off here.]`
+    : raw
+
+  // `path` stays the first file's — it feeds the approval dialog, which shows
+  // `content` itself, so the path is a pointer rather than the evidence.
+  return { fileName, path: distinct[0].path, content, truncated }
 }
 
 /**

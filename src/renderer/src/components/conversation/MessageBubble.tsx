@@ -1,7 +1,14 @@
-import { AlertTriangle, RotateCw } from 'lucide-react'
+import { AlertTriangle, Copy, RotateCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { MarkdownMessage } from '@/components/markdown/MarkdownMessage'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { Button } from '@/components/ui/button'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
 import { StreamingIndicator } from './StreamingIndicator'
 import { ToolCallTimeline } from './ToolCallTimeline'
 import { formatTime } from '@/lib/format'
@@ -18,6 +25,8 @@ interface MessageBubbleProps {
   backend?: PersonaBackend
   senderName?: string
   senderColor?: string
+  /** The sending persona's id — seeds the bot avatar beside group replies. */
+  senderSeed?: string
   onRetry?: () => void
   /**
    * What the agent is doing right now, while `status` is `streaming` — the
@@ -41,6 +50,9 @@ const ERROR_TITLE: Record<MessageBubbleError['kind'], string> = {
   sandbox_denied: 'Blocked by sandbox',
   network: 'Network error',
   auth: 'Not signed in',
+  // Rare on screen: messaging.ts retries a dead resume key with a fresh
+  // session before letting this surface, so seeing it means even that failed.
+  session: "Couldn't resume this conversation",
   // The default classifyErrorMessage() result, so this is the common case
   // rather than a fallback nobody hits.
   unknown: "Couldn't complete this turn"
@@ -55,6 +67,7 @@ export function MessageBubble({
   backend = 'claude',
   senderName,
   senderColor,
+  senderSeed,
   onRetry,
   activity,
   toolCalls
@@ -103,6 +116,7 @@ export function MessageBubble({
           <AvatarColorSwatch
             name={senderName}
             color={senderColor ?? 'var(--muted-foreground)'}
+            seed={senderSeed}
             size="xs"
           />
           <span className="text-xs font-medium">{senderName}</span>
@@ -113,37 +127,64 @@ export function MessageBubble({
           )}
         </div>
       )}
-      <div
-        className={cn(
-          'max-w-[min(46rem,88%)] px-3.5 py-2.5 text-sm',
-          // Asymmetric corner: the bubble's inner-bottom corner tightens toward
-          // its author, which is what makes direction readable without a tail.
-          isOutbound
-            ? 'bg-bubble-outbound text-bubble-outbound-foreground rounded-[var(--radius-bubble)] rounded-br-md'
-            : 'bg-bubble-inbound text-bubble-inbound-foreground rounded-[var(--radius-bubble)] rounded-bl-md'
-        )}
-      >
-        {isOutbound ? (
-          <p className="whitespace-pre-wrap">{content}</p>
-        ) : (
-          <MarkdownMessage content={content} />
-        )}
-        {status === 'streaming' && (
-          <>
-            {/* Above the indicator: what has happened reads top-down, and what
-                is happening now stays last, where the eye already is. */}
-            <ToolCallTimeline
-              calls={toolCalls ?? []}
-              className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
-            />
-            <StreamingIndicator
-              backend={backend}
-              className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
-              activity={activity ?? undefined}
-            />
-          </>
-        )}
-      </div>
+      <ContextMenu>
+        <ContextMenuTrigger
+          render={
+            <div
+              className={cn(
+                'max-w-[min(46rem,88%)] px-3.5 py-2.5 text-sm',
+                // Asymmetric corner: the bubble's inner-bottom corner tightens toward
+                // its author, which is what makes direction readable without a tail.
+                isOutbound
+                  ? 'bg-bubble-outbound text-bubble-outbound-foreground rounded-[var(--radius-bubble)] rounded-br-md'
+                  : 'bg-bubble-inbound text-bubble-inbound-foreground rounded-[var(--radius-bubble)] rounded-bl-md'
+              )}
+            >
+              {/* History: the turn's persisted tool record, above the reply it
+                  produced — same reading order as the live stream, where the
+                  work scrolls past before the answer lands. */}
+              {!isOutbound && status === 'sent' && (toolCalls ?? []).length > 0 && (
+                <ToolCallTimeline calls={toolCalls ?? []} className="mb-2" />
+              )}
+              {isOutbound ? (
+                <p className="whitespace-pre-wrap">{content}</p>
+              ) : (
+                <MarkdownMessage content={content} />
+              )}
+              {status === 'streaming' && (
+                <>
+                  {/* Above the indicator: what has happened reads top-down, and what
+                      is happening now stays last, where the eye already is. */}
+                  <ToolCallTimeline
+                    calls={toolCalls ?? []}
+                    className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
+                  />
+                  <StreamingIndicator
+                    backend={backend}
+                    className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
+                    activity={activity ?? undefined}
+                  />
+                </>
+              )}
+            </div>
+          }
+        />
+        <ContextMenuContent>
+          {/* The whole message, not the DOM selection — "copy what this said"
+              is the request a bubble menu answers; partial copy stays with
+              ordinary text selection. Toasted because a clipboard write has no
+              visible effect of its own. */}
+          <ContextMenuItem
+            onClick={() => {
+              void navigator.clipboard.writeText(content)
+              toast('Copied')
+            }}
+          >
+            <Copy />
+            Copy text
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
       {isOutbound && timestamp !== undefined && (
         <span className="text-muted-foreground mr-1 font-mono text-micro tabular-nums">
           {formatTime(timestamp)}

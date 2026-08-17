@@ -4,10 +4,18 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { contacts, groupMessages, groups, personaTemplates, usageEvents } from '../db/schema'
+import {
+  contacts,
+  groupMessages,
+  groups,
+  personaTemplates,
+  toolCalls,
+  usageEvents
+} from '../db/schema'
 import {
   createTurnHarness,
   DEFAULT_USAGE as USAGE,
+  defaultScript,
   REPO,
   seedContact,
   seedPersona,
@@ -293,6 +301,100 @@ describe('session resumption', () => {
     await settle()
 
     expect(db.select().from(contacts).all()[0].backendSessionId).toBeNull()
+  })
+
+  // The self-heal path: a stored resume key the backend refuses (the persona's
+  // model/backend changed, or the vendor expired the thread) must not surface
+  // as a raw vendor error — the transcript is ours, so a fresh session loses
+  // nothing the user can see.
+  describe('a dead resume key', () => {
+    const deadResume: AgentEvent[] = [
+      {
+        type: 'error',
+        kind: 'session',
+        message: 'Failed to resume session from /rollouts/abc.jsonl'
+      },
+      { type: 'done', finalText: '', usage: null }
+    ]
+
+    function seedStaleSession(): void {
+      db.update(contacts).set({ backendSessionId: 'stale-session' }).run()
+    }
+
+    it('retries once with a fresh session and completes the turn', async () => {
+      seedStaleSession()
+      harness.scriptQueue = [deadResume, defaultScript()]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      // Attempt 1 resumed the dead key; attempt 2 started clean.
+      expect(harness.created.map((c) => c.resumedFrom)).toEqual(['stale-session', null])
+      expect(listMessages('contact-a').at(-1)?.content).toBe('Looks good.')
+      // The healed turn's fresh key replaces the dead one.
+      expect(db.select().from(contacts).all()[0].backendSessionId).toBe('session-abc')
+    })
+
+    it('does not forward the healed attempt error to the renderer', async () => {
+      seedStaleSession()
+      harness.scriptQueue = [deadResume, defaultScript()]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(emitted.filter(({ event }) => event.type === 'error')).toHaveLength(0)
+    })
+
+    it('gives up after one retry rather than looping', async () => {
+      seedStaleSession()
+      // Even the fresh session reports a session error — nothing left to shed.
+      harness.script = deadResume
+      harness.scriptQueue = [deadResume, deadResume]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(harness.created).toHaveLength(2)
+      // The second failure is real and must reach the renderer.
+      expect(
+        emitted.filter(({ event }) => event.type === 'error' && event.kind === 'session')
+      ).toHaveLength(1)
+    })
+
+    it('does not restart on a session error from a fresh session', async () => {
+      // No key to shed: there is nothing a retry would change.
+      harness.script = deadResume
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(harness.created).toHaveLength(1)
+      expect(emitted.filter(({ event }) => event.type === 'error')).toHaveLength(1)
+    })
+
+    it('does not restart on non-session errors', async () => {
+      seedStaleSession()
+      harness.script = [
+        { type: 'error', kind: 'rate_limit', message: 'Rate limit exceeded' },
+        { type: 'done', finalText: '', usage: null }
+      ]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(harness.created).toHaveLength(1)
+      expect(db.select().from(contacts).all()[0].backendSessionId).toBe('stale-session')
+    })
+
+    it('records usage exactly once for a healed turn', async () => {
+      seedStaleSession()
+      harness.scriptQueue = [deadResume, defaultScript()]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(db.select().from(usageEvents).all()).toHaveLength(1)
+    })
   })
 
   it('announces the spend so a view nobody subscribed to can refresh', async () => {
@@ -848,5 +950,69 @@ describe('the completion promise', () => {
     await completed
 
     expect(listActiveRuns()).toHaveLength(0)
+  })
+})
+
+describe('tool-call persistence', () => {
+  const TOOLED: AgentEvent[] = [
+    { type: 'session_started', sessionId: 'session-abc' },
+    { type: 'tool_start', toolCallId: 'call-1', name: 'Read', detail: 'src/auth.ts' },
+    { type: 'tool_end', toolCallId: 'call-1', name: 'Read', status: 'completed' },
+    { type: 'tool_start', toolCallId: 'call-2', name: 'Bash', detail: 'npm test' },
+    { type: 'tool_end', toolCallId: 'call-2', name: 'Bash', status: 'failed' },
+    { type: 'done', finalText: 'Checked.', usage: USAGE }
+  ]
+
+  it('records each call by name and outcome, stamped with the reply', async () => {
+    harness.script = TOOLED
+    sendMessage('contact-a', 'go')
+    await settle(30)
+
+    const rows = db.select().from(toolCalls).all()
+    expect(rows.map((row) => [row.name, row.status])).toEqual([
+      ['Read', 'completed'],
+      ['Bash', 'failed']
+    ])
+
+    const reply = listMessages('contact-a').find((message) => message.role === 'assistant')
+    expect(rows.every((row) => row.messageId === reply?.id)).toBe(true)
+  })
+
+  it('stores no arguments — the detail string never reaches the database', async () => {
+    // Doc 15 item 1, as decided: name and status only. The table has no
+    // column for it, and this pins that no other column smuggles it in.
+    harness.script = TOOLED
+    sendMessage('contact-a', 'go')
+    await settle(30)
+
+    for (const row of db.select().from(toolCalls).all()) {
+      expect(JSON.stringify(row)).not.toContain('src/auth.ts')
+      expect(JSON.stringify(row)).not.toContain('npm test')
+    }
+  })
+
+  it('leaves a call that never ended as running, with no message to claim it', async () => {
+    harness.script = [
+      { type: 'session_started', sessionId: 'session-abc' },
+      { type: 'tool_start', toolCallId: 'call-1', name: 'Bash', detail: 'sleep 999' },
+      // The turn dies without a tool_end and without a reply.
+      { type: 'done', finalText: '', usage: null }
+    ]
+    sendMessage('contact-a', 'go')
+    await settle(30)
+
+    const [row] = db.select().from(toolCalls).all()
+    expect(row.status).toBe('running')
+    expect(row.messageId).toBeNull()
+  })
+
+  it('dies with its contact', async () => {
+    harness.script = TOOLED
+    sendMessage('contact-a', 'go')
+    await settle(30)
+    expect(db.select().from(toolCalls).all().length).toBeGreaterThan(0)
+
+    db.delete(contacts).run()
+    expect(db.select().from(toolCalls).all()).toEqual([])
   })
 })

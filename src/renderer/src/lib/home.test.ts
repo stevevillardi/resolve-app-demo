@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { formatElapsed, recentActivity, spendWindow } from './home'
+import {
+  authBannerFor,
+  dailySpend,
+  formatElapsed,
+  formatUpcoming,
+  recentActivity,
+  spendWindow,
+  upcomingRuns
+} from './home'
 import type { Contact, PersistedMessage, PersonaTemplate, UsageEvent } from '@/types'
 
 /**
@@ -179,5 +187,109 @@ describe('formatElapsed', () => {
 
   it('never renders a negative age from a clock that moved', () => {
     expect(formatElapsed(10_000, 0)).toBe('0s')
+  })
+})
+
+describe('upcomingRuns', () => {
+  const runs = [
+    { routineId: 'b', prompt: 'Second', contactName: null, nextRun: 2_000 },
+    { routineId: 'c', prompt: 'Unarmed', contactName: null, nextRun: null },
+    { routineId: 'a', prompt: 'First', contactName: 'Reviewer · app', nextRun: 1_000 },
+    { routineId: 'd', prompt: 'Fourth', contactName: null, nextRun: 4_000 },
+    { routineId: 'e', prompt: 'Third', contactName: null, nextRun: 3_000 }
+  ]
+
+  it('sorts soonest first and caps at the limit', () => {
+    expect(upcomingRuns(runs, 3).map((run) => run.routineId)).toEqual(['a', 'b', 'e'])
+  })
+
+  it('drops routines the engine cannot time rather than showing "never"', () => {
+    // Home answers "what happens next"; a row that answers "nothing" belongs
+    // to the Routines section.
+    expect(upcomingRuns(runs, 10).some((run) => run.routineId === 'c')).toBe(false)
+  })
+})
+
+describe('formatUpcoming', () => {
+  const morning = Date.parse('2026-08-16T09:00:00')
+
+  it('is absolute and local, never a countdown', () => {
+    const formatted = formatUpcoming(Date.parse('2026-08-16T14:30:00'), morning)
+    expect(formatted).toMatch(/^today /)
+    expect(formatted).not.toMatch(/\bin\b|from now/)
+  })
+
+  it('reads a midnight rollover as tomorrow', () => {
+    const lateNow = Date.parse('2026-08-16T23:59:00')
+    expect(formatUpcoming(Date.parse('2026-08-17T00:01:00'), lateNow)).toMatch(/^tomorrow/)
+  })
+
+  it('names the day past tomorrow', () => {
+    expect(formatUpcoming(Date.parse('2026-08-24T09:00:00'), morning)).toMatch(/Mon/)
+  })
+})
+
+describe('authBannerFor', () => {
+  const healthy = {
+    claude: {},
+    codex: {},
+    github: { tokenState: 'good' as const }
+  }
+
+  it('is quiet when everything is fine, and when status has not loaded', () => {
+    expect(authBannerFor(healthy)).toBeNull()
+    expect(authBannerFor(undefined)).toBeNull()
+  })
+
+  it('flags a rejected GitHub token with the reconnect framing', () => {
+    const banner = authBannerFor({ ...healthy, github: { tokenState: 'rejected' } })
+    expect(banner?.kind).toBe('github')
+    expect(banner?.message).toMatch(/reconnect/i)
+  })
+
+  it('never mistakes offline for revoked', () => {
+    // 'unreachable' means the network failed, not the credential — a banner
+    // telling the user to reconnect a good token is the bug this pins.
+    expect(authBannerFor({ ...healthy, github: { tokenState: 'unreachable' } })).toBeNull()
+  })
+
+  it('surfaces a backend probe failure as a backend banner', () => {
+    const banner = authBannerFor({ ...healthy, codex: { error: 'the check timed out' } })
+    expect(banner?.kind).toBe('backend')
+    expect(banner?.message).toMatch(/timed out/)
+  })
+
+  it('ranks a rejected token above a probe failure', () => {
+    const banner = authBannerFor({
+      claude: { error: 'probe failed' },
+      codex: {},
+      github: { tokenState: 'rejected' as const }
+    })
+    expect(banner?.kind).toBe('github')
+  })
+})
+
+describe('dailySpend', () => {
+  const noon2 = Date.parse('2026-08-16T12:00:00')
+  const dayMs2 = 86_400_000
+
+  it('returns exactly the window, zero-filled, ending today', () => {
+    const points = dailySpend([usage(noon2 - dayMs2, 2), usage(noon2 - dayMs2, 3)], noon2, 7)
+
+    expect(points).toHaveLength(7)
+    // Yesterday's two events sum into one bucket; every other day is a real
+    // zero rather than a missing bar.
+    expect(points[5].cost).toBe(5)
+    expect(points.filter((point) => point.cost === 0)).toHaveLength(6)
+  })
+
+  it('counts an unpriced event as zero rather than dropping the day', () => {
+    const points = dailySpend([usage(noon2, null)], noon2, 7)
+    expect(points[6].cost).toBe(0)
+  })
+
+  it('excludes events older than the window', () => {
+    const points = dailySpend([usage(noon2 - 30 * dayMs2, 9)], noon2, 7)
+    expect(points.every((point) => point.cost === 0)).toBe(true)
   })
 })

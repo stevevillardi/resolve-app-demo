@@ -1,7 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { MessagesSquare } from 'lucide-react'
 import { ConversationListItem } from './ConversationListItem'
+import { ContactActionDialogs, ContactActionItems, type ContactDialogKind } from './ContactActions'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ContextMenuContent } from '@/components/ui/context-menu'
+import { botttsDataUri } from '@/lib/avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { useContacts, useGroups } from '@/hooks/useConversations'
@@ -13,7 +16,7 @@ import { useUiStore } from '@/store/useUiStore'
 import { previewLine, repoName } from '@/lib/format'
 import { usageForContact, usageForContacts } from '@/lib/usage'
 import { cn } from '@/lib/utils'
-import type { Contact, PersonaTemplate } from '@/types'
+import type { Contact, PersonaBackend, PersonaTemplate } from '@/types'
 
 /**
  * Every row is real as of Phase 6 — contacts and groups came in Phase 4, and
@@ -70,11 +73,60 @@ function GroupAvatarCluster({
           key={persona.id}
           // Three members: the first spans the top row, the other two split
           // the bottom — a filled tile, never an awkward gap.
-          className={cn(members.length === 3 && index === 0 && 'col-span-2')}
-          style={{ backgroundColor: persona.avatarColor }}
-        />
+          className={cn(
+            'flex items-center justify-center overflow-hidden',
+            members.length === 3 && index === 0 && 'col-span-2'
+          )}
+          style={{ backgroundColor: `color-mix(in srgb, ${persona.avatarColor} 16%, transparent)` }}
+        >
+          <img
+            src={botttsDataUri(persona.id, persona.avatarColor)}
+            alt=""
+            draggable={false}
+            className="size-full object-contain"
+          />
+        </span>
       ))}
     </span>
+  )
+}
+
+/**
+ * A contact row plus its right-click menu and that menu's dialogs.
+ *
+ * The row-level component exists because each row needs its own dialog state:
+ * the actions themselves are the same ContactActionItems the thread header's
+ * ⋯ menu renders, so right-clicking a conversation offers exactly what opening
+ * it would — without the detour.
+ */
+function ContactRow({
+  contact,
+  backend,
+  ...item
+}: Omit<React.ComponentProps<typeof ConversationListItem>, 'repoPath' | 'contextMenu'> & {
+  contact: Contact
+  backend: PersonaBackend
+}): React.JSX.Element {
+  const [dialog, setDialog] = useState<ContactDialogKind | null>(null)
+
+  return (
+    <>
+      <ConversationListItem
+        {...item}
+        repoPath={contact.repoPath}
+        contextMenu={
+          <ContextMenuContent>
+            <ContactActionItems kind="context" contactId={contact.id} onOpen={setDialog} />
+          </ContextMenuContent>
+        }
+      />
+      <ContactActionDialogs
+        contact={contact}
+        backend={backend}
+        open={dialog}
+        onClose={() => setDialog(null)}
+      />
+    </>
   )
 }
 
@@ -163,10 +215,11 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
         const persona = personaFor(contact.personaTemplateId)
         const latest = previewFor(contact.id)
         return (
-          <ConversationListItem
+          <ContactRow
             key={contact.id}
+            contact={contact}
+            backend={persona?.backend ?? 'claude'}
             name={persona?.name ?? contact.displayName}
-            repoPath={contact.repoPath}
             // previewLine strips the markdown an assistant reply is full of —
             // a row showing "## Findings" reads as a bug rather than a preview.
             preview={latest ? previewLine(latest.content) : 'No messages yet'}
@@ -179,6 +232,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
               <AvatarColorSwatch
                 name={persona?.name ?? contact.displayName}
                 color={persona?.avatarColor ?? 'var(--muted)'}
+                seed={persona?.id}
               />
             }
           />

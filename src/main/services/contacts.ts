@@ -6,6 +6,7 @@ import { toContact } from '../db/mappers'
 import { contacts, personaTemplates } from '../db/schema'
 import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
+import { activeRuns } from './run-lock'
 import { plannedWorktree } from './worktrees'
 import { defaultIsolation } from '../../shared/domain'
 import type { Contact, ContactDraft, RepoTrust } from '../../shared/domain'
@@ -201,4 +202,59 @@ export function setBackendSessionId(id: string, backendSessionId: string): void 
     .run()
 
   if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+}
+
+/**
+ * Moves a Contact to another persona (Phase 17).
+ *
+ * The one binding change that can be made safe, so it is. What makes repoPath
+ * immutable — the Group key, the run-lock key, a checkout on disk — does not
+ * apply here: nothing on disk is keyed by the persona, and the only stale
+ * thing a rebind leaves behind is the resume key, which is cleared in the same
+ * transaction (the new persona may live on the other backend, and a session id
+ * is an index into one SDK's storage). History, worktree and spend all stay.
+ *
+ * Refused while a turn is running: rebinding under a live stream would change
+ * who is speaking mid-sentence, and the finishing turn would then write its
+ * session id onto a contact that no longer means the same thing.
+ */
+export function rebindContactPersona(id: string, personaTemplateId: string): Contact {
+  const db = initDb()
+  const contact = getContact(id)
+  if (!contact) throw new Error(`No such contact: ${id}`)
+
+  if (activeRuns().some((run) => run.contactId === id)) {
+    throw new Error(
+      'This contact is working right now. Wait for the turn to finish, or stop it first.'
+    )
+  }
+
+  const persona = db
+    .select()
+    .from(personaTemplates)
+    .where(eq(personaTemplates.id, personaTemplateId))
+    .get()
+  if (!persona) throw new Error(`No such persona: ${personaTemplateId}`)
+
+  db.transaction((tx) => {
+    tx.update(contacts)
+      .set({ personaTemplateId, backendSessionId: null })
+      .where(eq(contacts.id, id))
+      .run()
+  })
+
+  return getContact(id) as Contact
+}
+
+/**
+ * Forgets the resume key, so the next turn starts a fresh backend session.
+ *
+ * The transcript lives in this database, not in the vendor's session storage —
+ * so clearing this loses nothing the user can see, only the backend's working
+ * memory of the thread. Called when the key is known to be dead (the backend
+ * refused to resume it) or about to be (the persona is moving to a backend
+ * that has never heard of it).
+ */
+export function clearBackendSessionId(id: string): void {
+  initDb().update(contacts).set({ backendSessionId: null }).where(eq(contacts.id, id)).run()
 }

@@ -2,6 +2,7 @@ import { app, Menu, nativeImage, Tray } from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import trayIcon1x from '../../resources/trayTemplate.png?asset'
 import trayIcon2x from '../../resources/trayTemplate@2x.png?asset'
+import { listActiveRuns } from './services/messaging'
 import { nextRuns } from './services/scheduler'
 import { buildTrayMenu, type TrayMenuItem } from './tray-menu'
 
@@ -40,14 +41,25 @@ export function createTray(onShow: () => void): void {
  * Rebuilds the menu from current state.
  *
  * `Menu.buildFromTemplate` is a snapshot, so `setContextMenu` has to be called
- * again for anything to change. Two things trigger it — a schedule changing and
- * a routine finishing — which between them cover everything the menu displays.
- * Times are absolute (see tray-menu.ts), so there is no clock to keep up with.
+ * again for anything to change. Three things trigger it — a schedule changing,
+ * a routine finishing, and the set of in-flight turns changing (registered in
+ * index.ts via onRunsChangedInMain) — which between them cover everything the
+ * menu displays. Times are absolute (see tray-menu.ts), so there is no clock
+ * to keep up with.
  */
 export function refreshTrayMenu(): void {
   if (!tray) return
 
-  tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenu(nextRuns()).map(toMenuItem)))
+  const runningTurns = listActiveRuns().length
+  tray.setContextMenu(
+    Menu.buildFromTemplate(buildTrayMenu(nextRuns(), { runningTurns }).map(toMenuItem))
+  )
+  // The count beside the icon, macOS only — the one glanceable "agents are
+  // working" signal that survives the window being hidden. Cleared, not '0':
+  // a zero in the menu bar reads as a badge stuck on nothing.
+  if (process.platform === 'darwin') {
+    tray.setTitle(runningTurns > 0 ? String(runningTurns) : '')
+  }
 }
 
 /**
@@ -68,8 +80,11 @@ export function destroyTray(): void {
 }
 
 function toMenuItem(item: TrayMenuItem): Electron.MenuItemConstructorOptions {
+  if (item.id === 'separator') return { type: 'separator' }
   if (item.id === 'header') return { label: item.label, enabled: false }
   if (item.id === 'show') return { label: item.label, click: () => showWindow?.() }
+  // "N turns running" is an invitation to look, so clicking it is Show.
+  if (item.id === 'running') return { label: item.label, click: () => showWindow?.() }
   if (item.id === 'quit') return { label: item.label, click: () => app.quit() }
   return { label: item.label, enabled: false }
 }

@@ -23,11 +23,13 @@ const {
   createContact,
   getContact,
   listContacts,
+  rebindContactPersona,
   renameContact,
   setBackendSessionId,
   setRepoTrust
 } = await import('./contacts')
 const { ensureGroupForRepo, listGroups } = await import('./groups')
+const { acquire, resetRunLocks } = await import('./run-lock')
 
 const PERSONA_ID = 'persona-1'
 
@@ -44,6 +46,7 @@ function draft(
 
 beforeEach(() => {
   db = createTestDb()
+  resetRunLocks()
   db.insert(personaTemplates)
     .values({
       id: PERSONA_ID,
@@ -342,5 +345,79 @@ describe('repo trust', () => {
     expect(() => setRepoTrust('nope', { instructions: true, skills: [] })).toThrow(
       /No such contact/
     )
+  })
+})
+
+describe('rebindPersona', () => {
+  const OTHER_PERSONA = 'persona-2'
+
+  function seedOtherPersona(): void {
+    db.insert(personaTemplates)
+      .values({
+        id: OTHER_PERSONA,
+        name: 'Refactor Buddy',
+        avatarColor: '#eb6834',
+        backend: 'codex',
+        systemPrompt: '',
+        skillIds: [],
+        sandbox: 'workspace_write',
+        githubScope: 'open_pr'
+      })
+      .run()
+  }
+
+  it('moves the binding and clears the resume key, and nothing else', () => {
+    seedOtherPersona()
+    const contact = createContact({
+      personaTemplateId: PERSONA_ID,
+      repoPath: '~/code/app',
+      displayName: 'Code Reviewer · app',
+      isolation: 'worktree'
+    })
+    setBackendSessionId(contact.id, 'session-abc123')
+    const before = getContact(contact.id) as Contact
+
+    const after = rebindContactPersona(contact.id, OTHER_PERSONA)
+
+    // The whole row, not two fields: repoPath, worktreePath, branch and the
+    // display name are all load-bearing and must survive the rebind.
+    expect(after).toEqual({
+      ...before,
+      personaTemplateId: OTHER_PERSONA,
+      backendSessionId: null
+    })
+  })
+
+  it('refuses while a turn is running for this contact', () => {
+    seedOtherPersona()
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    const release = acquire({
+      runId: 'run-1',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'shared',
+      startedAt: 0
+    })
+
+    expect(() => rebindContactPersona(contact.id, OTHER_PERSONA)).toThrow(/working right now/)
+    // Untouched on refusal.
+    expect(getContact(contact.id)?.personaTemplateId).toBe(PERSONA_ID)
+
+    release?.()
+    expect(rebindContactPersona(contact.id, OTHER_PERSONA).personaTemplateId).toBe(OTHER_PERSONA)
+  })
+
+  it('rejects an unknown persona without touching the contact', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setBackendSessionId(contact.id, 'session-abc123')
+
+    expect(() => rebindContactPersona(contact.id, 'persona-invented')).toThrow(/No such persona/)
+    expect(getContact(contact.id)?.backendSessionId).toBe('session-abc123')
+  })
+
+  it('rejects an unknown contact', () => {
+    seedOtherPersona()
+    expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/No such contact/)
   })
 })

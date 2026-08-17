@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
 import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
 import { SplashScreen } from '@/components/launch/SplashScreen'
+import { Toaster } from '@/components/ui/sonner'
 import { useAuthStatus } from '@/hooks/useAuth'
 
 /**
@@ -54,6 +55,8 @@ function App(): React.JSX.Element {
           onRetry={isError ? () => void refetch() : undefined}
         />
       )}
+
+      <Toaster />
     </>
   )
 }

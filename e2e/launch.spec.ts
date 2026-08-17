@@ -206,9 +206,48 @@ test.describe('persistence', () => {
 })
 
 test.describe('completing onboarding', () => {
-  test('persists across a relaunch and lands in the shell', async () => {
-    await invoke(launched.window, 'auth.completeOnboarding')
+  test('walks the chooser: picks land, deselections land, guarded rows hold', async () => {
+    const { window } = launched
 
+    // The label depends on whether any backend happens to be reachable from
+    // this machine (a real Claude CLI login is reused even under the fixture
+    // HOME), so accept both phrasings of the same button.
+    await window.getByRole('button', { name: /^Continue( without connecting)?$/ }).click()
+
+    // Personas step. Defaults are the recommended tier; refine both ways —
+    // drop one recommended persona, add one optional one.
+    await expect(window.getByRole('checkbox', { name: /Docs Writer/ })).toBeVisible()
+    await window.getByRole('checkbox', { name: /Docs Writer/ }).click()
+    await window.getByRole('checkbox', { name: /Bug Hunter/ }).click()
+    await window.getByRole('button', { name: 'Continue', exact: true }).click()
+
+    // Skills step. Bug Hunter needs Review Etiquette, so its row is locked on
+    // and says who wants it. skill-api-design was deleted earlier in this
+    // spec; deselect it here so the walk respects that earlier decision.
+    await expect(window.getByText(/Needed by Bug Hunter/)).toBeVisible()
+    const apiDesign = window.getByRole('checkbox', { name: /API Design/ })
+    if (await apiDesign.getAttribute('aria-checked').then((v) => v === 'true')) {
+      await apiDesign.click()
+    }
+    await window.getByRole('button', { name: 'Finish setup' }).click()
+
+    await waitForShell(window)
+
+    const personas = await invoke<{ id: string; name: string }[]>(window, 'personas.list')
+    const personaIds = personas.map((persona) => persona.id)
+    expect(personaIds).toContain('persona-bug-hunter')
+    expect(personaIds).toContain('persona-code-reviewer')
+    expect(personaIds).not.toContain('persona-docs-writer')
+    // The user-created persona from the earlier test is not catalog content
+    // and must be untouchable by the picker.
+    expect(personas.some((persona) => persona.name === 'Bound Persona')).toBe(true)
+
+    const skills = await invoke<{ id: string }[]>(window, 'skills.list')
+    expect(skills.map((skill) => skill.id)).toContain('skill-review-etiquette')
+    expect(skills.map((skill) => skill.id)).not.toContain('skill-api-design')
+  })
+
+  test('persists across a relaunch and lands in the shell', async () => {
     // Relaunch against the same profile — the returning-user path.
     await launched.app.close()
     launched = await launchApp(profile)

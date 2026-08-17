@@ -51,6 +51,13 @@ interface SpecLike {
 export interface TurnHarness {
   /** Events the fake adapter yields, per run. Reassign to change a turn. */
   script: AgentEvent[]
+  /**
+   * Scripts consumed one per `run()` call, ahead of `script`. Lets a test give
+   * a turn's *retry* different events from its first attempt — the self-heal
+   * path re-enters run() inside a single logical turn, where reassigning
+   * `script` between attempts is impossible.
+   */
+  scriptQueue: AgentEvent[][]
   /** Set to make the adapter throw instead of yielding — the escaped-error path. */
   throwOnRun: Error | null
   /** Blocks the stream so a turn can be observed mid-flight. */
@@ -84,6 +91,7 @@ export function defaultScript(): AgentEvent[] {
 export function createTurnHarness(): TurnHarness {
   const harness: TurnHarness = {
     script: defaultScript(),
+    scriptQueue: [],
     throwOnRun: null,
     gate: null,
     sessionIdToReport: 'session-abc',
@@ -92,6 +100,7 @@ export function createTurnHarness(): TurnHarness {
     adapter: null,
     reset() {
       harness.script = defaultScript()
+      harness.scriptQueue = []
       harness.throwOnRun = null
       harness.gate = null
       harness.sessionIdToReport = 'session-abc'
@@ -139,7 +148,8 @@ export function createTurnHarness(): TurnHarness {
       harness.lastSignal = signal ?? null
       if (harness.throwOnRun) throw harness.throwOnRun
 
-      for (const event of harness.script) {
+      const script = harness.scriptQueue.shift() ?? harness.script
+      for (const event of script) {
         if (harness.gate) await harness.gate.promise
         // Mirrors the real adapters: the resume key is filled in mid-stream,
         // not known up front.

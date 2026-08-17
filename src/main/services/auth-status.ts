@@ -14,7 +14,7 @@ export async function getAuthStatus(forceRefresh = false): Promise<AuthStatus> {
   const claude = await getClaudeAuthStatus(forceRefresh)
   return {
     claude,
-    codex: getCodexAuthStatus(),
+    codex: getCodexAuthStatus(forceRefresh),
     github: getGitHubStatus(),
     onboardingCompleted: getAppStateFlag('onboarding_completed'),
     secretStorageAvailable: isSecretStorageAvailable()

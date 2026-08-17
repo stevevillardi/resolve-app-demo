@@ -193,6 +193,38 @@ export const messages = sqliteTable(
   (table) => [index('messages_contact_timestamp_idx').on(table.contactId, table.timestamp)]
 )
 
+/**
+ * The durable record of what a turn *called* (Phase 17, doc 15 item 1).
+ *
+ * Name and status only, by decision — never arguments, output, or the
+ * `detail` string the live stream shows: those carry issue titles, file paths
+ * and command lines that have no business living in SQLite forever. The live
+ * timeline stays event-driven and richer; these rows exist for the reload and
+ * the morning after an unattended routine, when "what did it actually touch"
+ * otherwise has no answer at all.
+ *
+ * `messageId` is stamped when the turn's assistant message is written; a row
+ * still `running` with a null messageId is a turn that died mid-call, and the
+ * renderer says "interrupted" rather than pretending it finished. Rows die
+ * with their contact, like messages.
+ */
+export const toolCalls = sqliteTable(
+  'tool_calls',
+  {
+    id: text('id').primaryKey(),
+    contactId: text('contact_id')
+      .notNull()
+      .references(() => contacts.id, { onDelete: 'cascade' }),
+    messageId: text('message_id').references(() => messages.id, { onDelete: 'cascade' }),
+    /** The backend's per-turn call id — unique within a turn, not globally. */
+    toolCallId: text('tool_call_id').notNull(),
+    name: text('name').notNull(),
+    status: text('status', { enum: ['running', 'completed', 'failed'] }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull()
+  },
+  (table) => [index('tool_calls_contact_created_idx').on(table.contactId, table.createdAt)]
+)
+
 export const routines = sqliteTable(
   'routines',
   {

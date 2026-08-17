@@ -102,6 +102,36 @@ test('binding a contact to a real repo creates its group', async () => {
   await expect(invoke(window, 'messages.list', { contactId: contact.id })).resolves.toEqual([])
 })
 
+test('right-clicking a conversation row offers the contact actions', async () => {
+  const { window } = launched
+
+  // Everything before this drove the bridge under the onboarding screen; this
+  // one needs the shell, so leave onboarding through its skip affordance.
+  await window.getByRole('button', { name: 'Skip setup for now' }).click()
+
+  // The contact bound in the previous test gives the list its first row.
+  await window.getByRole('button', { name: 'Chats', exact: true }).click()
+  const row = window.locator('[data-testid="list-row"]').first()
+  await expect(row).toBeVisible()
+
+  await row.click({ button: 'right' })
+
+  // The same verbs the thread header's ⋯ menu offers — shared item source.
+  const menu = window.locator('[data-slot="context-menu-content"]')
+  await expect(menu).toBeVisible()
+  await expect(menu.getByText('Rename…')).toBeVisible()
+  await expect(menu.getByText('Delete contact…')).toBeVisible()
+
+  // Right-click must not select: selection would swap the detail pane under
+  // the menu the user just opened. ListRow's own data-active is React-rendered
+  // with a literal "true"/"false" value (unlike Base UI's valueless variant),
+  // so equality — not presence — is the assertion here.
+  await expect(window.locator('[data-testid="list-row"][data-active="true"]')).toHaveCount(0)
+
+  await window.keyboard.press('Escape')
+  await expect(menu).toBeHidden()
+})
+
 test('a persona can be pointed at a specific model and it persists', async () => {
   const { window } = launched
 

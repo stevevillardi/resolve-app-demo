@@ -173,6 +173,34 @@ export function useRenameContact(): {
 }
 
 /**
+ * Moves a contact to another persona (Phase 17). Invalidates broadly: the
+ * conversation list shows the persona's name and avatar, the routine editor's
+ * "Runs as" rows show it too, and the context panel's whole answer changes.
+ */
+export function useRebindPersona(): {
+  rebind: (id: string, personaTemplateId: string, onDone?: () => void) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: ({ id, personaTemplateId }: { id: string; personaTemplateId: string }) =>
+      callProcedure('contacts.rebindPersona', { id, personaTemplateId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+      void queryClient.invalidateQueries({ queryKey: routinesKey })
+    }
+  })
+
+  return {
+    rebind: (id, personaTemplateId, onDone) =>
+      mutation.mutate({ id, personaTemplateId }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
  * Deletes a contact, its thread and its worktree.
  *
  * Invalidates well beyond contacts, because the cascade reaches further than

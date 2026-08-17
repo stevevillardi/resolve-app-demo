@@ -86,6 +86,7 @@ export function CommandPalette(): React.JSX.Element {
           <AvatarColorSwatch
             name={persona?.name ?? contact.displayName}
             color={persona?.avatarColor ?? 'var(--muted)'}
+            seed={persona?.id}
             size="xs"
           />
           <span className="truncate">{persona?.name ?? contact.displayName}</span>
@@ -137,7 +138,12 @@ export function CommandPalette(): React.JSX.Element {
       render.set(
         id,
         <>
-          <AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="xs" />
+          <AvatarColorSwatch
+            name={persona.name}
+            color={persona.avatarColor}
+            seed={persona.id}
+            size="xs"
+          />
           <span className="truncate">{persona.name}</span>
           {/* The scope chips travel with the persona everywhere else in the
               app; dropping them here would make the palette the one place a

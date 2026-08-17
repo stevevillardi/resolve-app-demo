@@ -7,7 +7,8 @@ import {
   listRoutines,
   updateRoutine
 } from '../../services/routines'
-import { fireRoutine, syncSchedules } from '../../services/scheduler'
+import { fireRoutine, nextRuns, syncSchedules } from '../../services/scheduler'
+import { getContact } from '../../services/contacts'
 
 /**
  * Routine CRUD, validation, and the manual trigger (blueprint §7).
@@ -40,6 +41,17 @@ registerProcedure('routines.delete', ({ id }) => {
   deleteRoutine(id)
   syncSchedules()
   return { deleted: true }
+})
+
+registerProcedure('routines.nextRuns', () => {
+  // Joined here rather than in the scheduler: nextRuns() serves the tray too,
+  // and the tray deliberately shows prompts, not contacts.
+  const contactIdByRoutine = new Map(listRoutines().map((r) => [r.id, r.contactId]))
+  return nextRuns().map((run) => {
+    const contactId = contactIdByRoutine.get(run.routineId)
+    const contact = contactId ? getContact(contactId) : null
+    return { ...run, contactName: contact?.displayName ?? null }
+  })
 })
 
 registerProcedure('routines.validateSchedule', ({ schedule }) => {

@@ -125,10 +125,13 @@ function BreakdownRows({
 
   return (
     <div className="flex flex-col gap-2.5">
+      {/* The name shares the flexible width with the bar (1:2) instead of the
+          old fixed 112px, which truncated names at any pane width. The numeric
+          columns stay fixed — tabular figures want a constant column. */}
       <div className="text-muted-foreground flex items-center gap-2.5 text-micro font-medium tracking-wide uppercase">
         <span className="size-5 shrink-0" aria-hidden />
-        <span className="w-28 shrink-0">Name</span>
-        <span className="min-w-0 flex-1" aria-hidden />
+        <span className="min-w-24 flex-[1_1_6rem]">Name</span>
+        <span className="min-w-16 flex-[2_1_4rem]" aria-hidden />
         <span className="w-16 shrink-0 text-right">Tokens</span>
         <span className="w-16 shrink-0 text-right">Spend</span>
       </div>
@@ -137,10 +140,10 @@ function BreakdownRows({
         return (
           <div key={row.key} className="flex items-center gap-2.5">
             <AvatarColorSwatch name={row.label} color={colorOf(row, index)} size="xs" />
-            <span className="w-28 shrink-0 truncate text-xs" title={row.label}>
+            <span className="min-w-24 flex-[1_1_6rem] truncate text-xs" title={row.label}>
               {row.label}
             </span>
-            <div className="bg-muted h-2 min-w-0 flex-1 overflow-hidden rounded-full">
+            <div className="bg-muted h-2 min-w-16 flex-[2_1_4rem] overflow-hidden rounded-full">
               <div
                 className="h-full rounded-full"
                 style={{
