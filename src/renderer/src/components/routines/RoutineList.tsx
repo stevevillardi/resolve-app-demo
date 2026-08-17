@@ -43,7 +43,8 @@ function RoutineRowMenu({ routine }: { routine: Routine }): React.JSX.Element {
       contactId: routine.contactId,
       schedule: routine.schedule,
       prompt: routine.prompt,
-      enabled: !routine.enabled
+      enabled: !routine.enabled,
+      monthlyBudgetUsd: routine.monthlyBudgetUsd
     })
 
   return (
@@ -175,6 +176,18 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
                     : 'Never run'
                   : 'Paused'}
               </span>
+              {/* Outstanding misses, in the warning register rather than the
+                  destructive one — nothing failed, something silently didn't
+                  happen. Cleared by any attempt, so a healthy routine never
+                  shows this line. */}
+              {routine.missedRunCount > 0 && (
+                <span className="text-scope-elevated mt-0.5 block text-meta">
+                  Missed{' '}
+                  {routine.missedRunCount === 1
+                    ? '1 scheduled run'
+                    : `${routine.missedRunCount} scheduled runs`}
+                </span>
+              )}
             </span>
           </ListRow>
         )

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   authBannerFor,
+  budgetBannerFor,
   dailySpend,
   formatElapsed,
   formatUpcoming,
+  missedRuns,
   recentActivity,
   spendWindow,
   upcomingRuns
@@ -28,7 +30,8 @@ function contact(id: string, personaTemplateId: string, repoPath: string): Conta
     worktreePath: null,
     branch: null,
     isolation: 'shared',
-    repoTrust: null
+    repoTrust: null,
+    lastReadAt: null
   }
 }
 
@@ -291,5 +294,136 @@ describe('dailySpend', () => {
   it('excludes events older than the window', () => {
     const points = dailySpend([usage(noon2 - 30 * dayMs2, 9)], noon2, 7)
     expect(points.every((point) => point.cost === 0)).toBe(true)
+  })
+})
+
+describe('missedRuns', () => {
+  function routine(
+    id: string,
+    contactId: string,
+    missedRunCount: number,
+    lastMissedAt: number | null
+  ): {
+    id: string
+    contactId: string
+    prompt: string
+    missedRunCount: number
+    lastMissedAt: number | null
+  } {
+    return { id, contactId, prompt: `prompt-${id}`, missedRunCount, lastMissedAt }
+  }
+
+  const CONTACTS = [contact('c1', 'p1', '~/code/app')]
+
+  it('lists only routines currently carrying a miss', () => {
+    const rows = missedRuns(
+      [routine('r1', 'c1', 0, null), routine('r2', 'c1', 2, 2_000)],
+      CONTACTS,
+      5
+    )
+
+    expect(rows.map((row) => row.routineId)).toEqual(['r2'])
+    expect(rows[0].count).toBe(2)
+  })
+
+  it('orders by most recent miss and honours the limit', () => {
+    const rows = missedRuns(
+      [routine('r1', 'c1', 1, 1_000), routine('r2', 'c1', 1, 3_000), routine('r3', 'c1', 1, 2_000)],
+      CONTACTS,
+      2
+    )
+
+    expect(rows.map((row) => row.routineId)).toEqual(['r2', 'r3'])
+  })
+
+  it('joins the contact name, and keeps the row when the contact is gone', () => {
+    // A missing contact should cascade the routine away entirely, so seeing
+    // this combination means something is wrong — hiding the row would be the
+    // wrong way to say so.
+    const rows = missedRuns(
+      [routine('r1', 'c1', 1, 1_000), routine('r2', 'c-gone', 1, 2_000)],
+      CONTACTS,
+      5
+    )
+
+    expect(rows.find((row) => row.routineId === 'r1')?.contactName).toBe('c1 · ~/code/app')
+    expect(rows.find((row) => row.routineId === 'r2')?.contactName).toBeNull()
+  })
+
+  it('drops a count with no stamp rather than inventing a time', () => {
+    expect(missedRuns([routine('r1', 'c1', 3, null)], CONTACTS, 5)).toEqual([])
+  })
+})
+
+describe('budgetBannerFor', () => {
+  const NOW = new Date('2026-08-17T12:00:00').getTime()
+  const LAST_MONTH = new Date('2026-07-20T12:00:00').getTime()
+
+  function routineWithBudget(
+    id: string,
+    monthlyBudgetUsd: number | null
+  ): Parameters<typeof budgetBannerFor>[2][number] {
+    return {
+      id,
+      contactId: 'c1',
+      schedule: '0 9 * * *',
+      prompt: `prompt for ${id}`,
+      enabled: true,
+      lastRunAt: null,
+      lastRunSummary: null,
+      missedRunCount: 0,
+      lastMissedAt: null,
+      monthlyBudgetUsd
+    }
+  }
+
+  function priced(timestamp: number, costUsd: number | null, routineId?: string): UsageEvent {
+    return { ...usage(timestamp, costUsd), ...(routineId ? { routineId } : {}) }
+  }
+
+  it('is null with no budgets configured', () => {
+    expect(budgetBannerFor([priced(NOW - 1000, 100)], null, [], NOW)).toBeNull()
+  })
+
+  it('banners an app-level crossing, counting only this month', () => {
+    const result = budgetBannerFor([priced(LAST_MONTH, 100), priced(NOW - 1000, 6)], 5, [], NOW)
+
+    expect(result?.scopeLabel).toBe('Switchboard')
+    expect(result?.message).toContain('$6.00 of its $5.00')
+  })
+
+  it('stays quiet under the threshold', () => {
+    expect(budgetBannerFor([priced(NOW - 1000, 4.99)], 5, [], NOW)).toBeNull()
+  })
+
+  // The dashboard's honesty rule in banner form: with unpriced turns the
+  // figure is a floor, and an all-unpriced month never banners at all.
+  it('says "at least" with unpriced turns present, and never banners all-unpriced', () => {
+    const mixed = budgetBannerFor([priced(NOW - 2000, 6), priced(NOW - 1000, null)], 5, [], NOW)
+    expect(mixed?.message).toContain('at least $6.00')
+
+    expect(budgetBannerFor([priced(NOW - 1000, null)], 5, [], NOW)).toBeNull()
+  })
+
+  it("banners a routine crossing on that routine's own spend only", () => {
+    const result = budgetBannerFor(
+      [priced(NOW - 2000, 3, 'r1'), priced(NOW - 1000, 50)],
+      null,
+      [routineWithBudget('r1', 2)],
+      NOW
+    )
+
+    expect(result?.scopeLabel).toContain('prompt for r1')
+  })
+
+  it('shows one banner — the worst overage — when several scopes crossed', () => {
+    const result = budgetBannerFor(
+      [priced(NOW - 2000, 10, 'r1'), priced(NOW - 1000, 2)],
+      10, // app floor 12 / 10 = 1.2x
+      [routineWithBudget('r1', 2)], // routine floor 10 / 2 = 5x
+      NOW
+    )
+
+    expect(result?.scopeLabel).toContain('prompt for r1')
   })
 })

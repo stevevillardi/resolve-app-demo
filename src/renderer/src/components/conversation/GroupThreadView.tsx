@@ -6,6 +6,7 @@ import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
+import { UnreadSeparator } from './UnreadSeparator'
 import { MessageBubble } from './MessageBubble'
 import { JournalNotice } from './JournalNotice'
 import { BranchRequestNotice } from './BranchRequestNotice'
@@ -19,6 +20,8 @@ import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useAgentStreams, useGroupMessages, useMentionInGroup } from '@/hooks/useGroupMessages'
 import { useCancelRun } from '@/hooks/useMessages'
+import { useMarkRead } from '@/hooks/useUnread'
+import { firstUnreadIndex } from '@/lib/unread'
 import { useRunStore } from '@/store/useRunStore'
 import { useUiStore } from '@/store/useUiStore'
 import type { Contact, GroupMessage, PersonaTemplate } from '@/types'
@@ -166,6 +169,22 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
   const contentRef = useRef<HTMLDivElement>(null)
   const streamed = live?.turn ? streamText(live.turn.stream) : ''
 
+  // Same boundary-at-open capture and read-on-open/arrival contract as
+  // ThreadView — see the comments there.
+  const [boundary, setBoundary] = useState<{ id: string; at: number | null } | null>(null)
+  if (group && boundary?.id !== groupId) {
+    setBoundary({ id: groupId, at: group.lastReadAt })
+  }
+  const unreadIndex = firstUnreadIndex(thread, boundary?.id === groupId ? boundary.at : null)
+
+  const { markGroupRead } = useMarkRead()
+  const lastMessageAt = thread.length > 0 ? thread[thread.length - 1].timestamp : null
+  const groupLoaded = group !== undefined
+  useEffect(() => {
+    if (!groupLoaded) return
+    markGroupRead(groupId)
+  }, [groupId, groupLoaded, lastMessageAt, markGroupRead])
+
   useEffect(() => {
     // Base UI's ScrollArea does not forward a ref to its viewport, so the
     // scrollable element has to be found from a child. Same workaround as
@@ -251,6 +270,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               return (
                 <Fragment key={message.id}>
                   {newDay && <DaySeparator timestamp={message.timestamp} />}
+                  {index === unreadIndex && <UnreadSeparator />}
                   <GroupEntry
                     message={message}
                     personaFor={personaFor}

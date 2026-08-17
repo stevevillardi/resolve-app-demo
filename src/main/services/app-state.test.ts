@@ -16,8 +16,15 @@ let db: AppDatabase
 
 vi.mock('../db', () => ({ initDb: () => db }))
 
-const { getAppState, setAppState, deleteAppState, getAppStateFlag, setAppStateFlag } =
-  await import('./app-state')
+const {
+  getAppState,
+  setAppState,
+  deleteAppState,
+  getAppStateFlag,
+  getAppStateNumber,
+  setAppStateFlag,
+  setAppStateNumber
+} = await import('./app-state')
 
 beforeEach(() => {
   db = createTestDb()
@@ -83,5 +90,23 @@ describe('flags', () => {
   it('treats any non-"true" stored value as false', () => {
     setAppState('onboarding_completed', 'yes')
     expect(getAppStateFlag('onboarding_completed')).toBe(false)
+  })
+})
+
+describe('numbers', () => {
+  it('round-trips a decimal', () => {
+    setAppStateNumber('monthly_budget_usd', 25.5)
+    expect(getAppStateNumber('monthly_budget_usd')).toBe(25.5)
+  })
+
+  it('is null when unset', () => {
+    expect(getAppStateNumber('monthly_budget_usd')).toBeNull()
+  })
+
+  // A corrupted value must read as "no budget", never as NaN — a NaN threshold
+  // makes every comparison false and silently disables alerting.
+  it('reads a non-numeric stored value as null, never NaN', () => {
+    setAppState('monthly_budget_usd', 'twenty')
+    expect(getAppStateNumber('monthly_budget_usd')).toBeNull()
   })
 })

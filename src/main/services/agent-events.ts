@@ -1,10 +1,10 @@
-import { BrowserWindow } from 'electron'
 import {
   AGENT_EVENT_CHANNEL,
   agentStreamMessageSchema,
   type AgentEvent,
   type AgentStreamMessage
 } from '../../shared/agent'
+import { getMainWindow } from '../main-window'
 
 /**
  * The main→renderer half of the IPC layer (Phase 6).
@@ -19,21 +19,9 @@ import {
  * Electron. The adapters yield events; this decides where they go.
  */
 
-/**
- * Resolved per send, never cached.
- *
- * setupIpc() runs before createWindow() in src/main/index.ts, so there is no
- * window to capture at registration time — and on macOS the app outlives its
- * window, which `activate` then re-creates. A module-level reference would be
- * stale in both directions.
- */
-function targetWindow(): BrowserWindow | null {
-  const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed())
-  return window ?? null
-}
-
 function send(message: AgentStreamMessage): void {
-  const window = targetWindow()
+  // Resolved per send, never cached — main-window.ts owns the reasoning.
+  const window = getMainWindow()
   if (!window) return
 
   // Validated on the way out, matching registerProcedure()'s treatment of
@@ -84,4 +72,36 @@ export function emitRunsChanged(): void {
  */
 export function emitUsageChanged(): void {
   send({ kind: 'usage-changed' })
+}
+
+/**
+ * Signals that a routine's durable state changed — run history, a recorded
+ * miss, a re-arm. Composed into the scheduler's notifyChange callback in
+ * index.ts, so every path that redraws the tray also wakes the renderer.
+ */
+export function emitRoutinesChanged(): void {
+  send({ kind: 'routines-changed' })
+}
+
+/**
+ * Same registry pattern as onRunsChangedInMain, for the same reason: the dock
+ * badge lives in main and has no window to receive a push — and a direct
+ * import of the badge module here would invert who depends on whom.
+ */
+const messagesChangedListeners = new Set<() => void>()
+
+export function onMessagesChangedInMain(listener: () => void): () => void {
+  messagesChangedListeners.add(listener)
+  return () => messagesChangedListeners.delete(listener)
+}
+
+/**
+ * Signals that a message row was written, 1:1 or group. Emitted from the two
+ * insert chokepoints (insertMessage, insertGroupMessage) rather than from
+ * their callers, so a new writer cannot forget to announce — a missed emitter
+ * here is a sidebar badge that quietly lies.
+ */
+export function emitMessagesChanged(): void {
+  send({ kind: 'messages-changed' })
+  for (const listener of messagesChangedListeners) listener()
 }

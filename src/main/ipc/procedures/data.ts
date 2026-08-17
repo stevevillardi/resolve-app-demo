@@ -4,12 +4,15 @@ import {
   deleteContact,
   getContact,
   listContacts,
+  markContactRead,
   rebindContactPersona,
   renameContact,
   setRepoTrust
 } from '../../services/contacts'
+import { emitMessagesChanged } from '../../services/agent-events'
+import { unreadCounts } from '../../services/unread'
 import { contactContext, repoOffers } from '../../services/session-spec'
-import { listGroups } from '../../services/groups'
+import { listGroups, markGroupRead } from '../../services/groups'
 import {
   createPersonaTemplate,
   deletePersonaTemplate,
@@ -62,3 +65,18 @@ registerProcedure('contacts.delete', async ({ id, discardUncommitted }) => ({
 }))
 
 registerProcedure('groups.list', () => listGroups())
+
+registerProcedure('unread.counts', () => unreadCounts())
+// Marking read announces on the same channel a new message does: one signal
+// drives the sidebar badges, the previews, and the dock. totalUnread() is not
+// exposed over IPC — the dock badge consumes it in main directly.
+registerProcedure('contacts.markRead', ({ id }) => {
+  const contact = markContactRead(id)
+  emitMessagesChanged()
+  return contact
+})
+registerProcedure('groups.markRead', ({ id }) => {
+  const group = markGroupRead(id)
+  emitMessagesChanged()
+  return group
+})

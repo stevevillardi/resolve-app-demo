@@ -159,13 +159,22 @@ export const contactSchema = z.object({
   branch: z.string().nullable(),
   /** Null reads as `shared` — that is what every pre-0007 row means. */
   isolation: isolationSchema.nullable(),
+  /**
+   * The unread boundary: message rows after this are unread. Null reads as
+   * "everything read" — defensive only, since 0016 backfills and creation
+   * stamps; the safe direction, because the failure mode of the other reading
+   * is a wall of stale badges nobody asked for.
+   */
+  lastReadAt: z.number().nullable(),
   /** Null reads as "nothing trusted" — every pre-0009 row, and every new one. */
   repoTrust: repoTrustSchema.nullable()
 })
 
 export const groupSchema = z.object({
   id: z.string(),
-  repoPath: z.string()
+  repoPath: z.string(),
+  /** Same contract as contactSchema.lastReadAt. */
+  lastReadAt: z.number().nullable()
 })
 
 export const groupMessageSchema = z.object({
@@ -244,7 +253,15 @@ export const routineSchema = z.object({
   prompt: z.string(),
   enabled: z.boolean(),
   lastRunAt: z.number().nullable(),
-  lastRunSummary: z.string().nullable()
+  lastRunSummary: z.string().nullable(),
+  /** Scheduled fires that never ran (machine asleep). Cleared by any attempt. */
+  missedRunCount: z.number(),
+  lastMissedAt: z.number().nullable(),
+  /**
+   * Soft monthly spend threshold in USD; null = no budget. Editable, so unlike
+   * the run history above it is deliberately NOT omitted from the write shapes.
+   */
+  monthlyBudgetUsd: z.number().nullable()
 })
 
 /**
@@ -268,6 +285,11 @@ export const usageEventSchema = z.object({
    */
   personaTemplateId: z.string().optional(),
   repoPath: z.string().optional(),
+  /**
+   * The routine whose fire spent this, for routine-origin turns (Phase 20).
+   * Plain attribution, not a FK — may name a routine that no longer exists.
+   */
+  routineId: z.string().optional(),
   timestamp: z.number(),
   source: usageSourceSchema,
   inputTokens: z.number(),
@@ -315,7 +337,10 @@ export const contactDraftSchema = contactSchema
     // its skills means reading what they say first, and the bind flow has not
     // shown them — approval lives in the thread header, where the text is on
     // screen next to the switch. A new Contact starts trusting nothing.
-    repoTrust: true
+    repoTrust: true,
+    // Read state is the app's bookkeeping, stamped at creation — a renderer
+    // that could supply it could mark threads read it has never shown.
+    lastReadAt: true
   })
   // Optional rather than nullable: an absent isolation means "decide for me",
   // and main picks from the persona's sandbox level. Null is only ever a stored
@@ -345,11 +370,15 @@ export const groupMessageDraftSchema = groupMessageSchema.omit({
 export const routineDraftSchema = routineSchema.omit({
   id: true,
   lastRunAt: true,
-  lastRunSummary: true
+  lastRunSummary: true,
+  missedRunCount: true,
+  lastMissedAt: true
 })
 export const routineUpdateSchema = routineSchema.omit({
   lastRunAt: true,
-  lastRunSummary: true
+  lastRunSummary: true,
+  missedRunCount: true,
+  lastMissedAt: true
 })
 
 // --- Inferred types ---------------------------------------------------------

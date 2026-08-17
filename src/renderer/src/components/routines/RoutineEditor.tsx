@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, Clock, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -38,6 +39,10 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
   const [prompt, setPrompt] = useState(routine.prompt)
   const [enabled, setEnabled] = useState(routine.enabled)
   const [contactId, setContactId] = useState(routine.contactId)
+  // Kept as the typed string so "12." mid-keystroke survives; parsed at save.
+  const [budgetText, setBudgetText] = useState(
+    routine.monthlyBudgetUsd === null ? '' : String(routine.monthlyBudgetUsd)
+  )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const contacts = useContacts().data ?? []
@@ -50,6 +55,13 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
 
   const contact = contacts.find((c) => c.id === contactId)
   const persona = personaTemplates.find((p) => p.id === contact?.personaTemplateId)
+
+  const parsedBudget = ((): number | null => {
+    const trimmed = budgetText.trim()
+    if (trimmed === '') return null
+    const value = Number(trimmed)
+    return Number.isFinite(value) && value > 0 ? value : null
+  })()
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
@@ -85,7 +97,16 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
               size="sm"
               className="gap-1.5"
               disabled={saving || Boolean(cronError)}
-              onClick={() => save({ id: routine.id, contactId, schedule, prompt, enabled })}
+              onClick={() =>
+                save({
+                  id: routine.id,
+                  contactId,
+                  schedule,
+                  prompt,
+                  enabled,
+                  monthlyBudgetUsd: parsedBudget
+                })
+              }
             >
               <Check className="size-3.5" />
               {saving ? 'Saving…' : 'Save'}
@@ -155,6 +176,25 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
             />
           </Field>
 
+          <Field
+            label="Monthly budget"
+            htmlFor="routine-budget"
+            hint="Alerts when this routine's month crosses it — nothing is stopped. Empty means no budget."
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground text-sm">$</span>
+              <Input
+                id="routine-budget"
+                className="w-28 text-right font-mono tabular-nums"
+                inputMode="decimal"
+                placeholder="none"
+                value={budgetText}
+                onChange={(event) => setBudgetText(event.target.value)}
+              />
+              <span className="text-muted-foreground text-sm">/ month</span>
+            </div>
+          </Field>
+
           <FieldGridSpan>
             <Field
               label="Prompt"
@@ -196,6 +236,25 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
             </div>
           ) : (
             <p className="text-muted-foreground text-xs">Hasn&apos;t run yet.</p>
+          )}
+          {/* The silence review §C2 ends: a laptop asleep at 9:00 skips the
+              fire outright (a recorded Phase 8 decision), and until now the
+              only trace was a console.warn. Run now — the button above — is
+              the catch-up, and clears this. */}
+          {routine.missedRunCount > 0 && (
+            <div className="border-scope-elevated/40 bg-scope-elevated-bg/30 rounded-lg border p-3">
+              <p className="text-scope-elevated text-meta font-medium">
+                Missed{' '}
+                {routine.missedRunCount === 1
+                  ? '1 scheduled run'
+                  : `${routine.missedRunCount} scheduled runs`}
+                {routine.lastMissedAt ? `, last ${formatRelative(routine.lastMissedAt)}` : ''}
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs text-pretty">
+                Schedules don&apos;t fire while the app is closed or the machine sleeps, and a
+                missed fire is never run late. Run now catches up.
+              </p>
+            </div>
           )}
         </Section>
       </PaneBody>

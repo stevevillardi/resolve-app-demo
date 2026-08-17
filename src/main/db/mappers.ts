@@ -89,12 +89,17 @@ export function toContact(row: ContactRow): Contact {
     // Null on purpose, and read through repoTrustOf(): the difference between
     // "trusts nothing" and "was never asked" is worth keeping, because the UI
     // shows a first-time prompt for one and a settled state for the other.
-    repoTrust: row.repoTrust
+    repoTrust: row.repoTrust,
+    lastReadAt: row.lastReadAt === null ? null : row.lastReadAt.getTime()
   }
 }
 
 export function toGroup(row: GroupRow): Group {
-  return { id: row.id, repoPath: row.repoPath }
+  return {
+    id: row.id,
+    repoPath: row.repoPath,
+    lastReadAt: row.lastReadAt === null ? null : row.lastReadAt.getTime()
+  }
 }
 
 export function toGroupMessage(row: GroupMessageRow): GroupMessage {
@@ -131,7 +136,10 @@ export function toRoutine(row: RoutineRow): Routine {
     prompt: row.prompt,
     enabled: row.enabled,
     lastRunAt: row.lastRunAt === null ? null : row.lastRunAt.getTime(),
-    lastRunSummary: row.lastRunSummary
+    lastRunSummary: row.lastRunSummary,
+    missedRunCount: row.missedRunCount,
+    lastMissedAt: row.lastMissedAt === null ? null : row.lastMissedAt.getTime(),
+    monthlyBudgetUsd: row.monthlyBudgetUsd
   }
 }
 
@@ -143,6 +151,7 @@ export function toUsageEvent(row: UsageEventRow): UsageEvent {
     contactId: row.contactId,
     ...optional('personaTemplateId', row.personaTemplateId),
     ...optional('repoPath', row.repoPath),
+    ...optional('routineId', row.routineId),
     timestamp: row.timestamp.getTime(),
     source: row.source,
     inputTokens: row.inputTokens,

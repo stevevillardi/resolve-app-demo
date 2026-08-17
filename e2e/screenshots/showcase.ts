@@ -137,12 +137,14 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
     contactId: reviewer.id,
     schedule: '0 9 * * *',
     prompt: 'Review anything that landed on main overnight and summarise what changed.',
+    monthlyBudgetUsd: null,
     enabled: true
   })
   await invoke(window, 'routines.create', {
     contactId: billing.id,
     schedule: '0 */4 * * *',
     prompt: 'Check the open pull requests for anything that has gone stale.',
+    monthlyBudgetUsd: null,
     enabled: false
   })
 
@@ -375,6 +377,22 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         `session-${row.contact}`
       )
     })
+    // --- Phase 20 chrome, all under review by the sweep ---
+    // Backdated read boundaries put an unread badge on the reviewer's row and
+    // the repo group, and the "New messages" divider into their threads —
+    // creation stamps "born read", so unread state has to be staged.
+    db.prepare(`update contacts set last_read_at = ? where id = ?`).run(now - 2 * DAY, reviewer.id)
+    if (groupA) {
+      db.prepare(`update groups set last_read_at = ?  where id = ?`).run(now - DAY, groupA.id)
+    }
+    // A routine that has been missing its 9:00 while the laptop slept: the
+    // warning line in the list/editor and Home's Missed section.
+    db.prepare(
+      `update routines set missed_run_count = 3, last_missed_at = ? where enabled = 1`
+    ).run(now - 3 * HOUR)
+    // A monthly budget the seeded spend has already crossed, with an unpriced
+    // turn in the month — Home's banner in its "at least $X" form.
+    db.prepare(`insert into app_state (key, value) values ('monthly_budget_usd', '1.50')`).run()
   } finally {
     db.close()
   }

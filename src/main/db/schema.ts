@@ -128,7 +128,15 @@ export const contacts = sqliteTable(
      * together, always through repoTrustOf() in shared/domain.ts, and because
      * a third kind of trust would otherwise be another migration.
      */
-    repoTrust: text('repo_trust', { mode: 'json' }).$type<RepoTrust>()
+    repoTrust: text('repo_trust', { mode: 'json' }).$type<RepoTrust>(),
+    /**
+     * When this thread was last on screen (Phase 20). The unread boundary:
+     * rows after it count, rows at or before it are read. Migration 0016
+     * backfills existing rows to its own run time — an upgrade must land with
+     * zero badges, not a wall of stale ones — and creation stamps new rows,
+     * so null is defensive only and reads as "everything read".
+     */
+    lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' })
   },
   (table) => [index('contacts_repo_path_idx').on(table.repoPath)]
 )
@@ -137,7 +145,9 @@ export const groups = sqliteTable(
   'groups',
   {
     id: text('id').primaryKey(),
-    repoPath: text('repo_path').notNull()
+    repoPath: text('repo_path').notNull(),
+    /** Same contract as contacts.lastReadAt — see that comment. */
+    lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' })
   },
   // Blueprint §4: exactly one Group per repo. Enforced here rather than only
   // in ensureGroupForRepo(), so a second writer can't race a duplicate in.
@@ -259,7 +269,24 @@ export const routines = sqliteTable(
     prompt: text('prompt').notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).notNull(),
     lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
-    lastRunSummary: text('last_run_summary')
+    lastRunSummary: text('last_run_summary'),
+    /**
+     * Run history, like the two above — never writable through the editor.
+     * Misses accumulate here (Phase 20) because node-cron does not catch up a
+     * missed fire (a Phase 8 decision that stands) and the armed handles are
+     * destroyed and re-created on every routine edit, so an in-memory counter
+     * would zero itself whenever anything was saved. Any recorded attempt
+     * resets the count — Run now is the catch-up.
+     */
+    missedRunCount: integer('missed_run_count').notNull().default(0),
+    lastMissedAt: integer('last_missed_at', { mode: 'timestamp_ms' }),
+    /**
+     * Soft monthly spend threshold in USD, null = no budget (Phase 20).
+     * User-editable, unlike the run history above — it travels the draft and
+     * update shapes and updateRoutine's explicit column list. Alerts only:
+     * crossing it notifies and banners, and nothing is ever stopped.
+     */
+    monthlyBudgetUsd: real('monthly_budget_usd')
   },
   (table) => [index('routines_contact_idx').on(table.contactId)]
 )
@@ -277,6 +304,14 @@ export const usageEvents = sqliteTable(
      * that untrue.
      */
     contactId: text('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    /**
+     * Which routine's fire spent this, when the turn's origin was a routine
+     * (Phase 20). Same non-FK rule as personaTemplateId below and for the same
+     * reason: spend outlives its attribution target, and a routine deleted
+     * next week must not take last month's figures with it. Null on rows from
+     * before the column existed — honestly unattributed, never guessed.
+     */
+    routineId: text('routine_id'),
     /**
      * Copied from the Contact when the row is written, and deliberately **not**
      * foreign keys.

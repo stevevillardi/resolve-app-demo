@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import {
+  Bell,
+  CircleDollarSign,
   ExternalLink,
   FlaskConical,
   FolderOpen,
@@ -36,9 +38,13 @@ import {
   useSetAnthropicApiKey,
   useSetOpenAiApiKey
 } from '@/hooks/useAuth'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   useAppInfo,
+  useBudget,
   useChooseWorkspaceRoot,
+  useNotificationSettings,
   useResetApp,
   useWorkspaceRoot
 } from '@/hooks/useSettings'
@@ -93,6 +99,7 @@ function SettingsContent(): React.JSX.Element {
 
   const { data: workspace } = useWorkspaceRoot()
   const { choose, isPending: choosing } = useChooseWorkspaceRoot()
+  const notifications = useNotificationSettings()
   const { data: appInfo } = useAppInfo()
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [confirmingReset, setConfirmingReset] = useState(false)
@@ -279,6 +286,29 @@ function SettingsContent(): React.JSX.Element {
           </div>
         </section>
 
+        {/* --- Notifications -------------------------------------------- */}
+        <section className="flex flex-col gap-2.5">
+          <SectionLabel>Notifications</SectionLabel>
+          <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border p-4">
+            <Bell className="text-muted-foreground size-5 shrink-0" />
+            <p className="text-muted-foreground min-w-0 flex-1 text-sm text-pretty">
+              A routine finishing, a reply landing while you’re elsewhere, a budget crossing — as
+              system notifications. Clicking one opens the conversation.
+            </p>
+            <Switch
+              checked={notifications.enabled}
+              onCheckedChange={notifications.setEnabled}
+              aria-label="OS notifications"
+            />
+          </div>
+        </section>
+
+        {/* --- Budgets -------------------------------------------------- */}
+        <section className="flex flex-col gap-2.5">
+          <SectionLabel>Budgets</SectionLabel>
+          <BudgetRow />
+        </section>
+
         {/* --- Appearance ----------------------------------------------- */}
         <section className="flex flex-col gap-2.5">
           <SectionLabel>Appearance</SectionLabel>
@@ -372,6 +402,55 @@ function SettingsContent(): React.JSX.Element {
         />
       )}
     </DialogContent>
+  )
+}
+
+/**
+ * The app-level monthly threshold. Alerts only, and the copy says so — a
+ * number field labelled "budget" invites the assumption that something gets
+ * cut off, and nothing here ever stops running. Committed on blur/Enter so a
+ * half-typed figure never round-trips.
+ */
+function BudgetRow(): React.JSX.Element {
+  const { monthlyBudgetUsd, setBudget } = useBudget()
+  const [draft, setDraft] = useState<string | null>(null)
+
+  const shown = draft ?? (monthlyBudgetUsd === null ? '' : String(monthlyBudgetUsd))
+
+  const commit = (): void => {
+    if (draft === null) return
+    const trimmed = draft.trim()
+    const value = Number(trimmed)
+    if (trimmed === '') setBudget(null)
+    else if (Number.isFinite(value) && value > 0) setBudget(value)
+    setDraft(null)
+  }
+
+  return (
+    <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border p-4">
+      <CircleDollarSign className="text-muted-foreground size-5 shrink-0" />
+      <p className="text-muted-foreground min-w-0 flex-1 text-sm text-pretty">
+        A soft monthly threshold across everything the app runs. Crossing it notifies and shows a
+        note on Home — alerts only, nothing stops running. Routines can carry their own threshold in
+        their editor.
+      </p>
+      <div className="flex items-center gap-1.5">
+        <span className="text-muted-foreground text-sm">$</span>
+        <Input
+          className="w-24 text-right font-mono tabular-nums"
+          inputMode="decimal"
+          placeholder="none"
+          aria-label="Monthly budget in US dollars"
+          value={shown}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit()
+          }}
+        />
+        <span className="text-muted-foreground text-sm">/ month</span>
+      </div>
+    </div>
   )
 }
 

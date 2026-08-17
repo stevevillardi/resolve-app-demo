@@ -1,6 +1,13 @@
 import { previewLine, repoName } from './format'
 import { aggregateUsage } from './usage'
-import type { Contact, PersistedMessage, PersonaTemplate, UsageEvent, UsageSummary } from '@/types'
+import type {
+  Contact,
+  PersistedMessage,
+  PersonaTemplate,
+  Routine,
+  UsageEvent,
+  UsageSummary
+} from '@/types'
 
 /**
  * What the resting screen shows, worked out here rather than in the component.
@@ -133,6 +140,51 @@ export function upcomingRuns(
     .slice(0, limit)
 }
 
+export interface MissedRun {
+  routineId: string
+  prompt: string
+  contactName: string | null
+  count: number
+  lastMissedAt: number
+}
+
+/**
+ * Routines with scheduled fires that never ran, most recently missed first
+ * (Phase 20, review §C2).
+ *
+ * Only routines currently carrying a miss appear — the counter is cleared by
+ * any attempt, so this is "what is outstanding", not a history. A routine
+ * whose contact is gone keeps its row with a null name rather than being
+ * dropped: deleting the contact cascades the routine away entirely, so this
+ * combination means something is wrong, and hiding it would be the wrong way
+ * to say so.
+ */
+export function missedRuns(
+  routines: {
+    id: string
+    contactId: string
+    prompt: string
+    missedRunCount: number
+    lastMissedAt: number | null
+  }[],
+  contacts: Contact[],
+  limit: number
+): MissedRun[] {
+  const contactById = new Map(contacts.map((contact) => [contact.id, contact]))
+
+  return routines
+    .filter((routine) => routine.missedRunCount > 0 && routine.lastMissedAt !== null)
+    .sort((a, b) => (b.lastMissedAt ?? 0) - (a.lastMissedAt ?? 0))
+    .slice(0, limit)
+    .map((routine) => ({
+      routineId: routine.id,
+      prompt: routine.prompt,
+      contactName: contactById.get(routine.contactId)?.displayName ?? null,
+      count: routine.missedRunCount,
+      lastMissedAt: routine.lastMissedAt as number
+    }))
+}
+
 /**
  * Absolute and local, the tray's rule for the same data (tray-menu.ts): a
  * static snapshot must not say "in 12 minutes", because that starts lying the
@@ -236,4 +288,83 @@ export function dailySpend(events: UsageEvent[], now: number, days: number): Dai
     cursor.setDate(cursor.getDate() + 1)
   }
   return points
+}
+
+// --- Budget banner (Phase 20) ------------------------------------------------
+
+export interface BudgetBanner {
+  /** "Switchboard" for the app scope, the routine's prompt preview otherwise. */
+  scopeLabel: string
+  floorUsd: number
+  budgetUsd: number
+  /** True when the month also holds unpriced turns — the figure is a floor. */
+  hasUnpriced: boolean
+  message: string
+}
+
+/**
+ * The month-to-date crossing worth a banner on Home, or null.
+ *
+ * Mirrors main's budget.ts semantics exactly — priced floor, local calendar
+ * month — because the banner and the toast describing the same crossing must
+ * not disagree about the number. "At least $X" when unpriced turns exist, the
+ * same honesty rule as `$12.34+`. When several scopes are crossed, the worst
+ * overage wins: one banner, not a stack.
+ */
+export function budgetBannerFor(
+  events: UsageEvent[],
+  appBudgetUsd: number | null,
+  routines: Routine[],
+  now: number
+): BudgetBanner | null {
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(1)
+  const from = start.getTime()
+  const month = events.filter((event) => event.timestamp >= from && event.timestamp <= now)
+
+  const floor = (rows: UsageEvent[]): { floorUsd: number; hasUnpriced: boolean } => ({
+    floorUsd: rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
+    hasUnpriced: rows.some((row) => row.costUsd === null)
+  })
+
+  const candidates: BudgetBanner[] = []
+
+  if (appBudgetUsd !== null && appBudgetUsd > 0) {
+    const { floorUsd, hasUnpriced } = floor(month)
+    if (floorUsd >= appBudgetUsd) {
+      candidates.push(banner('Switchboard', floorUsd, appBudgetUsd, hasUnpriced))
+    }
+  }
+
+  for (const routine of routines) {
+    if (routine.monthlyBudgetUsd === null || routine.monthlyBudgetUsd <= 0) continue
+    const own = month.filter((event) => event.routineId === routine.id)
+    const { floorUsd, hasUnpriced } = floor(own)
+    if (floorUsd >= routine.monthlyBudgetUsd) {
+      // The renderer's previewLine takes no cap; clamp here so a paragraph
+      // prompt cannot become the whole banner.
+      const label = previewLine(routine.prompt).slice(0, 60)
+      candidates.push(banner(label, floorUsd, routine.monthlyBudgetUsd, hasUnpriced))
+    }
+  }
+
+  if (candidates.length === 0) return null
+  return candidates.sort((a, b) => b.floorUsd / b.budgetUsd - a.floorUsd / a.budgetUsd)[0]
+}
+
+function banner(
+  scopeLabel: string,
+  floorUsd: number,
+  budgetUsd: number,
+  hasUnpriced: boolean
+): BudgetBanner {
+  const spent = `${hasUnpriced ? 'at least ' : ''}$${floorUsd.toFixed(2)}`
+  return {
+    scopeLabel,
+    floorUsd,
+    budgetUsd,
+    hasUnpriced,
+    message: `${scopeLabel} has spent ${spent} of its $${budgetUsd.toFixed(2)} monthly budget. Nothing has been stopped.`
+  }
 }

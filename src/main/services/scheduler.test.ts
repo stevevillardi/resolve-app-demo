@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { createTestDb } from '../db/test-db'
 import { groupMessages, groups, routines, usageEvents } from '../db/schema'
 import {
@@ -30,9 +31,24 @@ vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('./agent-events', () => ({
   emitAgentEvent: () => {},
   emitRunsChanged: () => {},
-  emitUsageChanged: () => {}
+  emitUsageChanged: () => {},
+  emitMessagesChanged: () => {}
 }))
 vi.mock('./adapter-host', () => ({ adapterForBackend: () => harness.adapter }))
+
+/**
+ * The OS toast stubbed to a log: this file asserts *when* the scheduler
+ * notifies and with what, while notifications.test.ts owns what a notification
+ * does with it (targets, the enabled flag, the electron binding).
+ */
+const notified: { prompt: string; status: string; summary: string }[] = []
+vi.mock('../notifications', () => ({
+  notifyTurnFinished: () => {},
+  notifyRoutineOutcome: (
+    routine: { prompt: string },
+    result: { status: string; summary: string }
+  ) => notified.push({ prompt: routine.prompt, ...result })
+}))
 
 /**
  * Compaction stubbed to a fixed verdict: this file asserts what the *scheduler*
@@ -90,6 +106,7 @@ const { createRoutine, getRoutine } = await import('./routines')
 interface FakeTask {
   expression: string
   onTick: () => void
+  onMissed?: (date: Date) => void
   nextRun: Date | null
   destroyed: boolean
 }
@@ -99,13 +116,19 @@ class FakeCronEngine implements CronEngine {
   /** Counts handles ever handed out, so "kept the same handle" is assertable. */
   handles = 0
 
-  schedule(expression: string, onTick: () => void, name: string): CronHandle {
+  schedule(
+    expression: string,
+    onTick: () => void,
+    name: string,
+    onMissed?: (date: Date) => void
+  ): CronHandle {
     if (expression.includes('bad')) throw new Error(`invalid expression: ${expression}`)
 
     this.handles += 1
     const task: FakeTask = {
       expression,
       onTick,
+      onMissed,
       nextRun: new Date('2026-08-17T09:00:00Z'),
       destroyed: false
     }
@@ -125,6 +148,13 @@ class FakeCronEngine implements CronEngine {
     const task = this.tasks.get(name)
     if (!task) throw new Error(`no task armed for ${name}`)
     task.onTick()
+  }
+
+  /** Reports a miss the way node-cron's execution:missed would. */
+  missTick(name: string, date: Date): void {
+    const task = this.tasks.get(name)
+    if (!task) throw new Error(`no task armed for ${name}`)
+    task.onMissed?.(date)
   }
 }
 
@@ -186,6 +216,7 @@ beforeEach(() => {
   prAvailable = false
   prResult = new Error('not configured')
   prAttempts.length = 0
+  notified.length = 0
   engine = new FakeCronEngine()
 
   seedSkill(db)
@@ -266,6 +297,126 @@ describe('contention with a writer already holding the repo', () => {
     expectRoutineRan('routine-2', 'contact-reader')
   })
 })
+
+// --- The toast (Phase 20) ----------------------------------------------------
+
+describe('outcome notifications', () => {
+  it('notifies a completed run with its summary', async () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    await fireRoutine('routine-1').completed
+
+    expect(notified).toHaveLength(1)
+    expect(notified[0].status).toBe('completed')
+    expect(notified[0].prompt).toContain('Check for new issues')
+  })
+
+  it('notifies a failed run as a failure', async () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+    harness.script = [
+      { type: 'error', kind: 'rate_limit', message: 'Rate limited.' },
+      { type: 'done', finalText: '', usage: null }
+    ]
+
+    await fireRoutine('routine-1').completed
+
+    expect(notified).toHaveLength(1)
+    expect(notified[0].status).toBe('failed')
+  })
+
+  // The decision this phase records: a lock-refused unattended fire is
+  // precisely the silence being ended, so a skip notifies too.
+  it('notifies a lock-refused skip', async () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+    acquire({
+      runId: 'other-run',
+      contactId: 'contact-writer',
+      contactName: 'Refactor Buddy',
+      workingPath: REPO,
+      mode: 'exclusive',
+      startedAt: Date.now()
+    })
+
+    const result = await fireRoutine('routine-1').completed
+
+    expect(result.status).toBe('skipped')
+    expect(notified).toHaveLength(1)
+    expect(notified[0].status).toBe('skipped')
+  })
+
+  // Fires that were never attempts write no history and make no sound — a
+  // toast for a routine that no longer exists would name nothing clickable.
+  it('stays silent for a fire that was never an attempt', async () => {
+    startScheduler(engine)
+    await fireRoutine('routine-gone').completed
+    expect(notified).toHaveLength(0)
+  })
+})
+
+// --- Missed fires (Phase 20) -------------------------------------------------
+
+describe('missed fires', () => {
+  it('persists the miss with the slot it should have fired at', () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    const slot = new Date('2026-08-17T09:00:00Z')
+    engine.missTick('routine-1', slot)
+
+    const routine = getRoutine('routine-1')
+    expect(routine?.missedRunCount).toBe(1)
+    expect(routine?.lastMissedAt).toBe(slot.getTime())
+    // A miss is not an attempt — recording one as a run would hide exactly
+    // the silence the counter exists to surface.
+    expect(routine?.lastRunAt).toBeNull()
+  })
+
+  it('announces the miss so the tray and renderer both learn', () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+    let changes = 0
+    stopScheduler()
+    startScheduler(engine, () => {
+      changes += 1
+    })
+    const before = changes
+
+    engine.missTick('routine-1', new Date('2026-08-17T09:00:00Z'))
+
+    expect(changes).toBe(before + 1)
+  })
+
+  it('a Run now afterwards clears the counter — the catch-up path', async () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+    engine.missTick('routine-1', new Date('2026-08-17T09:00:00Z'))
+    expect(getRoutine('routine-1')?.missedRunCount).toBe(1)
+
+    await fireRoutine('routine-1').completed
+
+    expect(getRoutine('routine-1')?.missedRunCount).toBe(0)
+  })
+
+  it('survives re-arming, because the count lives in the row', () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+    engine.missTick('routine-1', new Date('2026-08-17T09:00:00Z'))
+
+    // Any routine edit destroys and re-creates every armed handle. An
+    // in-memory counter would zero here; the claim is that the record does not.
+    updateRoutineSchedule('routine-1', '0 10 * * *')
+    syncSchedules()
+
+    expect(getRoutine('routine-1')?.missedRunCount).toBe(1)
+  })
+})
+
+function updateRoutineSchedule(id: string, schedule: string): void {
+  db.update(routines).set({ schedule }).where(eq(routines.id, id)).run()
+}
 
 // --- Bookkeeping timing ------------------------------------------------------
 
@@ -541,7 +692,8 @@ describe('createRoutine', () => {
         contactId: 'contact-writer',
         schedule: 'every so often',
         prompt: 'do the thing',
-        enabled: true
+        enabled: true,
+        monthlyBudgetUsd: null
       })
     ).toThrow(/won't run/)
   })

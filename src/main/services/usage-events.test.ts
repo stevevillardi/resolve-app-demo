@@ -20,6 +20,12 @@ vi.mock('../db', () => ({ initDb: () => db }))
 // from sitting stale on a dashboard somebody is watching.
 const emitUsageChanged = vi.fn()
 vi.mock('./agent-events', () => ({ emitUsageChanged: (): void => emitUsageChanged() }))
+// The budget check hangs off this seam; its own behaviour is budget-alerts'
+// business. Here it only matters that every write reaches it.
+const budgetChecked = vi.fn()
+vi.mock('./budget-alerts', () => ({
+  checkBudgetsAfterUsage: (event: unknown): void => budgetChecked(event)
+}))
 
 const { baselineFor, listUsageEvents, recordUsage } = await import('./usage-events')
 
@@ -74,6 +80,7 @@ beforeEach(() => {
   db = createTestDb()
   seed()
   emitUsageChanged.mockClear()
+  budgetChecked.mockClear()
 })
 
 describe('recordUsage', () => {
@@ -87,6 +94,24 @@ describe('recordUsage', () => {
     // is worth keeping; it just cannot participate in a baseline.
     recordUsage('contact-1', 'message', USAGE, null)
     expect(listUsageEvents('contact-1')[0].sessionId).toBeUndefined()
+  })
+
+  it('attributes routine spend to its routine, and round-trips it', () => {
+    // The id was always in hand at the call site and discarded until Phase 20
+    // needed per-routine budgets. Plain attribution, not a FK — the figure
+    // must survive the routine being deleted.
+    recordUsage('contact-1', 'routine', USAGE, SESSION, 'routine-9')
+    expect(listUsageEvents('contact-1')[0].routineId).toBe('routine-9')
+  })
+
+  it('leaves attribution absent rather than inventing one', () => {
+    recordUsage('contact-1', 'message', USAGE, SESSION)
+    expect(listUsageEvents('contact-1')[0].routineId).toBeUndefined()
+  })
+
+  it('hands every write to the budget check, after the row exists', () => {
+    recordUsage('contact-1', 'routine', USAGE, SESSION, 'routine-9')
+    expect(budgetChecked).toHaveBeenCalledTimes(1)
   })
 
   it('announces the write', () => {

@@ -66,7 +66,8 @@ test.beforeAll(async () => {
     contactId: contact.id,
     schedule: '*/2 * * * * *',
     prompt: 'Report anything that changed.',
-    enabled: true
+    enabled: true,
+    monthlyBudgetUsd: null
   })
 })
 

@@ -5,7 +5,8 @@ import { toMessage } from '../db/mappers'
 import { messages, toolCalls } from '../db/schema'
 import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
-import { emitAgentEvent, emitRunsChanged } from './agent-events'
+import { notifyTurnFinished } from '../notifications'
+import { emitAgentEvent, emitMessagesChanged, emitRunsChanged } from './agent-events'
 import { summarizeTurn } from './compaction'
 import { clearBackendSessionId, getContact, setBackendSessionId } from './contacts'
 import { groupForRepo, insertGroupMessage } from './group-messages'
@@ -182,6 +183,10 @@ function insertMessage(
     .insert(messages)
     .values({ ...message, work: work ?? null, timestamp: new Date(message.timestamp) })
     .run()
+  // After the insert, never before — same ordering rule as recordUsage. This
+  // chokepoint is what keeps previews and unread counts honest for turns no
+  // renderer is subscribed to (a routine, a reply landing on a closed thread).
+  emitMessagesChanged()
   return message
 }
 
@@ -559,7 +564,13 @@ function finish(
     // Stamped with the session so the next turn can subtract what this one
     // already accounted for — the row is a delta, and baselineFor() sums them.
     if (done?.usage) {
-      recordUsage(contactId, origin.kind, done.usage, session.sessionId)
+      recordUsage(
+        contactId,
+        origin.kind,
+        done.usage,
+        session.sessionId,
+        origin.kind === 'routine' ? origin.routineId : null
+      )
     }
 
     // Read after the run, never before: the adapters fill this in mid-stream at
@@ -575,6 +586,15 @@ function finish(
     runs.delete(runId)
     emitAgentEvent(runId, done ?? { type: 'done', finalText, usage: null })
     emitRunsChanged()
+
+    // A ten-minute turn finishing while the user is in their editor used to
+    // finish silently (review §C1). Routine origins are excluded — the
+    // scheduler notifies those with the run summary this function cannot see —
+    // and the "is anyone looking" check lives inside notifications.ts, so a
+    // watched turn stays silent without this module touching electron.
+    if (origin.kind !== 'routine') {
+      notifyTurnFinished({ contactId, origin, finalText, error: failure })
+    }
 
     // Blueprint §6, and deliberately the last thing to happen: it runs after
     // the lock is released and after the renderer has been told the turn is

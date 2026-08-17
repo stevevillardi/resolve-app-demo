@@ -74,11 +74,15 @@ export function createContact(draft: ContactDraft): Contact {
       // A new Contact trusts nothing its repository says. Granting that is a
       // separate, deliberate act taken with the text on screen — see
       // repoTrustSchema in shared/domain.ts.
-      repoTrust: null
+      repoTrust: null,
+      // Born read: a thread with no messages has nothing unread in it.
+      lastReadAt: Date.now()
     }
 
     ensureGroupForRepo(contact.repoPath, tx)
-    tx.insert(contacts).values(contact).run()
+    tx.insert(contacts)
+      .values({ ...contact, lastReadAt: new Date(contact.lastReadAt as number) })
+      .run()
 
     return contact
   })
@@ -174,6 +178,27 @@ export function renameContact(id: string, displayName: string): Contact {
  * names and `capabilitiesFor` intersects them with what is on disk, rather than
  * storing "trust this repo's skills" and resolving it later.
  */
+/**
+ * Stamps the unread boundary (Phase 20). Narrow on purpose, like setRepoTrust
+ * below and for the same reason. Monotonic and idempotent: a stale caller —
+ * two mounted views racing, an out-of-order invalidation — can never move the
+ * boundary *backwards* and resurrect read messages as unread, and a no-op
+ * write is skipped entirely so mark-read cannot ping-pong with the
+ * messages-changed invalidations it triggers.
+ */
+export function markContactRead(id: string, at = Date.now()): Contact {
+  const contact = getContact(id)
+  if (!contact) throw new Error(`No such contact: ${id}`)
+  if (contact.lastReadAt !== null && at <= contact.lastReadAt) return contact
+
+  initDb()
+    .update(contacts)
+    .set({ lastReadAt: new Date(at) })
+    .where(eq(contacts.id, id))
+    .run()
+  return { ...contact, lastReadAt: at }
+}
+
 export function setRepoTrust(id: string, trust: RepoTrust): Contact {
   const result = initDb()
     .update(contacts)

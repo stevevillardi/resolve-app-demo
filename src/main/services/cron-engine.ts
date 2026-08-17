@@ -29,7 +29,12 @@ import type { CronEngine, CronHandle } from './scheduler'
  */
 export function nodeCronEngine(): CronEngine {
   return {
-    schedule(expression: string, onTick: () => void, name: string): CronHandle {
+    schedule(
+      expression: string,
+      onTick: () => void,
+      name: string,
+      onMissed?: (date: Date) => void
+    ): CronHandle {
       const task = schedule(expression, onTick, {
         name,
         missedExecutionTolerance: MISSED_TOLERANCE_MS
@@ -40,6 +45,7 @@ export function nodeCronEngine(): CronEngine {
           `[scheduler] routine ${name} missed its ${context.date.toISOString()} fire — ` +
             'the app was not running, or the event loop was blocked past the tolerance'
         )
+        onMissed?.(context.date)
       })
 
       return {

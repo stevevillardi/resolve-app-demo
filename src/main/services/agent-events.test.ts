@@ -13,7 +13,8 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => windows }
 }))
 
-const { emitAgentEvent, emitRunsChanged } = await import('./agent-events')
+const { emitAgentEvent, emitMessagesChanged, emitRoutinesChanged, emitRunsChanged, onMessagesChangedInMain } =
+  await import('./agent-events')
 const { AGENT_EVENT_CHANNEL } = await import('../../shared/agent')
 
 function fakeWindow(destroyed = false): FakeWindow {
@@ -113,5 +114,46 @@ describe('emitRunsChanged', () => {
 
   it('does nothing when there is no window', () => {
     expect(() => emitRunsChanged()).not.toThrow()
+  })
+})
+
+describe('emitRoutinesChanged', () => {
+  it('sends a payload-free notification', () => {
+    const window = fakeWindow()
+    windows = [window]
+
+    emitRoutinesChanged()
+
+    expect(window.webContents.send).toHaveBeenCalledWith(AGENT_EVENT_CHANNEL, {
+      kind: 'routines-changed'
+    })
+  })
+})
+
+describe('emitMessagesChanged', () => {
+  it('sends a payload-free notification', () => {
+    const window = fakeWindow()
+    windows = [window]
+
+    emitMessagesChanged()
+
+    expect(window.webContents.send).toHaveBeenCalledWith(AGENT_EVENT_CHANNEL, {
+      kind: 'messages-changed'
+    })
+  })
+
+  // The dock badge lives in main and has no window to receive a push — the
+  // main-side registry is its only signal, and it must fire even windowless,
+  // because a routine writing at 3 a.m. is exactly when the badge matters.
+  it('notifies main-side listeners even with no window', () => {
+    const listener = vi.fn()
+    const unsubscribe = onMessagesChangedInMain(listener)
+
+    emitMessagesChanged()
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    unsubscribe()
+    emitMessagesChanged()
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 })

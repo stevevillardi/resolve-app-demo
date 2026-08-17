@@ -12,6 +12,7 @@ const {
   getRoutine,
   listEnabledRoutines,
   listRoutines,
+  recordMissedRun,
   recordRunOutcome,
   updateRoutine
 } = await import('./routines')
@@ -23,12 +24,14 @@ function draft(overrides: Partial<{ schedule: string; prompt: string; enabled: b
   schedule: string
   prompt: string
   enabled: boolean
+  monthlyBudgetUsd: number | null
 } {
   return {
     contactId: CONTACT,
     schedule: overrides.schedule ?? '0 9 * * *',
     prompt: overrides.prompt ?? 'Check for new issues.',
-    enabled: overrides.enabled ?? true
+    enabled: overrides.enabled ?? true,
+    monthlyBudgetUsd: null
   }
 }
 
@@ -83,7 +86,8 @@ describe('updateRoutine', () => {
       contactId: CONTACT,
       schedule: '0 */6 * * *',
       prompt: 'Review open PRs.',
-      enabled: false
+      enabled: false,
+      monthlyBudgetUsd: null
     })
 
     expect(saved.schedule).toBe('0 */6 * * *')
@@ -106,7 +110,8 @@ describe('updateRoutine', () => {
       contactId: CONTACT,
       schedule: '0 9 * * *',
       prompt: 'a newly typed prompt',
-      enabled: true
+      enabled: true,
+      monthlyBudgetUsd: null
     })
 
     const after = getRoutine(created.id)
@@ -123,7 +128,8 @@ describe('updateRoutine', () => {
         contactId: CONTACT,
         schedule: 'whenever',
         prompt: 'x',
-        enabled: true
+        enabled: true,
+        monthlyBudgetUsd: null
       })
     ).toThrow(/won't run/)
     expect(getRoutine(created.id)?.schedule).toBe('0 9 * * *')
@@ -136,7 +142,8 @@ describe('updateRoutine', () => {
         contactId: CONTACT,
         schedule: '0 9 * * *',
         prompt: 'x',
-        enabled: true
+        enabled: true,
+        monthlyBudgetUsd: null
       })
     ).toThrow(/No such routine/)
   })
@@ -173,6 +180,43 @@ describe('deleteRoutine', () => {
   })
 })
 
+describe('monthlyBudgetUsd', () => {
+  // The exact trap updateRoutine's explicit column list warns about: a new
+  // editable column left off that list saves as a silent no-op — how `model`
+  // once went unsaved.
+  it('saves through update, because it is editable rather than run history', () => {
+    const created = createRoutine(draft())
+
+    const saved = updateRoutine({
+      id: created.id,
+      contactId: CONTACT,
+      schedule: '0 9 * * *',
+      prompt: 'Check for new issues.',
+      enabled: true,
+      monthlyBudgetUsd: 12.5
+    })
+
+    expect(saved.monthlyBudgetUsd).toBe(12.5)
+    expect(getRoutine(created.id)?.monthlyBudgetUsd).toBe(12.5)
+  })
+
+  it('clears back to no-budget with null', () => {
+    const created = createRoutine({ ...draft(), monthlyBudgetUsd: 30 })
+    expect(getRoutine(created.id)?.monthlyBudgetUsd).toBe(30)
+
+    updateRoutine({
+      id: created.id,
+      contactId: CONTACT,
+      schedule: '0 9 * * *',
+      prompt: 'Check for new issues.',
+      enabled: true,
+      monthlyBudgetUsd: null
+    })
+
+    expect(getRoutine(created.id)?.monthlyBudgetUsd).toBeNull()
+  })
+})
+
 describe('recordRunOutcome', () => {
   it('stamps both the time and the reason', () => {
     const created = createRoutine(draft())
@@ -182,5 +226,61 @@ describe('recordRunOutcome', () => {
     const after = getRoutine(created.id)
     expect(after?.lastRunAt).toBe(1_755_000_000_000)
     expect(after?.lastRunSummary).toBe('Skipped — someone else is in this repo.')
+  })
+
+  // "Missed" means nothing happened at the scheduled time. An attempt —
+  // even a lock-refused one, which is what this summary is — happened, so it
+  // ends the silence the counter exists to break. Run now clears it too, by
+  // the same route.
+  it('clears the miss counter, because any attempt is the catch-up', () => {
+    const created = createRoutine(draft())
+    recordMissedRun(created.id, 1_755_000_000_000)
+    recordMissedRun(created.id, 1_755_000_060_000)
+
+    recordRunOutcome(created.id, 'Skipped — someone else is in this repo.')
+
+    const after = getRoutine(created.id)
+    expect(after?.missedRunCount).toBe(0)
+    // The stamp stays: "last missed Tuesday" is still true after a catch-up,
+    // and the count alone says whether anything is currently outstanding.
+    expect(after?.lastMissedAt).toBe(1_755_000_060_000)
+  })
+})
+
+describe('recordMissedRun', () => {
+  it('accumulates the count and keeps the most recent miss', () => {
+    const created = createRoutine(draft())
+
+    recordMissedRun(created.id, 1_755_000_000_000)
+    recordMissedRun(created.id, 1_755_000_060_000)
+
+    const after = getRoutine(created.id)
+    expect(after?.missedRunCount).toBe(2)
+    expect(after?.lastMissedAt).toBe(1_755_000_060_000)
+  })
+
+  it('no-ops for a routine deleted between arming and missing', () => {
+    expect(() => recordMissedRun('routine-gone')).not.toThrow()
+  })
+
+  // The stale-editor rule, extended to the new columns: an editor open across
+  // a miss must not be able to save its snapshot back over the counter.
+  it('is not writable through the draft or update shapes', () => {
+    const created = createRoutine(draft())
+    recordMissedRun(created.id)
+
+    updateRoutine({
+      id: created.id,
+      contactId: CONTACT,
+      schedule: '0 9 * * *',
+      prompt: 'Edited prompt.',
+      enabled: true,
+      monthlyBudgetUsd: null,
+      // Stale run history a snapshot might carry; the update shape strips it.
+      missedRunCount: 0,
+      lastMissedAt: null
+    } as never)
+
+    expect(getRoutine(created.id)?.missedRunCount).toBe(1)
   })
 })

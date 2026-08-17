@@ -1,6 +1,13 @@
+import { notifyRoutineOutcome } from '../notifications'
 import { runRoutineTurn } from './messaging'
 import { openPullRequest, pullRequestState } from './pull-requests'
-import { getRoutine, listEnabledRoutines, listRoutines, recordRunOutcome } from './routines'
+import {
+  getRoutine,
+  listEnabledRoutines,
+  listRoutines,
+  recordMissedRun,
+  recordRunOutcome
+} from './routines'
 import type { TurnOutcome } from './turn-origin'
 
 /**
@@ -25,7 +32,18 @@ import type { TurnOutcome } from './turn-origin'
 
 /** The slice of a cron engine this service uses. node-cron implements it; tests fake it. */
 export interface CronEngine {
-  schedule(expression: string, onTick: () => void, name: string): CronHandle
+  /**
+   * `onMissed` reports a fire the engine skipped outright (a late wake past
+   * its tolerance). Optional on the port because a caller with no miss policy
+   * is legitimate; the scheduler always passes one, and the engine forwards
+   * the slot's own date so the record says when the fire *should* have been.
+   */
+  schedule(
+    expression: string,
+    onTick: () => void,
+    name: string,
+    onMissed?: (date: Date) => void
+  ): CronHandle
 }
 
 export interface CronHandle {
@@ -117,8 +135,18 @@ export function syncSchedules(): void {
     try {
       // Closes over the id only, never a snapshot: fireRoutine re-reads from
       // SQLite, so an edited prompt takes effect on the next fire and a routine
-      // deleted between arming and firing simply no-ops.
-      const handle = engine.schedule(routine.schedule, () => void fireRoutine(id).completed, id)
+      // deleted between arming and firing simply no-ops. A miss is recorded to
+      // the row (the counter must survive re-arming, which destroys handles)
+      // and announced, so the tray and the renderer both learn without a fire.
+      const handle = engine.schedule(
+        routine.schedule,
+        () => void fireRoutine(id).completed,
+        id,
+        (date) => {
+          recordMissedRun(id, date.getTime())
+          onChange?.()
+        }
+      )
       armed.set(id, { handle, expression: routine.schedule })
     } catch (error) {
       console.error(`[scheduler] could not arm routine ${id}`, error)
@@ -166,6 +194,7 @@ export function fireRoutine(routineId: string): RoutineFire {
     const summary = `Skipped — ${messageOf(error)}`
     recordRunOutcome(routineId, summary)
     onChange?.()
+    notifyRoutineOutcome(routine, { status: 'skipped', summary })
     return settled({ status: 'skipped', summary })
   }
 
@@ -180,6 +209,11 @@ export function fireRoutine(routineId: string): RoutineFire {
     // that plainly happened looking like it never did.
     recordRunOutcome(routineId, result.summary)
     onChange?.()
+    // Sent with the run's own summary, not held for the PR attempt below —
+    // GitHub is a network call with no deadline, and the same reasoning that
+    // splits recordRunOutcome applies to the toast. The PR line still lands in
+    // lastRunSummary and the group thread, one click away.
+    notifyRoutineOutcome(routine, result)
 
     const pr = await raisePullRequest(routine.contactId, result)
     if (pr) {

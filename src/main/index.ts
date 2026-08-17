@@ -15,7 +15,13 @@ import { installEditableFieldMenu } from './context-menu'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { beginQuit, isQuitting } from './lifecycle'
-import { onRunsChangedInMain } from './services/agent-events'
+import { getMainWindow, setWindowFactory, showMainWindow } from './main-window'
+import {
+  emitRoutinesChanged,
+  onMessagesChangedInMain,
+  onRunsChangedInMain
+} from './services/agent-events'
+import { refreshDockBadge } from './dock-badge'
 import { nodeCronEngine } from './services/cron-engine'
 import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
@@ -115,6 +121,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Before anything that can call showMainWindow(): the factory is what lets a
+  // destroyed window be re-created without main-window.ts importing this file.
+  setWindowFactory(createWindow)
+
   initDb()
   // Before setupIpc, so the renderer's first skills.list can never race an
   // empty library and render the "no skills" empty state on a fresh install.
@@ -128,12 +138,21 @@ app.whenReady().then(() => {
 
   // Before the tray, so its first menu has real next-run times rather than an
   // empty list it would have to be told about later — and before the window,
-  // because not depending on one is the entire point of the phase.
-  startScheduler(nodeCronEngine(), refreshTrayMenu)
+  // because not depending on one is the entire point of the phase. The callback
+  // wakes both audiences a routine has: the tray in main, the renderer's
+  // routine rows over the push channel.
+  startScheduler(nodeCronEngine(), () => {
+    refreshTrayMenu()
+    emitRoutinesChanged()
+  })
   createTray(showMainWindow)
   // The tray's "N turns running" line goes stale exactly when the run set
   // changes, which is also the only time it is worth redrawing.
   onRunsChangedInMain(refreshTrayMenu)
+  // The dock badge, same pattern: recomputed on every message write or
+  // mark-read, and once at startup so a badge earned while quit reappears.
+  onMessagesChangedInMain(refreshDockBadge)
+  refreshDockBadge()
 
   installApplicationMenu()
 
@@ -162,9 +181,7 @@ app.whenReady().then(() => {
 function installApplicationMenu(): void {
   const sendAction = (action: MenuActionId): void => {
     showMainWindow()
-    BrowserWindow.getAllWindows()
-      .find((window) => !window.isDestroyed())
-      ?.webContents.send(MENU_ACTION_CHANNEL, action)
+    getMainWindow()?.webContents.send(MENU_ACTION_CHANNEL, action)
   }
 
   const toMenuItem = (item: AppMenuItem): MenuItemConstructorOptions => {
@@ -186,23 +203,6 @@ function installApplicationMenu(): void {
 
   const template = buildAppMenuTemplate({ platform: process.platform, isDev: is.dev })
   Menu.setApplicationMenu(Menu.buildFromTemplate(template.map(toMenuItem)))
-}
-
-/**
- * Brings the window back, whether it was hidden or never created.
- *
- * The window count is no longer the test it used to be: a hidden window is
- * still a window, so `getAllWindows().length === 0` is false after a close and
- * the dock icon would do nothing at all.
- */
-function showMainWindow(): void {
-  const existing = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
-  if (!existing) {
-    createWindow()
-    return
-  }
-  existing.show()
-  existing.focus()
 }
 
 /**

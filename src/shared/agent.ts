@@ -202,7 +202,20 @@ export const agentStreamMessageSchema = z.discriminatedUnion('kind', [
    * from compaction, *after* the run it belongs to is already over. Emitted
    * from recordUsage itself so all four sources announce spend by one path.
    */
-  z.object({ kind: z.literal('usage-changed') })
+  z.object({ kind: z.literal('usage-changed') }),
+  /**
+   * A routine's durable state changed — run history, a recorded miss, a
+   * schedule re-arm. Before this, routine outcomes reached the UI only by
+   * incidental refetch: a 3 a.m. fire's row went stale until the next focus.
+   */
+  z.object({ kind: z.literal('routines-changed') }),
+  /**
+   * A message row was written somewhere — 1:1 or group, whatever wrote it.
+   * Exists because a background run (a routine, a turn on a closed thread) has
+   * no renderer subscribed to its runId, so previews and unread counts had no
+   * signal at all for exactly the messages that arrive while nobody watches.
+   */
+  z.object({ kind: z.literal('messages-changed') })
 ])
 
 // --- Capabilities -----------------------------------------------------------

@@ -1,6 +1,7 @@
 import type { IpcProcedureName, IpcInput, IpcOutput } from '../../../shared/ipc-contract'
 import type { AgentEvent } from '../../../shared/agent'
 import type { MenuActionId } from '../../../shared/menu'
+import type { NavigateTarget } from '../../../shared/navigation'
 
 export function callProcedure<K extends IpcProcedureName>(
   name: K,
@@ -28,8 +29,20 @@ export function onUsageChanged(callback: () => void): () => void {
   return window.api.onUsageChanged(callback)
 }
 
+export function onRoutinesChanged(callback: () => void): () => void {
+  return window.api.onRoutinesChanged(callback)
+}
+
+export function onMessagesChanged(callback: () => void): () => void {
+  return window.api.onMessagesChanged(callback)
+}
+
 export function onMenuAction(callback: (action: MenuActionId) => void): () => void {
   return window.api.onMenuAction(callback)
+}
+
+export function onNavigate(callback: (target: NavigateTarget) => void): () => void {
+  return window.api.onNavigate(callback)
 }
 
 /**

@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { IpcProcedureName } from '../shared/ipc-contract'
 import { AGENT_EVENT_CHANNEL, type AgentEvent, type AgentStreamMessage } from '../shared/agent'
 import { MENU_ACTION_CHANNEL, type MenuActionId } from '../shared/menu'
+import { NAVIGATE_CHANNEL, type NavigateTarget } from '../shared/navigation'
 
 const IPC_CHANNEL = 'ipc-invoke'
 
@@ -43,6 +44,16 @@ const api = {
       if (message.kind === 'usage-changed') callback()
     }),
 
+  onRoutinesChanged: (callback: () => void): (() => void) =>
+    subscribe((message) => {
+      if (message.kind === 'routines-changed') callback()
+    }),
+
+  onMessagesChanged: (callback: () => void): (() => void) =>
+    subscribe((message) => {
+      if (message.kind === 'messages-changed') callback()
+    }),
+
   // The application menu's app-verbs (new contact, settings, palette) — main
   // sends the id, the shell maps it onto the same store transitions the
   // buttons use. Same IpcRendererEvent-dropping rule as subscribe() above.
@@ -50,6 +61,15 @@ const api = {
     const listener = (_event: IpcRendererEvent, action: MenuActionId): void => callback(action)
     ipcRenderer.on(MENU_ACTION_CHANNEL, listener)
     return () => ipcRenderer.removeListener(MENU_ACTION_CHANNEL, listener)
+  },
+
+  // Notification clicks arrive here as destinations rather than verbs — the
+  // shell maps the target onto the same selection the sidebar sets. Same
+  // IpcRendererEvent-dropping rule as everything above.
+  onNavigate: (callback: (target: NavigateTarget) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, target: NavigateTarget): void => callback(target)
+    ipcRenderer.on(NAVIGATE_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(NAVIGATE_CHANNEL, listener)
   }
 }
 
