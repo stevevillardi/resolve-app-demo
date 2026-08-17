@@ -14,6 +14,7 @@ import { useGroupMessagePreviews } from '@/hooks/useGroupMessages'
 import { useUnread } from '@/hooks/useUnread'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
+import { byRecency } from '@/lib/conversation-sort'
 import { previewLine, repoName } from '@/lib/format'
 import { usageForContact, usageForContacts } from '@/lib/usage'
 import { cn } from '@/lib/utils'
@@ -172,20 +173,32 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
     [personaTemplates]
   )
 
+  // Recency-sorted within each section (Phase 20): the services return
+  // alphabetical, which suits a phone book, not a messages app. The preview —
+  // already fetched for the row's own subtitle — is the timestamp authority.
   const visibleContacts = useMemo(
     () =>
-      contacts.filter(
-        (contact) =>
-          !needle ||
-          contact.displayName.toLowerCase().includes(needle) ||
-          contact.repoPath.toLowerCase().includes(needle)
+      byRecency(
+        contacts.filter(
+          (contact) =>
+            !needle ||
+            contact.displayName.toLowerCase().includes(needle) ||
+            contact.repoPath.toLowerCase().includes(needle)
+        ),
+        (contact) => previews.find((message) => message.contactId === contact.id)?.timestamp,
+        (contact) => contact.displayName
       ),
-    [contacts, needle]
+    [contacts, needle, previews]
   )
 
   const visibleGroups = useMemo(
-    () => groups.filter((group) => !needle || group.repoPath.toLowerCase().includes(needle)),
-    [groups, needle]
+    () =>
+      byRecency(
+        groups.filter((group) => !needle || group.repoPath.toLowerCase().includes(needle)),
+        (group) => groupPreviews.find((message) => message.groupId === group.id)?.timestamp,
+        (group) => repoName(group.repoPath)
+      ),
+    [groups, needle, groupPreviews]
   )
 
   if (isPending) {
