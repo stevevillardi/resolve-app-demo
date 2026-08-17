@@ -85,7 +85,7 @@ export function useAgentStreams(contactIds: string[]): void {
 }
 
 export function useMentionInGroup(groupId: string): {
-  mention: (contactId: string, content: string) => void
+  mention: (contactId: string, content: string, opts?: { onSuccess?: () => void }) => void
   isPending: boolean
   error: string | null
   reset: () => void
@@ -105,7 +105,10 @@ export function useMentionInGroup(groupId: string): {
   })
 
   return {
-    mention: (contactId, content) => mutation.mutate({ contactId, content }),
+    // Per-call onSuccess mirrors useSendMessage: the group composer clears its
+    // draft only when the mention was accepted, so a refusal keeps the text.
+    mention: (contactId, content, opts) =>
+      mutation.mutate({ contactId, content }, opts?.onSuccess ? { onSuccess: opts.onSuccess } : {}),
     isPending: mutation.isPending,
     // Carries the lock refusal naming whichever persona holds the repo.
     error: mutation.error ? ipcErrorMessage(mutation.error) : null,

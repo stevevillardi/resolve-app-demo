@@ -34,6 +34,12 @@ interface MessageBubbleProps {
    */
   activity?: string | null
   /**
+   * The model thinking aloud, shown collapsed while `status` is `streaming`
+   * and never persisted (review §B7). Only Codex emits it; on Claude the
+   * disclosure simply never appears.
+   */
+  reasoning?: string
+  /**
    * What it has done so far this turn.
    *
    * Distinct from `activity` above, which is one current line that is replaced
@@ -70,6 +76,7 @@ export function MessageBubble({
   senderSeed,
   onRetry,
   activity,
+  reasoning,
   toolCalls
 }: MessageBubbleProps): React.JSX.Element {
   const isOutbound = role === 'user'
@@ -153,6 +160,23 @@ export function MessageBubble({
               )}
               {status === 'streaming' && (
                 <>
+                  {/* Native details, collapsed by default: thinking is a pulse,
+                      not the reply, and it vanishes with the live state when
+                      the persisted row replaces this bubble. Above the
+                      timeline — it precedes the work it decided on. */}
+                  {reasoning?.trim() && (
+                    <details
+                      className={cn('group', content.trim() && 'mt-2')}
+                      onToggle={(event) => event.stopPropagation()}
+                    >
+                      <summary className="text-muted-foreground cursor-pointer list-none text-xs select-none">
+                        Thinking…
+                      </summary>
+                      <p className="text-muted-foreground mt-1 text-xs whitespace-pre-wrap">
+                        {reasoning}
+                      </p>
+                    </details>
+                  )}
                   {/* Above the indicator: what has happened reads top-down, and what
                       is happening now stays last, where the eye already is. */}
                   <ToolCallTimeline

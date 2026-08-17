@@ -802,6 +802,16 @@ export const ipcContract = {
     input: z.object({ id: z.string() }),
     output: contactSchema
   },
+  /**
+   * The contact's working tree for @file autocomplete: tracked plus
+   * untracked-but-not-ignored, relative paths in git's order. Falls back to
+   * the bound repo while an isolated contact's worktree doesn't exist yet,
+   * and degrades to [] for a non-repo binding. Capped; `truncated` says so.
+   */
+  'contacts.files': {
+    input: z.object({ contactId: z.string() }),
+    output: z.object({ files: z.array(z.string()), truncated: z.boolean() })
+  },
   'groups.markRead': {
     input: z.object({ id: z.string() }),
     output: groupSchema
@@ -900,6 +910,47 @@ export const ipcContract = {
   'messages.cancel': {
     input: z.object({ runId: z.string() }),
     output: z.object({ cancelled: z.boolean() })
+  },
+  /**
+   * Re-runs the thread's last user message without writing a second row — the
+   * failed turn already persisted it. Throws 'Nothing to retry.' when the tail
+   * is an assistant reply, and rejects on a lock refusal exactly like
+   * messages.send. `groupId` routes the reply to that group (a retry clicked
+   * in the group thread); absent, the reply stays in the 1:1 thread.
+   */
+  'messages.retry': {
+    input: z.object({ contactId: z.string(), groupId: z.string().optional() }),
+    output: z.object({ runId: z.string() })
+  },
+
+  /**
+   * Full-text search over message content, both 1:1 and group (FTS5,
+   * migration 0017). Snippets decorate matched tokens with the \u0001/\u0002
+   * control characters for the renderer to highlight — printable markers
+   * would collide with code in the text. Under two characters returns []
+   * rather than matching the world; raw FTS5 syntax in the query is quoted
+   * away by the service, never an error.
+   */
+  'search.messages': {
+    input: z.object({ query: z.string(), limit: z.number().int().positive().optional() }),
+    output: z.array(
+      z.discriminatedUnion('kind', [
+        z.object({
+          kind: z.literal('message'),
+          contactId: z.string(),
+          messageId: z.string(),
+          snippet: z.string(),
+          timestamp: z.number()
+        }),
+        z.object({
+          kind: z.literal('group_message'),
+          groupId: z.string(),
+          groupMessageId: z.string(),
+          snippet: z.string(),
+          timestamp: z.number()
+        })
+      ])
+    )
   },
 
   /**

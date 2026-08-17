@@ -19,10 +19,13 @@ import { streamText } from '@/lib/stream'
 import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useAgentStreams, useGroupMessages, useMentionInGroup } from '@/hooks/useGroupMessages'
-import { useCancelRun } from '@/hooks/useMessages'
+import { useActiveRuns, useCancelRun, useMessagePreviews, useRetryTurn } from '@/hooks/useMessages'
+import { useContactFiles } from '@/hooks/useContactFiles'
 import { useMarkRead } from '@/hooks/useUnread'
+import { groupRetryTarget } from '@/lib/turn-tail'
 import { firstUnreadIndex } from '@/lib/unread'
 import { useRunStore } from '@/store/useRunStore'
+import { draftKey, useDraftStore } from '@/store/useDraftStore'
 import { useUiStore } from '@/store/useUiStore'
 import type { Contact, GroupMessage, PersonaTemplate } from '@/types'
 
@@ -105,7 +108,11 @@ function GroupEntry({
 }
 
 export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.Element {
-  const [draft, setDraft] = useState('')
+  const draftId = draftKey('group', groupId)
+  const draft = useDraftStore((state) => state.byConversation[draftId] ?? '')
+  const setDraftValue = useDraftStore((state) => state.setDraft)
+  const clearDraft = useDraftStore((state) => state.clearDraft)
+  const setDraft = (value: string): void => setDraftValue(draftId, value)
 
   const { data: groups = [], isLoading: groupsLoading } = useGroups()
   const { data: contacts = [] } = useContacts()
@@ -142,6 +149,9 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
 
   const runsByContact = useRunStore((state) => state.byContact)
   const { mention, error: mentionError, reset } = useMentionInGroup(groupId)
+  const { retry, error: retryError, reset: resetRetry } = useRetryTurn()
+  const { data: previews = [] } = useMessagePreviews()
+  const { data: activeRuns = [] } = useActiveRuns()
 
   // A branch request is the one row here that asks the user for something, and
   // the Branches panel is where the answer lives — so the button navigates
@@ -168,6 +178,37 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
 
   const contentRef = useRef<HTMLDivElement>(null)
   const streamed = live?.turn ? streamText(live.turn.stream) : ''
+
+  // Which member an "interrupted, retry?" notice should re-run. A
+  // user_mention row records neither its target nor its @token, so the
+  // target is recovered from the durable side effect the mention left: the
+  // member whose own thread holds the unanswered user row (lib/turn-tail.ts).
+  // Members with a run in the store OR in main's active set are excluded —
+  // the store covers the post-send window, the query covers a renderer
+  // reload while main is still mid-turn.
+  const liveIds = memberIds.filter(
+    (id) => runsByContact[id] || activeRuns.some((run) => run.contactId === id)
+  )
+  const retryTarget = groupRetryTarget(thread, previews, memberIds, liveIds)
+
+  // Computed before the early returns because the file hook below needs the
+  // resolved target. With no group yet, repoContacts is empty and parseMention
+  // simply resolves nobody.
+  const mentionTargets = repoContacts.map((contact) => ({
+    contactId: contact.id,
+    name: personaOf(contact)?.name ?? contact.displayName
+  }))
+  const parsed = parseMention(draft, mentionTargets)
+
+  // @file completes against the *mentioned* contact's tree — the session the
+  // message is going to — and only once a mention resolves; before that an @
+  // is still the address, not a path. minStart puts the mention token itself
+  // out of the file parser's reach even when the draft starts with spaces.
+  const fileMinStart = draft.length - draft.trimStart().length + 1
+  const files = useContactFiles(
+    parsed?.contactId ?? '',
+    Boolean(parsed) && draft.includes('@', fileMinStart)
+  )
 
   // Same boundary-at-open capture and read-on-open/arrival contract as
   // ThreadView — see the comments there.
@@ -202,20 +243,13 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
   }
 
   const name = repoName(group.repoPath)
-
-  const mentionTargets = repoContacts.map((contact) => ({
-    contactId: contact.id,
-    name: personaOf(contact)?.name ?? contact.displayName
-  }))
-
-  const parsed = parseMention(draft, mentionTargets)
   const isRunning = Boolean(live)
 
   const handleSend = (): void => {
     if (!parsed) return
     reset()
-    mention(parsed.contactId, parsed.content)
-    setDraft('')
+    // Cleared only on acceptance — same contract as ThreadView's send.
+    mention(parsed.contactId, parsed.content, { onSuccess: () => clearDraft(draftId) })
   }
 
   return (
@@ -290,6 +324,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               content={streamed}
               status="streaming"
               activity={live.turn.stream.activity}
+              reasoning={live.turn.stream.reasoning}
               toolCalls={live.turn.stream.toolCalls}
               senderName={personaFor(live.contactId)?.name}
               senderColor={personaFor(live.contactId)?.avatarColor}
@@ -306,6 +341,25 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               senderName={personaFor(live.contactId)?.name}
               senderColor={personaFor(live.contactId)?.avatarColor}
               senderSeed={personaFor(live.contactId)?.id}
+              onRetry={() => {
+                resetRetry()
+                retry(live.contactId, groupId)
+              }}
+            />
+          )}
+
+          {/* The durable version, for a mention whose failure did not survive
+              a reload — same rule as ThreadView's interrupted notice. */}
+          {retryTarget && (
+            <MessageBubble
+              role="assistant"
+              content=""
+              status="error"
+              error={{ kind: 'unknown', message: 'This turn was interrupted before it finished.' }}
+              onRetry={() => {
+                resetRetry()
+                retry(retryTarget, groupId)
+              }}
             />
           )}
         </div>
@@ -316,6 +370,8 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
         value={draft}
         onValueChange={setDraft}
         onSend={handleSend}
+        files={files}
+        fileMinStart={fileMinStart}
         busy={isRunning}
         onStop={() => live?.turn && cancel(live.turn.runId)}
         // A draft addressed to nobody has nowhere to go: the Group has no
@@ -324,7 +380,9 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
         disabled={!parsed}
         hint={<span>Mention a persona with @ to route this to its own session.</span>}
         notice={
-          mentionError ?? (draft.trim() && !parsed ? 'Start with @ to choose who answers.' : null)
+          mentionError ??
+          retryError ??
+          (draft.trim() && !parsed ? 'Start with @ to choose who answers.' : null)
         }
         leadingAction={
           <MentionPicker
@@ -332,7 +390,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
             personaTemplates={personaTemplates}
             onSelect={(contact) => {
               const persona = personaOf(contact)
-              setDraft((prev) => `${prev}${mentionToken(persona?.name ?? contact.displayName)}`)
+              setDraft(`${draft}${mentionToken(persona?.name ?? contact.displayName)}`)
             }}
             trigger={
               <Button variant="ghost" size="icon-sm" aria-label="Mention a persona">

@@ -151,3 +151,20 @@ export function readProfileDb<T = Record<string, unknown>>(
     db.close()
   }
 }
+
+/**
+ * Writes into the profile database — **only while the app is closed**. The
+ * app holds an open WAL connection; a second writer against it is a
+ * SQLITE_BUSY flake waiting for CI. Used to stage the states only a dead
+ * process leaves behind (a crash's orphans, history to search), which no
+ * IPC procedure can or should create. Triggers fire here exactly as they do
+ * for the app's own writes — same database, same DDL.
+ */
+export function writeProfileDb(profile: string, sql: string, ...params: unknown[]): void {
+  const db = new DatabaseSync(join(profile, 'userData', 'switchboard.db'))
+  try {
+    db.prepare(sql).run(...(params as never[]))
+  } finally {
+    db.close()
+  }
+}

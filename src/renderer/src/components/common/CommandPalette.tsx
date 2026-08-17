@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BookOpen, Clock, Moon, Plus, Sun } from 'lucide-react'
+import { BookOpen, Clock, MessageSquare, Moon, Plus, Sun } from 'lucide-react'
 // lucide 1.x dropped brand marks, so the GitHub logo is inlined in the repo.
 import { Github } from '@/components/github/GithubMark'
 import {
@@ -21,7 +21,9 @@ import { usePersonas } from '@/hooks/usePersonas'
 import { useSkills } from '@/hooks/useSkills'
 import { buildCommandSections, type CommandItem as Command_ } from '@/lib/command-palette'
 import { repoName } from '@/lib/format'
+import { parseSnippet } from '@/lib/search-view'
 import { useRoutines } from '@/hooks/useRoutines'
+import { useSearchMessages } from '@/hooks/useSearch'
 import { useUiStore } from '@/store/useUiStore'
 
 /**
@@ -288,6 +290,30 @@ export function CommandPalette(): React.JSX.Element {
 
   const sections = useMemo(() => buildCommandSections(items, query), [items, query])
 
+  // The async section. Deliberately NOT routed through the pure scorer:
+  // FTS5 already ranked these by bm25, and re-scoring prose snippets with a
+  // label-prefix heuristic would only scramble them.
+  const messageResults = useSearchMessages(open ? query : '')
+
+  const conversationTitleFor = (result: (typeof messageResults)[number]): string => {
+    if (result.kind === 'message') {
+      const contact = contacts.find((candidate) => candidate.id === result.contactId)
+      const persona = personas.find((candidate) => candidate.id === contact?.personaTemplateId)
+      return persona?.name ?? contact?.displayName ?? 'Conversation'
+    }
+    const group = groups.find((candidate) => candidate.id === result.groupId)
+    return group ? repoName(group.repoPath) : 'Repo group'
+  }
+
+  const openResult = (result: (typeof messageResults)[number]): void => {
+    setSection('chats')
+    setSelectedConversation(
+      result.kind === 'message'
+        ? { kind: 'contact', id: result.contactId }
+        : { kind: 'group', id: result.groupId }
+    )
+  }
+
   return (
     <CommandDialog
       open={open}
@@ -322,6 +348,42 @@ export function CommandPalette(): React.JSX.Element {
               ))}
             </CommandGroup>
           ))}
+          {messageResults.length > 0 && (
+            <CommandGroup heading="Messages">
+              {messageResults.map((result) => {
+                const id =
+                  result.kind === 'message'
+                    ? `search:m:${result.messageId}`
+                    : `search:g:${result.groupMessageId}`
+                return (
+                  <CommandItem
+                    key={id}
+                    value={id}
+                    onSelect={() => {
+                      openResult(result)
+                      close()
+                    }}
+                  >
+                    <MessageSquare className="text-muted-foreground" />
+                    <span className="truncate">
+                      {parseSnippet(result.snippet).map((segment, index) =>
+                        segment.match ? (
+                          <span key={index} className="text-foreground font-semibold">
+                            {segment.text}
+                          </span>
+                        ) : (
+                          <span key={index}>{segment.text}</span>
+                        )
+                      )}
+                    </span>
+                    <CommandShortcut className="truncate text-meta tracking-normal">
+                      {conversationTitleFor(result)}
+                    </CommandShortcut>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          )}
         </CommandList>
         <div className="border-border text-muted-foreground flex items-center gap-3 border-t px-3 py-2 text-meta">
           <span className="flex items-center gap-1">
