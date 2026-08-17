@@ -4,6 +4,7 @@ import { initDb } from '../db'
 import { toUsageEvent } from '../db/mappers'
 import { contacts, usageEvents } from '../db/schema'
 import { emitUsageChanged } from './agent-events'
+import { checkBudgetsAfterUsage } from './budget-alerts'
 import type { AgentUsage } from '../../shared/agent'
 import type { UsageEvent, UsageSource } from '../../shared/domain'
 
@@ -89,12 +90,18 @@ export function recordUsage(
   // announcing first would race the row it is announcing. Same ordering the
   // turn loop uses for `done`.
   //
-  // Budget caps (blueprint §13) are deliberately not enforced anywhere in v1.
-  // If they ever are, this is the seam: every turn's spend passes through here,
-  // and this is the only place that knows a row was just written. Note a
-  // partial total must never trip a cap — a summary carrying unpriced turns is
-  // a lower bound, not a figure.
+  // Budget caps (blueprint §13) are still not *enforced* anywhere. What hangs
+  // off this seam since Phase 20 is the soft alert — see budget-alerts.ts,
+  // which honours the rule this comment has always carried: a summary with
+  // unpriced turns is a lower bound, so the alert says "at least $X" and no
+  // floor ever stops anything. Wrapped because an alert must never fail the
+  // turn whose spend it is reacting to.
   emitUsageChanged()
+  try {
+    checkBudgetsAfterUsage(event)
+  } catch (error) {
+    console.error('[budget] alert check failed', error)
+  }
 
   return event
 }
