@@ -802,6 +802,16 @@ export const ipcContract = {
     input: z.object({ id: z.string() }),
     output: contactSchema
   },
+  /**
+   * The contact's working tree for @file autocomplete: tracked plus
+   * untracked-but-not-ignored, relative paths in git's order. Falls back to
+   * the bound repo while an isolated contact's worktree doesn't exist yet,
+   * and degrades to [] for a non-repo binding. Capped; `truncated` says so.
+   */
+  'contacts.files': {
+    input: z.object({ contactId: z.string() }),
+    output: z.object({ files: z.array(z.string()), truncated: z.boolean() })
+  },
   'groups.markRead': {
     input: z.object({ id: z.string() }),
     output: groupSchema

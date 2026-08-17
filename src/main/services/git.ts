@@ -484,6 +484,19 @@ export async function currentBranch(workingPath: string): Promise<string | null>
 }
 
 /**
+ * Every file in the working tree as git sees it: tracked, plus untracked
+ * that isn't ignored. Feeds the composer's @file autocomplete, which is why
+ * ignored files are excluded — offering node_modules paths would bury the
+ * ones anyone actually types.
+ */
+export async function listTrackedFiles(workingPath: string): Promise<string[]> {
+  const result = await git(['ls-files', '--cached', '--others', '--exclude-standard'], workingPath)
+  if (result.code !== 0) throw localGitError(`Could not list the files of ${workingPath}`, result)
+
+  return result.stdout.split('\n').filter(Boolean)
+}
+
+/**
  * Subject lines of the commits `branch` has and `base` does not.
  *
  * Null — distinct from an empty array — when the range cannot be resolved,
