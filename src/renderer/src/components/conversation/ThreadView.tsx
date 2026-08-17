@@ -166,7 +166,8 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                 .map((call) => ({
                   id: call.id,
                   name: call.name,
-                  detail: call.status === 'running' ? 'interrupted' : '',
+                  detail: call.status === 'running' ? 'interrupted' : (call.detail ?? ''),
+                  ...(call.output ? { output: call.output } : {}),
                   status: (call.status === 'running' ? 'failed' : call.status) as
                     'completed' | 'failed'
                 }))

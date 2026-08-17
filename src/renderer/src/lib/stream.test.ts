@@ -122,6 +122,18 @@ describe('tool activity', () => {
     expect(stream.activity).toBeNull()
   })
 
+  it('carries tool_end output onto the call, and never invents one', () => {
+    const stream = fold([
+      { type: 'tool_start', toolCallId: 't1', name: 'Bash', detail: 'npm test' },
+      { type: 'tool_start', toolCallId: 't2', name: 'Read', detail: 'src/a.ts' },
+      { type: 'tool_end', toolCallId: 't1', name: 'Bash', status: 'completed', output: '12 passing' },
+      { type: 'tool_end', toolCallId: 't2', name: 'Read', status: 'completed' }
+    ])
+
+    expect(stream.toolCalls.find((call) => call.id === 't1')?.output).toBe('12 passing')
+    expect(stream.toolCalls.find((call) => call.id === 't2')?.output).toBeUndefined()
+  })
+
   it('keeps showing the other tool when one of two finishes first', () => {
     // The comment on the tool_end arm has always claimed this, and the arm
     // ignored toolCallId and cleared unconditionally — so the first of two

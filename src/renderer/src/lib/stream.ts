@@ -23,6 +23,8 @@ export interface ToolCall {
   name: string
   /** The command line, the path, the query — whatever the backend named. */
   detail: string
+  /** How it answered — the bounded excerpt tool_end carried (Phase 19). */
+  output?: string
   status: 'running' | 'completed' | 'failed'
 }
 
@@ -156,7 +158,8 @@ export function applyAgentEvent(stream: ThreadStream, event: AgentEvent): Thread
       const toolCalls = patchCall(stream.toolCalls, event.toolCallId, (call) => ({
         ...call,
         status: event.status,
-        detail: event.detail ?? call.detail
+        detail: event.detail ?? call.detail,
+        ...(event.output ? { output: event.output } : {})
       }))
       const running = toolCalls.filter((call) => call.status === 'running')
 
