@@ -779,10 +779,11 @@ export const ipcContract = {
   // returned here. A turn can take minutes, which is far too long to hold an
   // invoke open.
   /**
-   * The persisted tool record for a thread (Phase 17, doc 15 item 1): which
-   * tools each turn ran and how each ended — name and status only, never
-   * arguments. messageId is null for calls whose turn died before its reply
-   * was written; the renderer shows those as interrupted.
+   * The persisted tool record for a thread (Phase 17, doc 15 item 1; widened
+   * in Phase 19): which tools each turn ran, how each ended, and the bounded
+   * detail/output excerpts the live stream showed — capped where they are
+   * written, in messaging.ts. messageId is null for calls whose turn died
+   * before its reply was written; the renderer shows those as interrupted.
    */
   'messages.toolCalls': {
     input: z.object({ contactId: z.string() }),
@@ -792,7 +793,9 @@ export const ipcContract = {
         messageId: z.string().nullable(),
         name: z.string(),
         status: z.enum(['running', 'completed', 'failed']),
-        createdAt: z.number()
+        createdAt: z.number(),
+        detail: z.string().optional(),
+        output: z.string().optional()
       })
     )
   },

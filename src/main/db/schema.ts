@@ -1,5 +1,5 @@
 import { sqliteTable, integer, real, text, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import type { RepoTrust } from '../../shared/domain'
+import type { RepoTrust, TurnWork } from '../../shared/domain'
 
 /**
  * Blueprint §12, one table per bullet. The column shapes mirror the Zod
@@ -174,7 +174,13 @@ export const groupMessages = sqliteTable(
      * injecting these rows into every session on the repo. Retrofitting it
      * would mean a migration plus a re-summarisation pass over history.
      */
-    branch: text('branch')
+    branch: text('branch'),
+    /**
+     * `branch_request` only (Phase 19): stamped when the branch it asks about
+     * is merged or discarded, which is what stops an answered ask reading
+     * forever as a standing one.
+     */
+    resolvedAt: integer('resolved_at', { mode: 'timestamp_ms' })
   },
   (table) => [index('group_messages_group_timestamp_idx').on(table.groupId, table.timestamp)]
 )
@@ -188,20 +194,28 @@ export const messages = sqliteTable(
       .references(() => contacts.id, { onDelete: 'cascade' }),
     role: text('role', { enum: ['user', 'assistant'] }).notNull(),
     content: text('content').notNull(),
-    timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull()
+    timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
+    /**
+     * What the turn ending in this assistant message did to the working tree
+     * (Phase 19), stamped from git in finish(). Null on user rows and on turns
+     * that changed nothing, so a chip row only ever appears when there is work
+     * to show. JSON because the five fields are written and read together.
+     */
+    work: text('work', { mode: 'json' }).$type<TurnWork>()
   },
   (table) => [index('messages_contact_timestamp_idx').on(table.contactId, table.timestamp)]
 )
 
 /**
- * The durable record of what a turn *called* (Phase 17, doc 15 item 1).
+ * The durable record of what a turn *called* (Phase 17, doc 15 item 1;
+ * widened in Phase 19).
  *
- * Name and status only, by decision — never arguments, output, or the
- * `detail` string the live stream shows: those carry issue titles, file paths
- * and command lines that have no business living in SQLite forever. The live
- * timeline stays event-driven and richer; these rows exist for the reload and
- * the morning after an unattended routine, when "what did it actually touch"
- * otherwise has no answer at all.
+ * Phase 17 chose name and status only. Phase 19 reverses that deliberately —
+ * the workflow review made the cost concrete: the morning after an MCP
+ * routine, "what did it write" had no answer. The rows now carry *bounded*
+ * detail and output excerpts, never full arguments; the caps live beside the
+ * writer in messaging.ts. These rows exist for the reload and the morning
+ * after an unattended routine.
  *
  * `messageId` is stamped when the turn's assistant message is written; a row
  * still `running` with a null messageId is a turn that died mid-call, and the
@@ -220,7 +234,16 @@ export const toolCalls = sqliteTable(
     toolCallId: text('tool_call_id').notNull(),
     name: text('name').notNull(),
     status: text('status', { enum: ['running', 'completed', 'failed'] }).notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull()
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    /**
+     * Bounded excerpts (Phase 19, reversing doc 15 item 1 — see 00-progress):
+     * `detail` is what the call was asked (the command line, the path), capped
+     * at TOOL_DETAIL_MAX; `output` is how it answered, capped at
+     * TOOL_OUTPUT_MAX. Both nullable — rows from before the columns existed
+     * read as absent, and a turn that reported neither stores neither.
+     */
+    detail: text('detail'),
+    output: text('output')
   },
   (table) => [index('tool_calls_contact_created_idx').on(table.contactId, table.createdAt)]
 )

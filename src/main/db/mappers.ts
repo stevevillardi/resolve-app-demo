@@ -107,7 +107,8 @@ export function toGroupMessage(row: GroupMessageRow): GroupMessage {
     ...optional('contactId', row.contactId),
     ...optional('category', row.category),
     ...optional('durable', row.durable),
-    ...optional('branch', row.branch)
+    ...optional('branch', row.branch),
+    ...optional('resolvedAt', row.resolvedAt === null ? null : row.resolvedAt.getTime())
   }
 }
 
@@ -117,7 +118,8 @@ export function toMessage(row: MessageRow): PersistedMessage {
     contactId: row.contactId,
     role: row.role,
     content: row.content,
-    timestamp: row.timestamp.getTime()
+    timestamp: row.timestamp.getTime(),
+    ...optional('work', row.work)
   }
 }
 

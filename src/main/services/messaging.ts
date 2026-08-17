@@ -82,9 +82,10 @@ const runs = new Map<string, Run>()
 // --- Reads ------------------------------------------------------------------
 
 /**
- * The persisted tool record for a thread (Phase 17, doc 15 item 1): name and
- * status per call, stamped with the message the turn ended in. Never
- * arguments — see the table's comment in schema.ts.
+ * The persisted tool record for a thread (Phase 17, doc 15 item 1; widened in
+ * Phase 19): name and status per call, stamped with the message the turn ended
+ * in, plus the bounded detail/output excerpts — see the table's comment in
+ * schema.ts for the reversal this was.
  */
 export function listToolCalls(contactId: string): {
   id: string
@@ -92,6 +93,8 @@ export function listToolCalls(contactId: string): {
   name: string
   status: 'running' | 'completed' | 'failed'
   createdAt: number
+  detail?: string
+  output?: string
 }[] {
   return initDb()
     .select()
@@ -104,7 +107,9 @@ export function listToolCalls(contactId: string): {
       messageId: row.messageId,
       name: row.name,
       status: row.status,
-      createdAt: row.createdAt.getTime()
+      createdAt: row.createdAt.getTime(),
+      ...(row.detail === null ? {} : { detail: row.detail }),
+      ...(row.output === null ? {} : { output: row.output })
     }))
 }
 
