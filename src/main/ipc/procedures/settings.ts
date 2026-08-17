@@ -3,7 +3,13 @@ import { is } from '@electron-toolkit/utils'
 import { existsSync } from 'fs'
 import { registerProcedure } from '../registerProcedure'
 import { notificationsEnabled } from '../../notifications'
-import { getAppState, setAppStateFlag } from '../../services/app-state'
+import {
+  deleteAppState,
+  getAppState,
+  getAppStateNumber,
+  setAppStateFlag,
+  setAppStateNumber
+} from '../../services/app-state'
 import { chooseWorkspaceRoot } from '../../services/repos'
 
 registerProcedure('workspace.getRoot', () => {
@@ -18,6 +24,18 @@ registerProcedure('notifications.get', () => ({ enabled: notificationsEnabled() 
 registerProcedure('notifications.set', ({ enabled }) => {
   setAppStateFlag('notifications_enabled', enabled)
   return { enabled }
+})
+
+registerProcedure('budget.get', () => ({
+  monthlyBudgetUsd: getAppStateNumber('monthly_budget_usd')
+}))
+
+registerProcedure('budget.set', ({ monthlyBudgetUsd }) => {
+  // Null clears the row rather than storing "null": absence is the no-budget
+  // state everywhere else this key is read.
+  if (monthlyBudgetUsd === null) deleteAppState('monthly_budget_usd')
+  else setAppStateNumber('monthly_budget_usd', monthlyBudgetUsd)
+  return { monthlyBudgetUsd }
 })
 
 registerProcedure('appInfo.get', () => ({

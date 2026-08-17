@@ -18,6 +18,7 @@ import { PaneHeader } from '@/components/common/PaneHeader'
 import { RunPulse } from '@/components/common/RunIndicator'
 import { Section } from '@/components/common/Section'
 import { useAuthStatus, useRefreshAuth } from '@/hooks/useAuth'
+import { useBudget } from '@/hooks/useSettings'
 import { useBranches } from '@/hooks/useBranches'
 import { useContacts } from '@/hooks/useConversations'
 import { useActiveRuns, useCancelRun, useMessagePreviews } from '@/hooks/useMessages'
@@ -26,6 +27,7 @@ import { useNextRuns, useRoutines } from '@/hooks/useRoutines'
 import { useUsageEvents } from '@/hooks/useUsage'
 import {
   authBannerFor,
+  budgetBannerFor,
   dailySpend,
   formatElapsed,
   formatUpcoming,
@@ -86,6 +88,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   const { data: nextRunRows = [] } = useNextRuns()
   const { data: routines = [] } = useRoutines()
   const { data: authStatus } = useAuthStatus()
+  const { monthlyBudgetUsd } = useBudget()
   const { refresh: refreshAuth, isPending: refreshingAuth } = useRefreshAuth()
   const { cancel } = useCancelRun()
 
@@ -105,6 +108,8 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   const upcoming = variant === 'home' ? upcomingRuns(nextRunRows, UPCOMING_LIMIT) : []
   const missed = variant === 'home' ? missedRuns(routines, contacts, UPCOMING_LIMIT) : []
   const banner = variant === 'home' ? authBannerFor(authStatus) : null
+  const budgetBanner =
+    variant === 'home' ? budgetBannerFor(events, monthlyBudgetUsd, routines, now) : null
   const repoCount = new Set(contacts.map((contact) => contact.repoPath)).size
   // Only the ones with something in them, and not yet landed. A merged branch
   // is finished work, not waiting work — counting it kept the banner up
@@ -129,11 +134,16 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
     )
   }
 
-  // Missed fires keep the summary on screen even when the week was otherwise
-  // quiet — a month of silent 9:00 misses on an unused install is exactly the
-  // case where the empty state would swallow the one thing worth saying.
+  // Missed fires and a crossed budget both keep the summary on screen even
+  // when the week was otherwise quiet: a month of silent 9:00 misses, or a
+  // quiet week after a spendy month-start, is exactly when the empty state
+  // would swallow the one thing worth saying.
   const nothingToShow =
-    runs.length === 0 && recent.length === 0 && spend.turns === 0 && missed.length === 0
+    runs.length === 0 &&
+    recent.length === 0 &&
+    spend.turns === 0 &&
+    missed.length === 0 &&
+    budgetBanner === null
   if (nothingToShow) {
     return variant === 'chats' ? (
       <EmptyPane
@@ -188,6 +198,20 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
                 Check again
               </Button>
             )}
+          </div>
+        )}
+
+        {/* The month-to-date crossing, in the warning register — deliberately
+            not destructive: nothing failed and nothing was stopped, which the
+            copy also says. One banner, worst overage, computed by the same
+            priced-floor rules as the toast so the two cannot disagree. */}
+        {budgetBanner && (
+          <div className="border-scope-elevated/40 bg-scope-elevated-bg/30 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3">
+            <AlertTriangle className="text-scope-elevated size-4 shrink-0" />
+            <p className="min-w-0 flex-1 text-sm text-pretty">{budgetBanner.message}</p>
+            <Button variant="outline" size="sm" onClick={() => setSection('usage')}>
+              See usage
+            </Button>
           </div>
         )}
 

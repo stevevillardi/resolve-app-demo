@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   authBannerFor,
+  budgetBannerFor,
   dailySpend,
   formatElapsed,
   formatUpcoming,
@@ -350,5 +351,78 @@ describe('missedRuns', () => {
 
   it('drops a count with no stamp rather than inventing a time', () => {
     expect(missedRuns([routine('r1', 'c1', 3, null)], CONTACTS, 5)).toEqual([])
+  })
+})
+
+describe('budgetBannerFor', () => {
+  const NOW = new Date('2026-08-17T12:00:00').getTime()
+  const LAST_MONTH = new Date('2026-07-20T12:00:00').getTime()
+
+  function routineWithBudget(
+    id: string,
+    monthlyBudgetUsd: number | null
+  ): Parameters<typeof budgetBannerFor>[2][number] {
+    return {
+      id,
+      contactId: 'c1',
+      schedule: '0 9 * * *',
+      prompt: `prompt for ${id}`,
+      enabled: true,
+      lastRunAt: null,
+      lastRunSummary: null,
+      missedRunCount: 0,
+      lastMissedAt: null,
+      monthlyBudgetUsd
+    }
+  }
+
+  function priced(timestamp: number, costUsd: number | null, routineId?: string): UsageEvent {
+    return { ...usage(timestamp, costUsd), ...(routineId ? { routineId } : {}) }
+  }
+
+  it('is null with no budgets configured', () => {
+    expect(budgetBannerFor([priced(NOW - 1000, 100)], null, [], NOW)).toBeNull()
+  })
+
+  it('banners an app-level crossing, counting only this month', () => {
+    const result = budgetBannerFor([priced(LAST_MONTH, 100), priced(NOW - 1000, 6)], 5, [], NOW)
+
+    expect(result?.scopeLabel).toBe('Switchboard')
+    expect(result?.message).toContain('$6.00 of its $5.00')
+  })
+
+  it('stays quiet under the threshold', () => {
+    expect(budgetBannerFor([priced(NOW - 1000, 4.99)], 5, [], NOW)).toBeNull()
+  })
+
+  // The dashboard's honesty rule in banner form: with unpriced turns the
+  // figure is a floor, and an all-unpriced month never banners at all.
+  it('says "at least" with unpriced turns present, and never banners all-unpriced', () => {
+    const mixed = budgetBannerFor([priced(NOW - 2000, 6), priced(NOW - 1000, null)], 5, [], NOW)
+    expect(mixed?.message).toContain('at least $6.00')
+
+    expect(budgetBannerFor([priced(NOW - 1000, null)], 5, [], NOW)).toBeNull()
+  })
+
+  it("banners a routine crossing on that routine's own spend only", () => {
+    const result = budgetBannerFor(
+      [priced(NOW - 2000, 3, 'r1'), priced(NOW - 1000, 50)],
+      null,
+      [routineWithBudget('r1', 2)],
+      NOW
+    )
+
+    expect(result?.scopeLabel).toContain('prompt for r1')
+  })
+
+  it('shows one banner — the worst overage — when several scopes crossed', () => {
+    const result = budgetBannerFor(
+      [priced(NOW - 2000, 10, 'r1'), priced(NOW - 1000, 2)],
+      10, // app floor 12 / 10 = 1.2x
+      [routineWithBudget('r1', 2)], // routine floor 10 / 2 = 5x
+      NOW
+    )
+
+    expect(result?.scopeLabel).toContain('prompt for r1')
   })
 })

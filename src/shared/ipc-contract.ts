@@ -395,6 +395,20 @@ export const ipcContract = {
   },
 
   /**
+   * The app-level soft monthly spend threshold (Phase 20). Null = no budget.
+   * Alerts only — crossing it notifies and banners, nothing is stopped.
+   * Per-routine thresholds live on the routine rows, not here.
+   */
+  'budget.get': {
+    input: z.void(),
+    output: z.object({ monthlyBudgetUsd: z.number().nullable() })
+  },
+  'budget.set': {
+    input: z.object({ monthlyBudgetUsd: z.number().positive().nullable() }),
+    output: z.object({ monthlyBudgetUsd: z.number().nullable() })
+  },
+
+  /**
    * Wipes the app back to a fresh install and relaunches (Phase 18). Dev
    * tooling: profile, secrets, worktrees and persona branches all go; the
    * user's backend logins and cloned repositories are never touched. The

@@ -50,6 +50,31 @@ export function useNotificationSettings(): {
   }
 }
 
+export const budgetKey = ['budget'] as const
+
+export function useBudget(): {
+  monthlyBudgetUsd: number | null
+  setBudget: (monthlyBudgetUsd: number | null) => void
+  isLoading: boolean
+} {
+  const queryClient = useQueryClient()
+  const query = useQuery({
+    queryKey: budgetKey,
+    queryFn: () => callProcedure('budget.get', undefined)
+  })
+  const mutation = useMutation({
+    mutationFn: (monthlyBudgetUsd: number | null) =>
+      callProcedure('budget.set', { monthlyBudgetUsd }),
+    onSuccess: (result) => queryClient.setQueryData(budgetKey, result)
+  })
+
+  return {
+    monthlyBudgetUsd: query.data?.monthlyBudgetUsd ?? null,
+    setBudget: (monthlyBudgetUsd) => mutation.mutate(monthlyBudgetUsd),
+    isLoading: query.isLoading
+  }
+}
+
 export function useAppInfo(): UseQueryResult<IpcOutput<'appInfo.get'>> {
   return useQuery({
     queryKey: ['appInfo'] as const,
