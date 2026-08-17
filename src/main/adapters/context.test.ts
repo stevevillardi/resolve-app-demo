@@ -515,3 +515,77 @@ describe('the cacheable prefix', () => {
     expect(prefix.every((block) => block !== '')).toBe(true)
   })
 })
+
+describe('the block order Codex receives', () => {
+  /**
+   * Doc 15 item 6: Claude splices its cache boundary between prefix and
+   * suffix, but @openai/codex-sdk has no equivalent — Codex receives one
+   * joined string and the ordering below is pure convention with nothing in
+   * the SDK enforcing it. This test IS the enforcement: identity first
+   * (persona prompt, working directory, skills), then what the repository was
+   * trusted to say, then the volatile tail (unavailable servers, repo log,
+   * sibling branches) — stable-before-volatile is also what keeps the cached
+   * prefix cacheable on the backend that does have a boundary.
+   */
+  it('orders identity, then repo trust, then the volatile tail', () => {
+    const full: SessionSpec = {
+      persona: persona(['s1']),
+      repoPath: '/tmp/repo',
+      skills: [skill('s1', 'Checklist', 'Be thorough.')],
+      workingContext: { workingPath: '/tmp/wt', repoPath: '/tmp/repo', branch: 'persona/x' },
+      repoInstructions: { fileName: 'CLAUDE.md', content: 'Prefer small commits.' },
+      injectedSkills: [{ name: 'release', description: 'Cut a release.', path: '/tmp/x' }],
+      unavailableServers: [{ id: 'github', reason: 'GitHub is not connected.' }],
+      groupContext: [
+        {
+          id: 'g1',
+          groupId: 'grp',
+          type: 'system_summary',
+          timestamp: 1,
+          content: 'Reviewer merged auth.'
+        }
+      ],
+      siblingBranches: [{ branch: 'persona/y', contactName: 'Buddy · repo', headSha: 'abc123' }]
+    }
+
+    const text = composeInstructions(full)
+    const order = [
+      'You review code.',
+      '/tmp/wt',
+      'Checklist',
+      'Prefer small commits.',
+      'release',
+      'GitHub is not connected.',
+      'Reviewer merged auth.',
+      'persona/y'
+    ].map((marker) => {
+      const at = text.indexOf(marker)
+      expect(at, marker).toBeGreaterThanOrEqual(0)
+      return at
+    })
+
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+  })
+
+  it('keeps the volatile tail out of the cacheable prefix', () => {
+    const full: SessionSpec = {
+      persona: persona([]),
+      repoPath: '/tmp/repo',
+      skills: [],
+      unavailableServers: [{ id: 'github', reason: 'GitHub is not connected.' }],
+      groupContext: [
+        {
+          id: 'g1',
+          groupId: 'grp',
+          type: 'system_summary',
+          timestamp: 1,
+          content: 'Reviewer merged auth.'
+        }
+      ]
+    }
+    const { prefix, suffix } = composeInstructionBlocks(full)
+    expect(prefix.join()).not.toContain('GitHub is not connected.')
+    expect(suffix.join()).toContain('GitHub is not connected.')
+    expect(suffix.join()).toContain('Reviewer merged auth.')
+  })
+})
