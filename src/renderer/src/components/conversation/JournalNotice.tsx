@@ -38,7 +38,7 @@ export function JournalNotice({
     <div className="my-1 flex flex-col items-center gap-1.5 py-1">
       <div className="flex w-full items-center gap-2.5">
         <span className="bg-border h-px flex-1" />
-        <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-[11px] font-medium tracking-wide uppercase">
+        <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-meta font-medium tracking-wide uppercase">
           {CATEGORY_LABEL[category]}
           {durable && (
             <Tooltip>
@@ -58,11 +58,11 @@ export function JournalNotice({
         </span>
         <span className="bg-border h-px flex-1" />
       </div>
-      <p className="text-foreground/85 max-w-[46rem] px-6 text-center text-[13px] leading-relaxed text-pretty">
+      <p className="text-foreground/85 max-w-[46rem] px-6 text-center text-row leading-relaxed text-pretty">
         {content}
       </p>
       {(authorName || timestamp !== undefined) && (
-        <p className="text-muted-foreground text-[11px]">
+        <p className="text-muted-foreground text-meta">
           {authorName}
           {authorName && timestamp !== undefined && ' · '}
           {timestamp !== undefined && (

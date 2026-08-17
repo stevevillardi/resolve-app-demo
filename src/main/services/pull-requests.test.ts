@@ -56,6 +56,7 @@ const comments: { issueNumber: number; body: string }[] = []
 
 function fakeClient(): GitHubClient {
   return {
+    whoAmI: async () => ({ login: 'octocat' }),
     listRepos: async () => [],
     getRepo: async () => ({ defaultBranch, canPush }),
     findOpenPr: async () => openPr,

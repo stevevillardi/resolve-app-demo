@@ -1,4 +1,4 @@
-import type { UsageEvent, UsageSummary } from '@/types'
+import type { PersonaBackend, UsageEvent, UsageSummary } from '@/types'
 
 /**
  * Rolls a set of turns up into one displayable total.
@@ -97,4 +97,78 @@ export function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
   if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`
   return `${tokens}`
+}
+
+export interface ContextTokens {
+  /** input + cached + cache-write: the whole prompt the backend was handed. */
+  promptTokens: number
+  /** How many recorded turns went into that figure. */
+  turns: number
+  /** The newest turn counted, so the panel can say how fresh this is. */
+  at: number
+  model: string | null
+  /** Which arithmetic was used, so the UI can say which — see below. */
+  reading: 'last-turn' | 'session-sum'
+}
+
+/**
+ * How large this contact's prompt currently is, read from what was billed.
+ *
+ * The two backends record incompatible things and the difference is not
+ * cosmetic — it is the whole reason this branches rather than summing.
+ *
+ * **Claude** re-sends the entire conversation every turn, so one row's
+ * `inputTokens` *is* the prompt. Summing rows would count the same prompt once
+ * per turn and produce a figure several times too large.
+ *
+ * **Codex** reports cumulatively across a thread, and `recordUsage` stores the
+ * delta — see `deltaFrom` and `usageBaseline` in src/main/adapters/codex.ts. So
+ * one row is that turn's increment, and only the sum is the prompt.
+ *
+ * Scoped to `sessionId`, because a prompt belongs to a session: rows from a
+ * session that has ended describe a conversation the backend has forgotten.
+ * Returns null when there is no session yet — nothing is in context until a
+ * turn has run, and rendering that as 0 would suggest an empty prompt rather
+ * than no prompt at all.
+ *
+ * Deliberately returns **no percentage**. There is no per-model context-window
+ * table anywhere in this app, and inventing one to divide by would be a guess
+ * presented as a measurement. (`LONG_CONTEXT_THRESHOLD` in pricing.ts is a
+ * Codex pricing tier boundary, not a limit.)
+ */
+export function contextTokens(
+  events: UsageEvent[],
+  sessionId: string | null,
+  backend: PersonaBackend
+): ContextTokens | null {
+  if (!sessionId) return null
+
+  const forSession = events.filter((event) => event.sessionId === sessionId)
+  if (forSession.length === 0) return null
+
+  const promptOf = (event: UsageEvent): number =>
+    event.inputTokens + (event.cachedInputTokens ?? 0) + (event.cacheWriteInputTokens ?? 0)
+
+  // Found explicitly rather than by trusting usage.list's ordering: a caller
+  // that filtered or re-sorted first would otherwise silently get the wrong
+  // turn, and the number would still look plausible.
+  const newest = forSession.reduce((latest, event) =>
+    event.timestamp >= latest.timestamp ? event : latest
+  )
+
+  return backend === 'codex'
+    ? {
+        promptTokens: forSession.reduce((total, event) => total + promptOf(event), 0),
+        turns: forSession.length,
+        at: newest.timestamp,
+        model: newest.model ?? null,
+        reading: 'session-sum'
+      }
+    : {
+        promptTokens: promptOf(newest),
+        turns: forSession.length,
+        at: newest.timestamp,
+        model: newest.model ?? null,
+        reading: 'last-turn'
+      }
 }

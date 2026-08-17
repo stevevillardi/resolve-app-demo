@@ -1,7 +1,8 @@
 import { createOAuthDeviceAuth } from '@octokit/auth-oauth-device'
-import { Octokit } from '@octokit/rest'
 import type { DeviceFlowState, GitHubAuthStatus } from '../../shared/ipc-contract'
 import { deleteAppState, getAppState, setAppState } from './app-state'
+import { gitHubClient } from './github-client'
+import { clearTokenState, gitHubTokenState, markTokenUnreachable } from './github-token-state'
 import { deleteSecret, getSecret, hasSecret, isSecretStorageAvailable, setSecret } from './secrets'
 
 /**
@@ -41,6 +42,15 @@ export function getGitHubToken(): string | null {
   return getSecret('github_token')
 }
 
+/**
+ * `connected` still means "a token is stored" — that is the honest reading of a
+ * synchronous function that cannot make a network call. What it no longer does
+ * is stop there: `error` carries what the last GitHub answer actually was.
+ *
+ * The two are deliberately separate rather than folded into one boolean. A
+ * rejected token is not the same as no token: the remedy is Reconnect, not
+ * Connect, and the dialog needs to be able to tell them apart to offer it.
+ */
 export function getGitHubStatus(): GitHubAuthStatus {
   const configured = clientId() !== null
   if (!hasSecret('github_token')) {
@@ -48,12 +58,54 @@ export function getGitHubStatus(): GitHubAuthStatus {
   }
 
   const storedScopes = getAppState('github_scopes')
+  const tokenState = gitHubTokenState()
   return {
     connected: true,
     configured,
+    tokenState,
     login: getAppState('github_account_login') ?? undefined,
-    scopes: storedScopes ? storedScopes.split(' ') : undefined
+    scopes: storedScopes ? storedScopes.split(' ') : undefined,
+    ...(tokenState === 'rejected'
+      ? { error: 'GitHub rejected the stored token. Reconnect to use GitHub features.' }
+      : {}),
+    // Not an error about the token — an admission that we cannot say. Worded so
+    // nobody reconnects a perfectly good token because their wifi dropped.
+    ...(tokenState === 'unreachable'
+      ? { error: 'Could not reach GitHub to check this token.' }
+      : {})
   }
+}
+
+/**
+ * Asks GitHub whether the stored token still works, and records the answer.
+ *
+ * Called at launch and when the window regains focus, because the interesting
+ * failure — a token revoked on github.com — happens while the app is not
+ * looking. Cheap: one `/user` request, no pagination, and it doubles as a
+ * refresh of the account label, which was previously written once during the
+ * device flow and then left to go stale forever.
+ *
+ * Never throws. A failure to verify is a status, not an error to surface: the
+ * caller is a background check nobody asked for.
+ */
+export async function verifyGitHubToken(): Promise<GitHubAuthStatus> {
+  const token = getGitHubToken()
+  if (!token) {
+    clearTokenState()
+    return getGitHubStatus()
+  }
+
+  try {
+    const { login } = await gitHubClient(token).whoAmI()
+    setAppState('github_account_login', login)
+  } catch (error) {
+    // `call()` has already recorded a 401 as rejected. Anything else — DNS,
+    // a proxy, a captive portal, GitHub itself being down — must not, so the
+    // distinction is made on the message it produced rather than assumed.
+    if (!/rejected the stored token/i.test(String(error))) markTokenUnreachable()
+  }
+
+  return getGitHubStatus()
 }
 
 // --- Device flow ------------------------------------------------------------
@@ -112,11 +164,18 @@ export function startDeviceFlow(): DeviceFlowState {
       if (thisGeneration !== generation) return
       setSecret('github_token', token)
       setAppState('github_scopes', requested.join(' '))
+      // A new token knows nothing about the old one's fate. Without this, a
+      // reconnect after a revocation would still read as rejected until the
+      // next successful request.
+      clearTokenState()
 
-      // Purely to label the connected account in the UI.
+      // Labels the connected account, and — now that it goes through the port
+      // rather than its own `new Octokit` — is also the first verification of
+      // the token we just stored. Still non-fatal: a missing label is not a
+      // reason to refuse a token GitHub just issued.
       try {
-        const { data } = await new Octokit({ auth: token }).rest.users.getAuthenticated()
-        setAppState('github_account_login', data.login)
+        const { login } = await gitHubClient(token).whoAmI()
+        setAppState('github_account_login', login)
       } catch {
         deleteAppState('github_account_login')
       }
@@ -163,5 +222,6 @@ export function disconnectGitHub(): GitHubAuthStatus {
   deleteSecret('github_token')
   deleteAppState('github_account_login')
   deleteAppState('github_scopes')
+  clearTokenState()
   return getGitHubStatus()
 }

@@ -53,7 +53,7 @@ export function RunIndicator({
     >
       <RunPulse />
       {expanded ? (
-        <span className="truncate font-mono text-[11px] tabular-nums">{count} running</span>
+        <span className="truncate font-mono text-meta tabular-nums">{count} running</span>
       ) : (
         <span className="sr-only">{label}</span>
       )}

@@ -8,6 +8,7 @@ import { NewContactFlow } from '@/components/persona/NewContactFlow'
 import { GitHubConnectDialog } from '@/components/github/GitHubConnectDialog'
 import { CommandPalette } from '@/components/common/CommandPalette'
 import { useThemeSync } from '@/hooks/useThemeSync'
+import { useVerifyGitHub } from '@/hooks/useAuth'
 import { useCommandPalette } from '@/hooks/useCommandPalette'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -19,6 +20,7 @@ const RAIL_WIDTH_EXPANDED = '13rem'
 
 export function AppShell(): React.JSX.Element {
   useThemeSync()
+  useVerifyGitHub()
   useCommandPalette()
   // Panel widths persist themselves to localStorage, so the shell reopens the
   // way you left it. react-resizable-panels v4 replaced the old `autoSaveId`
@@ -27,6 +29,7 @@ export function AppShell(): React.JSX.Element {
     id: 'persona-router-panes',
     storage: localStorage
   })
+  const section = useUiStore((state) => state.section)
   const navExpanded = useUiStore((state) => state.navExpanded)
   const setNavExpanded = useUiStore((state) => state.setNavExpanded)
   const dialog = useUiStore((state) => state.dialog)
@@ -49,19 +52,31 @@ export function AppShell(): React.JSX.Element {
         {/* Pixel sizes, not percentages: the list panel holds fixed-width rows,
             so what matters is that it never gets narrower than a readable row
             — not that it keeps a share of the window. */}
-        <ResizablePanelGroup
-          orientation="horizontal"
-          defaultLayout={defaultLayout}
-          onLayoutChanged={onLayoutChanged}
-        >
-          <ResizablePanel id="list" defaultSize={300} minSize={240} maxSize={480}>
-            <ListPanel />
-          </ResizablePanel>
-          <ResizableHandle />
-          <ResizablePanel id="workspace" minSize={420}>
-            <WorkspaceView />
-          </ResizablePanel>
-        </ResizablePanelGroup>
+        {/*
+          Home has no master list — it summarises every section, so a list beside
+          it would be a list of what? Rendering the panel group at all on Home
+          would also mean react-resizable-panels persisting a layout for a
+          two-panel arrangement that is only sometimes two panels, so the whole
+          group is skipped instead and the saved widths are left untouched for
+          when a real section comes back.
+        */}
+        {section === 'home' ? (
+          <WorkspaceView />
+        ) : (
+          <ResizablePanelGroup
+            orientation="horizontal"
+            defaultLayout={defaultLayout}
+            onLayoutChanged={onLayoutChanged}
+          >
+            <ResizablePanel id="list" defaultSize={300} minSize={240} maxSize={480}>
+              <ListPanel />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel id="workspace" minSize={420}>
+              <WorkspaceView />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        )}
       </SidebarInset>
 
       {/* The only two surfaces that stay modal: both are short, decision-shaped

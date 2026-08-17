@@ -34,20 +34,20 @@ export function BranchRequestNotice({
 }: BranchRequestNoticeProps): React.JSX.Element {
   return (
     <div className="flex items-start gap-3 py-0.5 pl-0.5">
-      <span className="text-muted-foreground flex w-11 shrink-0 justify-end pt-0.5 font-mono text-[10px] tabular-nums">
+      <span className="text-muted-foreground flex w-11 shrink-0 justify-end pt-0.5 font-mono text-micro tabular-nums">
         {timestamp !== undefined ? formatTime(timestamp) : ''}
       </span>
       <span className="border-foreground/25 flex min-w-0 flex-1 items-start gap-2 border-l-2 pl-3">
         <GitPullRequestArrow className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
         <span className="min-w-0 flex-1">
-          <span className="text-muted-foreground block text-[11px] font-medium tracking-wide uppercase">
+          <span className="text-muted-foreground block text-meta font-medium tracking-wide uppercase">
             Needs a merge{authorName ? ` · ${authorName}` : ''}
           </span>
-          <span className="text-foreground/85 mt-0.5 block text-[13px] leading-relaxed">
+          <span className="text-foreground/85 mt-0.5 block text-row leading-relaxed">
             {content}
           </span>
           <span className="mt-1.5 flex flex-wrap items-center gap-2">
-            <code className="bg-muted text-foreground/80 rounded px-1.5 py-0.5 font-mono text-[11px]">
+            <code className="bg-muted text-foreground/80 rounded px-1.5 py-0.5 font-mono text-meta">
               {branch}
             </code>
             {onReview && (

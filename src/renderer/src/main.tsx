@@ -22,7 +22,7 @@ createRoot(document.getElementById('root')!).render(
     {/* Outside the providers on purpose: a throw from QueryClientProvider or
         TooltipProvider itself has to be caught too, and the fallback must not
         depend on anything that might be the thing that failed. */}
-    <ErrorBoundary>
+    <ErrorBoundary variant="window">
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <App />

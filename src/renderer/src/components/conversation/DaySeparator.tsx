@@ -8,7 +8,7 @@ import { formatDaySeparator } from '@/lib/format'
 export function DaySeparator({ timestamp }: { timestamp: number }): React.JSX.Element {
   return (
     <div className="sticky top-0 z-10 flex justify-center py-1">
-      <span className="bg-background/80 text-muted-foreground rounded-full px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-sm">
+      <span className="bg-background/80 text-muted-foreground rounded-full px-2.5 py-0.5 text-meta font-medium backdrop-blur-sm">
         {formatDaySeparator(timestamp)}
       </span>
     </div>

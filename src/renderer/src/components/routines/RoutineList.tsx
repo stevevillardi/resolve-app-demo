@@ -1,6 +1,7 @@
 import { Clock } from 'lucide-react'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { EmptyState } from '@/components/common/EmptyState'
+import { ListRow } from '@/components/common/ListRow'
 import { formatRelative } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useContacts } from '@/hooks/useConversations'
@@ -13,7 +14,7 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
   const setSelectedId = useUiStore((state) => state.setSelectedRoutineId)
   const needle = query.trim().toLowerCase()
 
-  const routines = useRoutines().data ?? []
+  const { data: routines = [], isPending } = useRoutines()
   const contacts = useContacts().data ?? []
   const personaTemplates = usePersonas().data ?? []
 
@@ -23,6 +24,11 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
       routine.prompt.toLowerCase().includes(needle) ||
       routine.schedule.toLowerCase().includes(needle)
   )
+
+  // Before the two nothings below: "not loaded yet" is a third state, and
+  // showing "No routines yet" during the first fetch tells the user something
+  // that is not true.
+  if (isPending) return <EmptyState compact loading title="Loading routines…" />
 
   if (visible.length === 0) {
     // Two different nothings: a filter that matched nothing, and a section
@@ -51,40 +57,37 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
         const persona = personaTemplates.find((p) => p.id === contact?.personaTemplateId)
         const active = selectedId === routine.id
         return (
-          <button
+          <ListRow
             key={routine.id}
-            type="button"
-            onClick={() => setSelectedId(routine.id)}
-            className={cn(
-              'flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
-              'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-              active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-            )}
+            active={active}
+            onSelect={() => setSelectedId(routine.id)}
+            leading={
+              <span className="relative shrink-0">
+                <AvatarColorSwatch
+                  name={persona?.name ?? 'Routine'}
+                  color={persona?.avatarColor ?? 'var(--muted)'}
+                />
+                {/* Disabled routines are dimmed rather than hidden — a routine
+                    that exists but isn't running is worth seeing. */}
+                {!routine.enabled && (
+                  <span className="bg-card/70 absolute inset-0 rounded-lg" aria-hidden />
+                )}
+              </span>
+            }
           >
-            <span className="relative shrink-0">
-              <AvatarColorSwatch
-                name={persona?.name ?? 'Routine'}
-                color={persona?.avatarColor ?? 'var(--muted)'}
-              />
-              {/* Disabled routines are dimmed rather than hidden — a routine
-                  that exists but isn't running is worth seeing. */}
-              {!routine.enabled && (
-                <span className="bg-card/70 absolute inset-0 rounded-lg" aria-hidden />
-              )}
-            </span>
-            <span className={cn('min-w-0 flex-1', !routine.enabled && 'opacity-60')}>
+            <span className={cn('block', !routine.enabled && 'opacity-60')}>
               <span className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-[13px] font-medium">
+                <span className="truncate text-row font-medium">
                   {persona?.name ?? 'Unknown persona'}
                 </span>
-                <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
+                <span className="text-muted-foreground shrink-0 font-mono text-micro">
                   {routine.schedule}
                 </span>
               </span>
               <span className="text-muted-foreground mt-0.5 block truncate text-xs">
                 {routine.prompt}
               </span>
-              <span className="text-muted-foreground mt-0.5 block text-[11px]">
+              <span className="text-muted-foreground mt-0.5 block text-meta">
                 {routine.enabled
                   ? routine.lastRunAt
                     ? `Last run ${formatRelative(routine.lastRunAt)}`
@@ -92,7 +95,7 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
                   : 'Paused'}
               </span>
             </span>
-          </button>
+          </ListRow>
         )
       })}
     </div>

@@ -94,7 +94,7 @@ export function MessageBubble({
           />
           <span className="text-xs font-medium">{senderName}</span>
           {timestamp !== undefined && (
-            <span className="text-muted-foreground font-mono text-[10px] tabular-nums">
+            <span className="text-muted-foreground font-mono text-micro tabular-nums">
               {formatTime(timestamp)}
             </span>
           )}
@@ -124,7 +124,7 @@ export function MessageBubble({
         )}
       </div>
       {isOutbound && timestamp !== undefined && (
-        <span className="text-muted-foreground mr-1 font-mono text-[10px] tabular-nums">
+        <span className="text-muted-foreground mr-1 font-mono text-micro tabular-nums">
           {formatTime(timestamp)}
         </span>
       )}

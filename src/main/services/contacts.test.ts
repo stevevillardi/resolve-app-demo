@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
 import { groups, personaTemplates } from '../db/schema'
 import type { AppDatabase } from '../db/create'
+import type { Contact } from '../../shared/domain'
 
 /**
  * The invariant under test is blueprint §4's "one Group per repo". A Contact
@@ -18,7 +19,8 @@ vi.mock('electron', () => ({
   app: { getPath: () => '/Users/dev/Library/Application Support/persona-router' }
 }))
 
-const { createContact, getContact, listContacts } = await import('./contacts')
+const { createContact, getContact, listContacts, renameContact, setBackendSessionId } =
+  await import('./contacts')
 const { ensureGroupForRepo, listGroups } = await import('./groups')
 
 const PERSONA_ID = 'persona-1'
@@ -206,6 +208,65 @@ describe('group auto-creation', () => {
       })
     ).toThrow()
     expect(listGroups()).toEqual([])
+  })
+})
+
+describe('rename', () => {
+  it('changes the display name and nothing else', () => {
+    // The claim this function makes is not "it renames" — it is "it renames and
+    // touches nothing else". repoPath is the Group key and the run-lock key,
+    // worktreePath and branch are pointed at by a checkout on disk, and
+    // backendSessionId is what makes a conversation survive quitting the app.
+    // So the assertion is on the whole row, not on the one field that changed:
+    // anything else moving here is a live worktree or a live session orphaned.
+    //
+    // The session id and the worktree have to be *set* for this to have teeth.
+    // The first version of this test renamed a fresh contact, whose
+    // backendSessionId and worktreePath are both null — so a mutation that
+    // nulled them on every rename passed it. A row where every load-bearing
+    // column is already null cannot detect a function that clears them.
+    const contact = createContact({
+      personaTemplateId: PERSONA_ID,
+      repoPath: '~/code/app',
+      displayName: 'Code Reviewer · app',
+      isolation: 'worktree'
+    })
+    setBackendSessionId(contact.id, 'session-abc123')
+    const before = getContact(contact.id) as Contact
+    expect(before.backendSessionId).toBe('session-abc123')
+    expect(before.worktreePath).not.toBeNull()
+    expect(before.branch).not.toBeNull()
+
+    const renamed = renameContact(contact.id, 'Reviewer')
+
+    expect(renamed).toEqual({ ...before, displayName: 'Reviewer' })
+    expect(getContact(contact.id)).toEqual(renamed)
+  })
+
+  it('trims, because a name of spaces is a row with no visible label', () => {
+    const contact = createContact(draft('~/code/app', 'Code Reviewer · app'))
+    expect(renameContact(contact.id, '  Reviewer  ').displayName).toBe('Reviewer')
+  })
+
+  it('refuses a name that is only whitespace', () => {
+    // min(1) at the Zod boundary passes '   ', so the service has to be the
+    // one that says no — the contract cannot see that it trims to nothing.
+    const contact = createContact(draft('~/code/app', 'Code Reviewer · app'))
+    expect(() => renameContact(contact.id, '   ')).toThrow(/needs a name/)
+    expect(getContact(contact.id)?.displayName).toBe('Code Reviewer · app')
+  })
+
+  it('throws on an unknown id rather than silently doing nothing', () => {
+    expect(() => renameContact('nope', 'Reviewer')).toThrow(/No such contact/)
+  })
+
+  it('re-sorts the list, because listContacts orders by display name', () => {
+    // The renamed row's place in the list has moved, so returning the caller's
+    // patched copy would be describing a list that no longer exists.
+    const a = createContact(draft('~/code/a', 'Alpha'))
+    createContact(draft('~/code/b', 'Bravo'))
+    renameContact(a.id, 'Zulu')
+    expect(listContacts().map((contact) => contact.displayName)).toEqual(['Bravo', 'Zulu'])
   })
 })
 

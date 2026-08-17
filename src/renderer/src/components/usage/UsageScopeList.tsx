@@ -2,12 +2,12 @@ import { useMemo } from 'react'
 import { FolderGit2, Layers } from 'lucide-react'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { EmptyState } from '@/components/common/EmptyState'
+import { ListRow } from '@/components/common/ListRow'
 import { useContacts } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { repoName } from '@/lib/format'
 import { formatCostSummary, usageForContacts } from '@/lib/usage'
-import { cn } from '@/lib/utils'
 import { useUiStore } from '@/store/useUiStore'
 
 /**
@@ -22,7 +22,7 @@ export function UsageScopeList(): React.JSX.Element {
   const setScope = useUiStore((state) => state.setUsageScope)
 
   const { data: events = [] } = useUsageEvents()
-  const { data: contacts = [] } = useContacts()
+  const { data: contacts = [], isPending } = useContacts()
   const { data: personas = [] } = usePersonas()
 
   // Every repo any Contact is bound to, whether or not it has spent anything —
@@ -36,34 +36,37 @@ export function UsageScopeList(): React.JSX.Element {
   const costFor = (contactIds: string[]): string =>
     formatCostSummary(usageForContacts(events, contactIds))
 
-  const rowClass = (active: boolean): string =>
-    cn(
-      'flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
-      'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-      active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-    )
+  const cost = (contactIds: string[]): React.JSX.Element => (
+    <span className="text-muted-foreground shrink-0 font-mono text-meta tabular-nums">
+      {costFor(contactIds)}
+    </span>
+  )
 
   const heading = (text: string): React.JSX.Element => (
-    <p className="text-muted-foreground px-2 pt-3 pb-1 text-[11px] font-medium tracking-wide uppercase">
+    <p className="text-muted-foreground px-2 pt-3 pb-1 text-meta font-medium tracking-wide uppercase">
       {text}
     </p>
   )
 
+  // "All personas" with a "—" beside it is not a neutral thing to render while
+  // the first fetch is in flight: it reads as a fleet that has spent nothing.
+  if (isPending) return <EmptyState compact loading title="Loading usage…" />
+
   return (
     <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={() => setScope({ kind: 'all' })}
-        className={rowClass(scope.kind === 'all')}
+      <ListRow
+        active={scope.kind === 'all'}
+        onSelect={() => setScope({ kind: 'all' })}
+        align="center"
+        leading={
+          <span className="border-border flex size-8 shrink-0 items-center justify-center rounded-lg border">
+            <Layers className="text-muted-foreground size-4" />
+          </span>
+        }
+        trailing={cost(contacts.map((contact) => contact.id))}
       >
-        <span className="border-border flex size-8 shrink-0 items-center justify-center rounded-lg border">
-          <Layers className="text-muted-foreground size-4" />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">All personas</span>
-        <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
-          {costFor(contacts.map((contact) => contact.id))}
-        </span>
-      </button>
+        <span className="block truncate text-row font-medium">All personas</span>
+      </ListRow>
 
       {personas.length === 0 && contacts.length === 0 && (
         <EmptyState
@@ -81,23 +84,19 @@ export function UsageScopeList(): React.JSX.Element {
           .map((contact) => contact.id)
         const active = scope.kind === 'persona' && scope.id === persona.id
         return (
-          <button
+          <ListRow
             key={persona.id}
-            type="button"
-            onClick={() => setScope({ kind: 'persona', id: persona.id })}
-            className={rowClass(active)}
+            active={active}
+            onSelect={() => setScope({ kind: 'persona', id: persona.id })}
+            align="center"
+            leading={<AvatarColorSwatch name={persona.name} color={persona.avatarColor} />}
+            trailing={cost(contactIds)}
           >
-            <AvatarColorSwatch name={persona.name} color={persona.avatarColor} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium">{persona.name}</span>
-              <span className="text-muted-foreground block text-xs">
-                {contactIds.length} {contactIds.length === 1 ? 'contact' : 'contacts'}
-              </span>
+            <span className="block truncate text-row font-medium">{persona.name}</span>
+            <span className="text-muted-foreground block text-xs">
+              {contactIds.length} {contactIds.length === 1 ? 'contact' : 'contacts'}
             </span>
-            <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
-              {costFor(contactIds)}
-            </span>
-          </button>
+          </ListRow>
         )
       })}
 
@@ -109,27 +108,25 @@ export function UsageScopeList(): React.JSX.Element {
           .map((contact) => contact.id)
         const active = scope.kind === 'repo' && scope.repoPath === repoPath
         return (
-          <button
+          <ListRow
             key={repoPath}
-            type="button"
-            onClick={() => setScope({ kind: 'repo', repoPath })}
-            className={rowClass(active)}
+            active={active}
+            onSelect={() => setScope({ kind: 'repo', repoPath })}
+            align="center"
+            leading={
+              <span className="border-border flex size-8 shrink-0 items-center justify-center rounded-lg border">
+                <FolderGit2 className="text-muted-foreground size-4" />
+              </span>
+            }
+            trailing={cost(contactIds)}
           >
-            <span className="border-border flex size-8 shrink-0 items-center justify-center rounded-lg border">
-              <FolderGit2 className="text-muted-foreground size-4" />
+            <span className="block truncate font-mono text-row font-medium">
+              {repoName(repoPath)}
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-mono text-[13px] font-medium">
-                {repoName(repoPath)}
-              </span>
-              <span className="text-muted-foreground block text-xs">
-                {contactIds.length} {contactIds.length === 1 ? 'contact' : 'contacts'}
-              </span>
+            <span className="text-muted-foreground block text-xs">
+              {contactIds.length} {contactIds.length === 1 ? 'contact' : 'contacts'}
             </span>
-            <span className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums">
-              {costFor(contactIds)}
-            </span>
-          </button>
+          </ListRow>
         )
       })}
     </div>

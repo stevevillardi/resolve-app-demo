@@ -89,7 +89,7 @@ export function CommandPalette(): React.JSX.Element {
             size="xs"
           />
           <span className="truncate">{persona?.name ?? contact.displayName}</span>
-          <CommandShortcut className="truncate font-mono text-[11px] tracking-normal">
+          <CommandShortcut className="truncate font-mono text-meta tracking-normal">
             {repoName(contact.repoPath)}
           </CommandShortcut>
         </>
@@ -114,7 +114,7 @@ export function CommandPalette(): React.JSX.Element {
         <>
           <span className="bg-muted size-4 shrink-0 rounded-[4px]" aria-hidden />
           <span className="truncate">{repoName(group.repoPath)}</span>
-          <CommandShortcut className="shrink-0 text-[11px] tracking-normal">
+          <CommandShortcut className="shrink-0 text-meta tracking-normal">
             Repo group
           </CommandShortcut>
         </>
@@ -162,7 +162,7 @@ export function CommandPalette(): React.JSX.Element {
         <>
           <BookOpen className="text-muted-foreground" />
           <span className="truncate">{skill.name}</span>
-          <CommandShortcut className="truncate text-[11px] tracking-normal">
+          <CommandShortcut className="truncate text-meta tracking-normal">
             {skill.description}
           </CommandShortcut>
         </>
@@ -189,7 +189,7 @@ export function CommandPalette(): React.JSX.Element {
         <>
           <Clock className="text-muted-foreground" />
           <span className="truncate">{persona?.name ?? 'Routine'}</span>
-          <CommandShortcut className="shrink-0 font-mono text-[11px] tracking-normal">
+          <CommandShortcut className="shrink-0 font-mono text-meta tracking-normal">
             {routine.schedule}
           </CommandShortcut>
         </>
@@ -316,7 +316,7 @@ export function CommandPalette(): React.JSX.Element {
             </CommandGroup>
           ))}
         </CommandList>
-        <div className="border-border text-muted-foreground flex items-center gap-3 border-t px-3 py-2 text-[11px]">
+        <div className="border-border text-muted-foreground flex items-center gap-3 border-t px-3 py-2 text-meta">
           <span className="flex items-center gap-1">
             <CommandShortcut className="ml-0 font-mono">↑↓</CommandShortcut> navigate
           </span>
@@ -325,6 +325,19 @@ export function CommandPalette(): React.JSX.Element {
           </span>
           <span className="flex items-center gap-1">
             <CommandShortcut className="ml-0 font-mono">esc</CommandShortcut> dismiss
+          </span>
+          {/*
+            The app's other two shortcuts, documented in the one place a user
+            already comes looking for shortcuts. An undiscoverable binding is
+            not a feature, and there is nowhere else in the app that lists them.
+          */}
+          <span className="border-border ml-auto flex items-center gap-3 border-l pl-3">
+            <span className="flex items-center gap-1">
+              <CommandShortcut className="ml-0 font-mono">/</CommandShortcut> search list
+            </span>
+            <span className="flex items-center gap-1">
+              <CommandShortcut className="ml-0 font-mono">⌘B</CommandShortcut> rail
+            </span>
           </span>
         </div>
       </Command>

@@ -93,11 +93,9 @@ function StatTile({
 }): React.JSX.Element {
   return (
     <div className="border-border rounded-lg border p-3">
-      <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-        {label}
-      </p>
+      <p className="text-muted-foreground text-meta font-medium tracking-wide uppercase">{label}</p>
       <p className="mt-1 font-mono text-xl tabular-nums">{value}</p>
-      {note && <p className="text-muted-foreground mt-0.5 text-[11px]">{note}</p>}
+      {note && <p className="text-muted-foreground mt-0.5 text-meta">{note}</p>}
     </div>
   )
 }
@@ -127,7 +125,7 @@ function BreakdownRows({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="text-muted-foreground flex items-center gap-2.5 text-[10px] font-medium tracking-wide uppercase">
+      <div className="text-muted-foreground flex items-center gap-2.5 text-micro font-medium tracking-wide uppercase">
         <span className="size-5 shrink-0" aria-hidden />
         <span className="w-28 shrink-0">Name</span>
         <span className="min-w-0 flex-1" aria-hidden />
@@ -151,10 +149,10 @@ function BreakdownRows({
                 }}
               />
             </div>
-            <span className="text-muted-foreground w-16 shrink-0 text-right font-mono text-[11px] tabular-nums">
+            <span className="text-muted-foreground w-16 shrink-0 text-right font-mono text-meta tabular-nums">
               {formatTokens(row.tokens)}
             </span>
-            <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums">
+            <span className="w-16 shrink-0 text-right font-mono text-meta tabular-nums">
               {formatCostSummary(row.summary)}
             </span>
           </div>
@@ -265,16 +263,14 @@ export function UsageDashboard(): React.JSX.Element {
     <div className="bg-background flex h-full min-h-0 flex-col">
       <PaneHeader
         title={scopeName}
+        // Range and the table toggle only. Measure moved down into the filter
+        // row below: three controls plus a title in a 48px strip left the range
+        // options touching the table button at 1100px wide, and a header that
+        // has to be read at two speeds is not a header.
         actions={
           <>
             <SegmentedControl
-              options={METRICS.map((option) => ({ ...option }))}
-              value={metric}
-              onChange={setMetric}
-              aria-label="Measure"
-            />
-            <SegmentedControl
-              options={RANGES.map((option) => ({ ...option }))}
+              options={RANGES}
               value={range}
               onChange={setRange}
               aria-label="Time range"
@@ -293,19 +289,35 @@ export function UsageDashboard(): React.JSX.Element {
       />
 
       <PaneBody measure="wide">
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground shrink-0 text-[11px] font-medium tracking-wide uppercase">
-            Source
-          </span>
-          <SegmentedControl
-            options={SOURCES.map((option) => ({ ...option }))}
-            value={source}
-            onChange={setSource}
-            aria-label="Usage source"
-          />
+        {/* What is being counted, and what it is being counted over. Both
+            reshape every figure below them, so they belong together and above
+            the tiles rather than split between here and the header. */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground shrink-0 text-meta font-medium tracking-wide uppercase">
+              Measure
+            </span>
+            <SegmentedControl
+              options={METRICS}
+              value={metric}
+              onChange={setMetric}
+              aria-label="Measure"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground shrink-0 text-meta font-medium tracking-wide uppercase">
+              Source
+            </span>
+            <SegmentedControl
+              options={SOURCES}
+              value={source}
+              onChange={setSource}
+              aria-label="Usage source"
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 @3xl/pane:grid-cols-4">
           <StatTile label="Reported spend" value={formatCostSummary(totals)} note={unpricedNote} />
           <StatTile
             label="Tokens"
@@ -382,7 +394,7 @@ export function UsageDashboard(): React.JSX.Element {
               }
               action={
                 <SegmentedControl
-                  options={BREAKDOWNS.map((option) => ({ ...option }))}
+                  options={BREAKDOWNS}
                   value={breakdown}
                   onChange={setBreakdown}
                   aria-label="Break down by"

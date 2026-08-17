@@ -1,8 +1,8 @@
 import { GitBranch } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
+import { ListRow } from '@/components/common/ListRow'
 import { useBranches } from '@/hooks/useBranches'
 import { repoName } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { useUiStore } from '@/store/useUiStore'
 import type { BranchSummary } from '../../../../shared/ipc-contract'
 
@@ -32,12 +32,16 @@ export function BranchList({ query }: BranchListProps): React.JSX.Element {
     : branches
 
   if (isLoading) {
-    return <p className="text-muted-foreground px-2 py-6 text-center text-xs">Reading branches…</p>
+    // The same shape every other list uses while it waits. This was a bare
+    // centred paragraph, which is the one loading state in the app that did not
+    // look like the others.
+    return <EmptyState compact loading title="Reading branches…" />
   }
 
   if (matching.length === 0) {
     return (
       <EmptyState
+        compact
         icon={GitBranch}
         title={needle ? 'No matching branches' : 'No open branches'}
         description={
@@ -58,30 +62,26 @@ export function BranchList({ query }: BranchListProps): React.JSX.Element {
     <div className="flex flex-col gap-3">
       {[...byRepo.entries()].map(([repoPath, repoBranches]) => (
         <div key={repoPath} className="flex flex-col gap-0.5">
-          <p className="text-muted-foreground px-2 pt-1 text-[11px] font-medium tracking-wide uppercase">
+          <p className="text-muted-foreground px-2 pt-1 text-meta font-medium tracking-wide uppercase">
             {repoName(repoPath)}
           </p>
           {repoBranches.map((branch) => {
             const active = selected?.repoPath === repoPath && selected.branch === branch.branch
             return (
-              <button
+              <ListRow
                 key={branch.branch}
-                type="button"
-                onClick={() => setSelected({ repoPath, branch: branch.branch })}
-                className={cn(
-                  'focus-visible:ring-ring/50 flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-2',
-                  active ? 'bg-accent' : 'hover:bg-accent/50'
-                )}
+                active={active}
+                onSelect={() => setSelected({ repoPath, branch: branch.branch })}
               >
-                <span className="w-full truncate font-mono text-[13px]">{branch.branch}</span>
-                <span className="text-muted-foreground truncate text-xs">
+                <span className="block w-full truncate font-mono text-row">{branch.branch}</span>
+                <span className="text-muted-foreground mt-0.5 block truncate text-xs">
                   {/* Named rather than left blank: a branch whose Contact was
                       deleted is the one most likely to be forgotten, so it says
                       so instead of showing an empty line. */}
                   {branch.contactName ?? 'No contact'} ·{' '}
                   {branch.files.length === 1 ? '1 file' : `${branch.files.length} files`}
                 </span>
-              </button>
+              </ListRow>
             )
           })}
         </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Trash2, Users2 } from 'lucide-react'
+import { Check, FolderGit2, Trash2, Users2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,15 +13,19 @@ import {
 } from '@/components/ui/select'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ClaudeMark, CodexMark } from '@/components/brand/BrandMarks'
+import { CheckRow } from '@/components/common/CheckRow'
+import { ListRow } from '@/components/common/ListRow'
+import { FieldGrid, FieldGridSpan } from '@/components/common/FieldGrid'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
-import { EmptyState } from '@/components/common/EmptyState'
+import { EmptyPane } from '@/components/common/EmptyPane'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { PaneBody } from '@/components/common/PaneBody'
 import { Field } from '@/components/common/Field'
 import { Section } from '@/components/common/Section'
-import { cn } from '@/lib/utils'
+import { repoName } from '@/lib/format'
 import { useContacts } from '@/hooks/useConversations'
 import { useDeletePersona, usePersonas, useUpdatePersona } from '@/hooks/usePersonas'
 import { useModels } from '@/hooks/useModels'
@@ -39,10 +43,12 @@ import type {
 /** Stands in for `model: null` — Select can't carry null as a value. */
 const DEFAULT_MODEL = '__default__'
 
-const BACKEND_OPTIONS: { value: PersonaBackend; label: string }[] = [
-  { value: 'claude', label: 'Claude' },
-  { value: 'codex', label: 'Codex' }
-]
+// The only segmented control in the app whose options name a *thing* rather
+// than a level, which is why it is the only one carrying icons.
+const BACKEND_OPTIONS = [
+  { value: 'claude', label: 'Claude', icon: ClaudeMark },
+  { value: 'codex', label: 'Codex', icon: CodexMark }
+] as const satisfies readonly { value: PersonaBackend; label: string; icon: unknown }[]
 
 const SANDBOX_OPTIONS: { value: SandboxLevel; label: string }[] = [
   { value: 'read_only', label: 'Read only' },
@@ -83,6 +89,8 @@ function PersonaForm({
   const [skillIds, setSkillIds] = useState<string[]>(persona.skillIds)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const setSelectedId = useUiStore((state) => state.setSelectedPersonaId)
+  const setSection = useUiStore((state) => state.setSection)
+  const setSelectedConversation = useUiStore((state) => state.setSelectedConversation)
 
   const { save, isPending: saving, error: saveError } = useUpdatePersona()
   const { remove, isPending: deleting, error: deleteError, reset } = useDeletePersona()
@@ -130,7 +138,13 @@ function PersonaForm({
             >
               <Trash2 className="size-3.5" />
             </Button>
-            <Button size="sm" disabled={!dirty || saving} onClick={() => save(edited)}>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              disabled={!dirty || saving}
+              onClick={() => save(edited)}
+            >
+              <Check className="size-3.5" />
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </>
@@ -143,7 +157,10 @@ function PersonaForm({
         )}
 
         <section className="flex flex-col gap-4">
-          <div className="flex items-end gap-3">
+          {/* Capped rather than stretched. A persona name is a dozen
+              characters; giving it the full pane put its colour swatch a
+              thousand pixels from the field it belongs to. */}
+          <div className="flex max-w-md items-end gap-3">
             <div className="flex flex-1 flex-col gap-1.5">
               <Label htmlFor="persona-name">Name</Label>
               <Input
@@ -165,7 +182,7 @@ function PersonaForm({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <FieldGrid>
             <Field label="Backend" hint="Codex streams live tool progress; Claude cannot.">
               <SegmentedControl
                 options={BACKEND_OPTIONS}
@@ -200,24 +217,29 @@ function PersonaForm({
                 </SelectContent>
               </Select>
             </Field>
-          </div>
+          </FieldGrid>
 
-          <Field label="System prompt" htmlFor="persona-prompt">
-            <Textarea
-              id="persona-prompt"
-              rows={5}
-              value={systemPrompt}
-              onChange={(event) => setSystemPrompt(event.target.value)}
-              placeholder="You are a meticulous code reviewer…"
-            />
-          </Field>
+          {/* Spans, and caps itself: this is the one control in the pane that
+              is long-form prose, and a full-width textarea on a wide window is
+              a worse place to write than the narrow column it replaced. */}
+          <FieldGridSpan>
+            <Field label="System prompt" htmlFor="persona-prompt">
+              <Textarea
+                id="persona-prompt"
+                rows={5}
+                value={systemPrompt}
+                onChange={(event) => setSystemPrompt(event.target.value)}
+                placeholder="You are a meticulous code reviewer…"
+              />
+            </Field>
+          </FieldGridSpan>
         </section>
 
         <Section
           title="Permissions"
           description="Two independent axes: what this persona can touch on disk, and what it can do on GitHub."
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <FieldGrid>
             <Field label="Sandbox">
               <SegmentedControl
                 options={SANDBOX_OPTIONS}
@@ -236,45 +258,27 @@ function PersonaForm({
               />
               <ScopeChip axis="github" value={githubScope} className="self-start" />
             </Field>
-          </div>
+          </FieldGrid>
         </Section>
 
         <Section
           title="Skills"
           description="Reusable instructions injected into every session this persona starts."
         >
-          <div className="flex flex-col gap-1">
-            {allSkills.map((skill) => {
-              const checked = skillIds.includes(skill.id)
-              return (
-                <button
-                  key={skill.id}
-                  type="button"
-                  role="checkbox"
-                  aria-checked={checked}
-                  onClick={() => toggleSkill(skill.id)}
-                  className={cn(
-                    'border-border flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors',
-                    'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-                    checked ? 'bg-accent border-accent' : 'hover:bg-accent/40'
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border',
-                      checked ? 'bg-primary text-primary-foreground border-primary' : 'border-input'
-                    )}
-                  >
-                    {checked && <Check className="size-3" />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-medium">{skill.name}</span>
-                    <span className="text-muted-foreground block text-xs">{skill.description}</span>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+          {/* Three across on a wide pane. Each entry is a name and one line of
+              description, so a single column left this list running down the
+              middle of the window no matter how much room there was. */}
+          <FieldGrid columns={3} className="gap-1.5">
+            {allSkills.map((skill) => (
+              <CheckRow
+                key={skill.id}
+                checked={skillIds.includes(skill.id)}
+                onToggle={() => toggleSkill(skill.id)}
+                title={skill.name}
+                description={skill.description}
+              />
+            ))}
+          </FieldGrid>
         </Section>
 
         <Section title="Bound contacts">
@@ -283,19 +287,37 @@ function PersonaForm({
               Not bound to a repo yet. Create a contact to put this persona to work.
             </p>
           ) : (
-            <ul className="flex flex-col gap-1">
+            /*
+              Was a full absolute repo path against a raw `backendSessionId` —
+              a 36-character opaque id that answers no question anyone has, next
+              to 80 characters of path saying what its last segment says. Now:
+              where it works, how it is isolated, and a way to actually go
+              there, which is what you wanted when you read the list.
+            */
+            <FieldGrid columns={3} className="gap-1.5">
               {boundContacts.map((contact) => (
-                <li
+                <ListRow
                   key={contact.id}
-                  className="border-border flex items-center justify-between gap-2 rounded-lg border px-3 py-2"
+                  active={false}
+                  align="center"
+                  bordered
+                  leading={<FolderGit2 className="text-muted-foreground size-4 shrink-0" />}
+                  onSelect={() => {
+                    setSelectedConversation({ kind: 'contact', id: contact.id })
+                    setSection('chats')
+                  }}
+                  trailing={
+                    <span className="text-muted-foreground shrink-0 text-meta">
+                      {contact.isolation === 'worktree' ? 'own checkout' : 'your checkout'}
+                    </span>
+                  }
                 >
-                  <span className="truncate font-mono text-xs">{contact.repoPath}</span>
-                  <span className="text-muted-foreground shrink-0 font-mono text-[11px]">
-                    {contact.backendSessionId ?? 'no session yet'}
+                  <span className="block truncate text-row" title={contact.repoPath}>
+                    {repoName(contact.repoPath)}
                   </span>
-                </li>
+                </ListRow>
               ))}
-            </ul>
+            </FieldGrid>
           )}
         </Section>
       </PaneBody>
@@ -327,14 +349,11 @@ export function PersonaDetailPanel(): React.JSX.Element {
 
   if (!persona) {
     return (
-      <div className="bg-background flex h-full flex-col">
-        <div className="drag-region h-12 shrink-0" />
-        <EmptyState
-          icon={Users2}
-          title="No persona selected"
-          description="A persona is a system prompt, a set of skills, and a permission scope. Pick one to edit it."
-        />
-      </div>
+      <EmptyPane
+        icon={Users2}
+        title="No persona selected"
+        description="A persona is a system prompt, a set of skills, and a permission scope. Pick one to edit it."
+      />
     )
   }
 

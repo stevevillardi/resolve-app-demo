@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { BookOpen, Trash2 } from 'lucide-react'
+import { BookOpen, Check, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { EmptyState } from '@/components/common/EmptyState'
+import { EmptyPane } from '@/components/common/EmptyPane'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
@@ -42,7 +42,9 @@ function SkillForm({
     name !== skill.name || description !== skill.description || content !== skill.content
 
   return (
-    <div className="bg-background flex h-full min-h-0 flex-col">
+    // Declares `@container/pane` itself, because this is the one view that
+    // opts out of PaneBody — which is where every other pane gets it.
+    <div className="@container/pane bg-background flex h-full min-h-0 flex-col">
       <PaneHeader
         leading={<BookOpen className="text-muted-foreground size-4 shrink-0" />}
         title={name || 'Untitled skill'}
@@ -59,9 +61,11 @@ function SkillForm({
             </Button>
             <Button
               size="sm"
+              className="gap-1.5"
               disabled={!dirty || saving}
               onClick={() => save({ ...skill, name, description, content })}
             >
+              <Check className="size-3.5" />
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </>
@@ -77,7 +81,7 @@ function SkillForm({
       {/* Metadata band. Name and description describe the skill; the
           instructions below are the skill. Keeping them on one row stops two
           short strings from consuming the top third of a writing surface. */}
-      <div className="border-border grid shrink-0 grid-cols-1 gap-4 border-b px-5 py-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+      <div className="border-border grid shrink-0 grid-cols-1 gap-4 border-b px-5 py-4 @2xl/pane:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="skill-name">Name</Label>
           <Input id="skill-name" value={name} onChange={(event) => setName(event.target.value)} />
@@ -96,7 +100,7 @@ function SkillForm({
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-5 pt-4 pb-3">
         <div className="flex items-baseline justify-between gap-3">
           <Label htmlFor="skill-content">Instructions</Label>
-          <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
+          <span className="text-muted-foreground font-mono text-meta tabular-nums">
             {content.length.toLocaleString()} chars
           </span>
         </div>
@@ -106,7 +110,7 @@ function SkillForm({
           onChange={(event) => setContent(event.target.value)}
           spellCheck={false}
           placeholder="Write what this skill should tell a persona to do…"
-          className="border-input bg-background scrollbar-subtle focus-visible:border-ring focus-visible:ring-ring/40 placeholder:text-muted-foreground min-h-0 flex-1 resize-none rounded-lg border p-3 font-mono text-[12.5px] leading-relaxed outline-none focus-visible:ring-2"
+          className="border-input bg-background scrollbar-subtle focus-visible:border-ring focus-visible:ring-ring/40 placeholder:text-muted-foreground min-h-0 flex-1 resize-none rounded-lg border p-3 font-mono text-code leading-relaxed outline-none focus-visible:ring-2"
         />
         <p className="text-muted-foreground text-xs">
           Markdown, injected verbatim into every session that attaches this skill.
@@ -160,14 +164,11 @@ export function SkillLibraryView(): React.JSX.Element {
 
   if (!skill) {
     return (
-      <div className="bg-background flex h-full flex-col">
-        <div className="drag-region h-12 shrink-0" />
-        <EmptyState
-          icon={BookOpen}
-          title="No skill selected"
-          description="Skills are reusable instructions any persona can attach. Pick one to read or edit it."
-        />
-      </div>
+      <EmptyPane
+        icon={BookOpen}
+        title="No skill selected"
+        description="Skills are reusable instructions any persona can attach. Pick one to read or edit it."
+      />
     )
   }
 

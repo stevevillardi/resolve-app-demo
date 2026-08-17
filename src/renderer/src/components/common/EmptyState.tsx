@@ -24,6 +24,11 @@ export function EmptyState({
 }: EmptyStateProps): React.JSX.Element {
   return (
     <div
+      // Lets a caller — and the screenshot sweep — ask "is this pane showing
+      // nothing?" without matching on copy. The sweep needs it because an empty
+      // state's action button sits inside the list body and is otherwise
+      // indistinguishable from a row.
+      data-slot="empty-state"
       className={cn(
         'flex h-full flex-1 flex-col items-center justify-center text-center',
         compact ? 'gap-2 px-4 py-8' : 'gap-3 px-6 py-16',
@@ -45,7 +50,7 @@ export function EmptyState({
         </span>
       )}
       <div className="flex flex-col gap-1">
-        <p className={cn('font-medium', compact ? 'text-sm' : 'text-[15px]')}>{title}</p>
+        <p className={cn('font-medium', compact ? 'text-sm' : 'text-title')}>{title}</p>
         {description && (
           <p className="text-muted-foreground mx-auto max-w-sm text-sm text-pretty">
             {description}

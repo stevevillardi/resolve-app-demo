@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, CloudDownload, FolderGit2, FolderOpen, Search } from 'lucide-react'
+import { AlertTriangle, Check, CloudDownload, FolderGit2, FolderOpen, Search } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -9,19 +9,23 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
+import { ListRow } from '@/components/common/ListRow'
 import { Github } from '@/components/github/GithubMark'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
-import { useAuthStatus } from '@/hooks/useAuth'
+import { useAuthStatus, useVerifyGitHubNow } from '@/hooks/useAuth'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useCreateContact } from '@/hooks/useConversations'
 import { useChooseDirectory, useCloneRepo, useRepos } from '@/hooks/useRepos'
 import { useUiStore } from '@/store/useUiStore'
+import { ipcErrorMessage } from '@/lib/ipc-client'
 import { repoName } from '@/lib/format'
 import { NON_REPO_NOTE, repoBindingProblem } from '@/lib/repo-binding'
+import { filterRepos, isPossiblyTruncated, REPO_PAGE_SIZE } from '@/lib/repo-filter'
 import { cn } from '@/lib/utils'
 import { defaultIsolation } from '../../../../shared/domain'
 import type { Isolation } from '@/types'
@@ -134,6 +138,18 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   // Only fetched once the user is actually on the GitHub step — it is a network
   // round trip that a local-folder binding never needs.
   const repos = useRepos(open && step === 'repo' && source === 'github' && githubConnected)
+  // A failed listing is often the first thing that notices a revoked token, and
+  // it would be absurd to show "couldn't load your repositories" here while the
+  // rail two inches away still shows a healthy dot. Re-checks once, on the edge
+  // into failure — not on every render of the error state.
+  const verifyGitHub = useVerifyGitHubNow()
+  useEffect(() => {
+    if (repos.isError) verifyGitHub()
+  }, [repos.isError, verifyGitHub])
+
+  const [repoQuery, setRepoQuery] = useState('')
+  const visibleRepos = filterRepos(repos.data ?? [], repoQuery)
+
   const { choose, isPending: choosing } = useChooseDirectory()
   const { clone, isPending: cloning, error: cloneError } = useCloneRepo()
   const { create, isPending: creating, error: createError } = useCreateContact()
@@ -149,6 +165,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       setLocalRepo(null)
       setIsolation(null)
       setSource('github')
+      setRepoQuery('')
     }, 200)
     return () => window.clearTimeout(timer)
   }, [open])
@@ -203,16 +220,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
     }
   }
 
-  const rowClass = (selected: boolean): string =>
-    cn(
-      'flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors',
-      'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-      selected ? 'border-primary bg-accent' : 'border-border hover:bg-accent/50'
-    )
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{STEP_COPY[step].title}</DialogTitle>
           <DialogDescription>{STEP_COPY[step].description}</DialogDescription>
@@ -221,25 +231,26 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
         {step === 'persona' && (
           <div className="flex flex-col gap-1.5">
             {personaTemplates.map((template) => (
-              <button
+              <ListRow
                 key={template.id}
-                type="button"
-                onClick={() => setPersonaId(template.id)}
-                className={rowClass(personaId === template.id)}
+                active={personaId === template.id}
+                onSelect={() => setPersonaId(template.id)}
+                align="center"
+                bordered
+                leading={<AvatarColorSwatch name={template.name} color={template.avatarColor} />}
+                trailing={
+                  personaId === template.id ? <Check className="size-4 shrink-0" /> : undefined
+                }
               >
-                <AvatarColorSwatch name={template.name} color={template.avatarColor} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate text-[13px] font-medium">{template.name}</span>
-                    <BackendBadge backend={template.backend} />
-                  </span>
-                  <span className="mt-1 flex flex-wrap gap-1">
-                    <ScopeChip axis="sandbox" value={template.sandbox} />
-                    <ScopeChip axis="github" value={template.githubScope} />
-                  </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate text-row font-medium">{template.name}</span>
+                  <BackendBadge backend={template.backend} />
                 </span>
-                {personaId === template.id && <Check className="size-4 shrink-0" />}
-              </button>
+                <span className="mt-1 flex flex-wrap gap-1">
+                  <ScopeChip axis="sandbox" value={template.sandbox} />
+                  <ScopeChip axis="github" value={template.githubScope} />
+                </span>
+              </ListRow>
             ))}
           </div>
         )}
@@ -251,7 +262,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               value={source}
               onChange={setSource}
               aria-label="Repo source"
-              className="w-56"
+              className="self-start"
             />
 
             {source === 'local' && (
@@ -301,14 +312,51 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               />
             )}
 
+            {source === 'github' && githubConnected && repos.isSuccess && repos.data.length > 0 && (
+              <InputGroup className="bg-background dark:bg-background border-border h-8 rounded-md">
+                <InputGroupAddon className="pl-2">
+                  <Search className="text-muted-foreground size-3.5" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  value={repoQuery}
+                  onChange={(event) => setRepoQuery(event.target.value)}
+                  placeholder="Filter repositories"
+                  aria-label="Filter repositories"
+                  className="h-8 text-xs [&::-webkit-search-cancel-button]:appearance-none"
+                />
+              </InputGroup>
+            )}
+
             {source === 'github' && githubConnected && (
-              <div className="scrollbar-subtle flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+              <div className="scrollbar-subtle flex max-h-96 flex-col gap-1.5 overflow-y-auto">
                 {repos.isPending && <EmptyState compact loading title="Loading repositories…" />}
+                {/*
+                  Main's own words, not a paraphrase. It distinguishes a
+                  rejected token from a rate limit from a network failure and
+                  says what to do about each — "check your connection and try
+                  again" was wrong for two of the three and useless for all of
+                  them. A stored token that has been revoked still reports
+                  `connected: true`, because that only means a token exists, so
+                  this message is the only place the user finds out.
+                */}
                 {repos.isError && (
                   <EmptyState
                     compact
+                    icon={AlertTriangle}
                     title="Couldn't load repositories"
-                    description="Check your connection and try again."
+                    description={ipcErrorMessage(repos.error)}
+                    action={
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => void repos.refetch()}>
+                          Try again
+                        </Button>
+                        <Button size="sm" className="gap-2" onClick={() => setDialog('github')}>
+                          <Github />
+                          Reconnect
+                        </Button>
+                      </div>
+                    }
                   />
                 )}
                 {repos.isSuccess && repos.data.length === 0 && (
@@ -319,25 +367,43 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                     description="This account has no repositories we can see."
                   />
                 )}
-                {repos.data?.map((option: RepoOption) => (
-                  <button
+                {repos.isSuccess && repos.data.length > 0 && visibleRepos.length === 0 && (
+                  <EmptyState
+                    compact
+                    icon={Search}
+                    title={`Nothing matches “${repoQuery.trim()}”`}
+                    // Names the cap, because "nothing matches" and "nothing
+                    // matches in the hundred we fetched" are different facts and
+                    // only one of them is a reason to give up.
+                    description={
+                      isPossiblyTruncated(repos.data)
+                        ? `Only the ${REPO_PAGE_SIZE} most recently pushed repositories are listed. If yours is older, clone it and bind the folder instead.`
+                        : 'Try the owner or the repository name.'
+                    }
+                  />
+                )}
+                {visibleRepos.map((option: RepoOption) => (
+                  <ListRow
                     key={option.id}
-                    type="button"
-                    onClick={() => setRepoId(option.id)}
-                    className={rowClass(repoId === option.id)}
-                  >
-                    <FolderGit2 className="text-muted-foreground size-4 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate font-mono text-xs">
-                      {option.fullName}
-                    </span>
-                    {!option.localPath && (
-                      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-[11px]">
-                        <CloudDownload className="size-3" />
-                        clone
+                    active={repoId === option.id}
+                    onSelect={() => setRepoId(option.id)}
+                    align="center"
+                    bordered
+                    leading={<FolderGit2 className="text-muted-foreground size-4 shrink-0" />}
+                    trailing={
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {!option.localPath && (
+                          <span className="text-muted-foreground flex items-center gap-1 text-meta">
+                            <CloudDownload className="size-3" />
+                            clone
+                          </span>
+                        )}
+                        {repoId === option.id && <Check className="size-4" />}
                       </span>
-                    )}
-                    {repoId === option.id && <Check className="size-4 shrink-0" />}
-                  </button>
+                    }
+                  >
+                    <span className="block truncate font-mono text-xs">{option.fullName}</span>
+                  </ListRow>
                 ))}
               </div>
             )}
@@ -349,33 +415,32 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             {ISOLATION_OPTIONS.map((option) => {
               const unavailable = option.needsGit && !isGitRepo
               return (
-                <button
+                <ListRow
                   key={option.value}
-                  type="button"
+                  active={chosenIsolation === option.value}
+                  onSelect={() => setIsolation(option.value)}
                   disabled={unavailable}
-                  onClick={() => setIsolation(option.value)}
-                  className={cn(
-                    rowClass(chosenIsolation === option.value),
-                    'items-start disabled:cursor-not-allowed disabled:opacity-50'
-                  )}
+                  bordered
+                  trailing={
+                    chosenIsolation === option.value ? (
+                      <Check className="mt-0.5 size-4 shrink-0" />
+                    ) : undefined
+                  }
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1.5 text-sm font-medium">
-                      {option.label}
-                      {option.value === suggestedIsolation && !unavailable && (
-                        <span className="text-muted-foreground text-[11px] font-normal">
-                          Recommended
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
-                      {unavailable
-                        ? 'Needs a git repository — this folder isn’t one.'
-                        : option.description}
-                    </p>
-                  </div>
-                  {chosenIsolation === option.value && <Check className="mt-0.5 size-4 shrink-0" />}
-                </button>
+                  <p className="flex items-center gap-1.5 text-sm font-medium">
+                    {option.label}
+                    {option.value === suggestedIsolation && !unavailable && (
+                      <span className="text-muted-foreground text-meta font-normal">
+                        Recommended
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    {unavailable
+                      ? 'Needs a git repository — this folder isn’t one.'
+                      : option.description}
+                  </p>
+                </ListRow>
               )
             })}
           </div>

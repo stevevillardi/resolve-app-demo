@@ -103,7 +103,7 @@ export function ScopeChip({
         render={
           <span
             className={cn(
-              'inline-flex shrink-0 cursor-default items-center gap-1 rounded-full font-mono text-[11px] leading-none',
+              'inline-flex shrink-0 cursor-default items-center gap-1 rounded-full font-mono text-meta leading-none',
               compact ? 'size-5 justify-center' : 'py-1 pr-2 pl-1.5',
               SEVERITY_CLASS[descriptor.severity],
               className

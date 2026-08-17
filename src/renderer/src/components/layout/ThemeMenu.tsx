@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { SidebarMenuButton } from '@/components/ui/sidebar'
+import { RAIL_BUTTON } from '@/lib/nav-items'
 import { useUiStore, type ThemePreference } from '@/store/useUiStore'
 
 const THEMES: { value: ThemePreference; label: string; icon: LucideIcon }[] = [
@@ -28,10 +29,7 @@ export function ThemeMenu(): React.JSX.Element {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <SidebarMenuButton
-            aria-label={`Theme: ${active.label}`}
-            className="h-10 gap-2.5 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center"
-          >
+          <SidebarMenuButton aria-label={`Theme: ${active.label}`} className={RAIL_BUTTON}>
             <ActiveIcon />
             <span className="group-data-[collapsible=icon]:hidden">Theme</span>
           </SidebarMenuButton>

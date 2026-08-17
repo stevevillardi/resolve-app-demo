@@ -38,6 +38,7 @@ function listing(overrides: Partial<RepoListing> = {}): RepoListing {
 
 function fakeClient(repos: RepoListing[]): GitHubClient {
   return {
+    whoAmI: async () => ({ login: 'octocat' }),
     listRepos: async () => repos,
     getRepo: async () => ({ defaultBranch: 'main', canPush: true }),
     findOpenPr: async () => null,

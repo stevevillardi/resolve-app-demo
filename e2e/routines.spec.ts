@@ -46,6 +46,10 @@ test.beforeAll(async () => {
     model: null,
     systemPrompt: 'Sweep the repo.',
     skillIds: [],
+    // Required since migration 0009, and not optional in the draft: an empty
+    // allowlist is a decision (this persona reaches no MCP server), so it has
+    // to be stated rather than inferred from its absence.
+    mcpServerIds: [],
     sandbox: 'read_only',
     githubScope: 'open_pr'
   })

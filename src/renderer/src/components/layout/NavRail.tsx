@@ -11,7 +11,7 @@ import { ThemeMenu } from './ThemeMenu'
 import { GitHubStatusButton } from '@/components/github/GitHubStatusButton'
 import { RunIndicator } from '@/components/common/RunIndicator'
 import { useActiveRuns } from '@/hooks/useMessages'
-import { NAV_ITEMS } from '@/lib/nav-items'
+import { NAV_ITEMS, RAIL_BUTTON } from '@/lib/nav-items'
 import { useUiStore } from '@/store/useUiStore'
 
 export function NavRail(): React.JSX.Element {
@@ -39,7 +39,7 @@ export function NavRail(): React.JSX.Element {
                 aria-label={item.label}
                 isActive={section === item.section}
                 onClick={() => setSection(item.section)}
-                className="h-10 gap-2.5 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center"
+                className={RAIL_BUTTON}
               >
                 <item.icon />
                 {/* Hidden rather than clipped when collapsed — the button's

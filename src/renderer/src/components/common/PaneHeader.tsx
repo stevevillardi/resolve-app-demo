@@ -6,6 +6,13 @@ interface PaneHeaderProps {
   title: string
   /** Machine text — a repo path, a session id. Set in mono by the rule. */
   subtitle?: string
+  /**
+   * The long form, on hover, when the subtitle is an abbreviation of it.
+   *
+   * A repo path is routinely 60+ characters and told you nothing its last
+   * segment didn't, so headers show the name and keep the path here.
+   */
+  subtitleTitle?: string
   actions?: React.ReactNode
   className?: string
 }
@@ -27,6 +34,7 @@ export function PaneHeader({
   leading,
   title,
   subtitle,
+  subtitleTitle,
   actions,
   className
 }: PaneHeaderProps): React.JSX.Element {
@@ -41,7 +49,12 @@ export function PaneHeader({
       <div className="flex min-w-0 flex-1 items-baseline gap-2">
         <h1 className="truncate text-sm font-semibold tracking-tight">{title}</h1>
         {subtitle && (
-          <span className="text-muted-foreground truncate font-mono text-[11px]">{subtitle}</span>
+          <span
+            className="text-muted-foreground truncate font-mono text-meta"
+            {...(subtitleTitle ? { title: subtitleTitle } : {})}
+          >
+            {subtitle}
+          </span>
         )}
       </div>
       {actions && <div className="no-drag flex shrink-0 items-center gap-1.5">{actions}</div>}

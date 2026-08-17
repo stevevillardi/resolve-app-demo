@@ -4,9 +4,15 @@ import type { ThemePreference } from '@/lib/theme'
 
 export type { ThemePreference }
 
-/** Which workspace the shell is showing. Each one is master-detail: the
- *  resizable list panel on the left, its detail view on the right. */
-export type Section = 'chats' | 'personas' | 'skills' | 'routines' | 'usage' | 'branches'
+/**
+ * Which workspace the shell is showing.
+ *
+ * All but one are master-detail: the resizable list panel on the left, its
+ * detail view on the right. `home` is the exception and has no list — it is a
+ * summary of everything, so a master list would be a list of what exactly? See
+ * AppShell, which drops the panel for it.
+ */
+export type Section = 'home' | 'chats' | 'personas' | 'skills' | 'routines' | 'usage' | 'branches'
 
 export type ConversationSelection =
   { kind: 'contact'; id: string } | { kind: 'group'; id: string } | null
@@ -77,7 +83,10 @@ interface UiState {
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
-      section: 'chats',
+      // Launches on Home rather than Chats. `section` is not persisted, so this
+      // *is* the launch screen — and Chats with nothing selected was only ever
+      // showing the overview as a fall-through anyway.
+      section: 'home',
       setSection: (section) => set({ section }),
 
       navExpanded: false,
