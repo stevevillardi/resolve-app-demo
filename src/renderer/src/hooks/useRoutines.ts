@@ -91,6 +91,28 @@ export function useRunRoutineNow(): {
   }
 }
 
+export interface NextRunRow {
+  routineId: string
+  prompt: string
+  contactName: string | null
+  nextRun: number | null
+}
+
+/**
+ * The scheduler's next-fire view for Home. Refetched on window focus and
+ * invalidated with routinesKey-adjacent mutations indirectly: fire times only
+ * move when a schedule changes or a routine fires, both of which land back on
+ * this screen through a refetch soon enough for a resting overview.
+ */
+export function useNextRuns(): UseQueryResult<NextRunRow[]> {
+  return useQuery({
+    queryKey: [...routinesKey, 'nextRuns'] as const,
+    queryFn: () => callProcedure('routines.nextRuns', undefined),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true
+  })
+}
+
 /**
  * Validates a cron expression in main, where node-cron lives.
  *

@@ -107,3 +107,126 @@ export function formatElapsed(startedAt: number, now: number): string {
   const hours = Math.floor(minutes / 60)
   return `${hours}h ${minutes % 60}m`
 }
+
+// --- Scheduled (Phase 17) ----------------------------------------------------
+
+export interface UpcomingRun {
+  routineId: string
+  prompt: string
+  contactName: string | null
+  nextRun: number
+}
+
+/**
+ * The next few fires, soonest first. Routines whose engine cannot name a time
+ * (disabled, unarmed) are dropped rather than shown as "not scheduled" — Home
+ * answers "what happens next", and a row that answers "nothing" is the
+ * Routines section's job.
+ */
+export function upcomingRuns(
+  runs: { routineId: string; prompt: string; contactName: string | null; nextRun: number | null }[],
+  limit: number
+): UpcomingRun[] {
+  return runs
+    .filter((run): run is UpcomingRun => run.nextRun !== null)
+    .sort((a, b) => a.nextRun - b.nextRun)
+    .slice(0, limit)
+}
+
+/**
+ * Absolute and local, the tray's rule for the same data (tray-menu.ts): a
+ * static snapshot must not say "in 12 minutes", because that starts lying the
+ * moment it is drawn. Duplicated rather than imported — main code cannot be
+ * imported into the renderer, and six lines is cheaper than a shared module
+ * for one format.
+ */
+export function formatUpcoming(at: number, now: number): string {
+  const when = new Date(at)
+  const time = when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  const start = new Date(now)
+  const end = new Date(at)
+  start.setHours(0, 0, 0, 0)
+  end.setHours(0, 0, 0, 0)
+  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
+
+  if (days === 0) return `today ${time}`
+  if (days === 1) return `tomorrow ${time}`
+  return `${when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} ${time}`
+}
+
+// --- Degraded auth (Phase 17) ------------------------------------------------
+
+interface AuthStatusLike {
+  claude: { error?: string }
+  codex: { error?: string }
+  github: { tokenState?: 'unverified' | 'good' | 'rejected' | 'unreachable' }
+}
+
+export interface AuthBanner {
+  kind: 'github' | 'backend'
+  message: string
+}
+
+/**
+ * The one degraded-auth state worth a banner on the resting screen, or null.
+ *
+ * `rejected` only, never `unreachable` — offline must not read as "go fix your
+ * credentials". Backend probe *errors* rank below a rejected GitHub token
+ * because they are usually transient detection failures (the probe self-heals
+ * on focus), while a revoked token stays revoked until a human acts.
+ */
+export function authBannerFor(status: AuthStatusLike | undefined): AuthBanner | null {
+  if (!status) return null
+  if (status.github.tokenState === 'rejected') {
+    return {
+      kind: 'github',
+      message:
+        'GitHub rejected the stored token. Reconnect to keep repository browsing and pull requests working.'
+    }
+  }
+  const backendError = status.claude.error ?? status.codex.error
+  if (backendError) return { kind: 'backend', message: backendError }
+  return null
+}
+
+// --- Spend sparkline (Phase 17) ----------------------------------------------
+
+export interface DailySpendPoint {
+  day: number
+  label: string
+  cost: number
+}
+
+/**
+ * Cost per calendar day for the trailing window, zero-filled.
+ *
+ * Not lib/usage-report's bucketByDay: that spans the *events'* range and keys
+ * by a selector for the dashboard's stacked series. A sparkline needs the
+ * opposite guarantees — exactly `days` buckets ending today, empty days
+ * present as zeros so a quiet week does not compress into two bars.
+ */
+export function dailySpend(events: UsageEvent[], now: number, days: number): DailySpendPoint[] {
+  const points: DailySpendPoint[] = []
+  const cursor = new Date(now)
+  cursor.setHours(0, 0, 0, 0)
+  // Walk back by calendar day rather than by 86_400_000, so a DST transition
+  // does not shift every earlier bucket by an hour.
+  cursor.setDate(cursor.getDate() - (days - 1))
+
+  for (let i = 0; i < days; i += 1) {
+    const start = cursor.getTime()
+    const next = new Date(cursor)
+    next.setDate(next.getDate() + 1)
+    const end = next.getTime()
+
+    points.push({
+      day: start,
+      label: new Date(start).toLocaleDateString(undefined, { weekday: 'short' }),
+      cost: events
+        .filter((event) => event.timestamp >= start && event.timestamp < end)
+        .reduce((sum, event) => sum + (event.costUsd ?? 0), 0)
+    })
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return points
+}

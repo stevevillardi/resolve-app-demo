@@ -469,6 +469,24 @@ export const ipcContract = {
     output: z.object({ runId: z.string().nullable(), skipped: z.string().nullable() })
   },
 
+  /**
+   * The scheduler's next-fire view, joined to contact names — the same data
+   * the tray menu draws, exposed so Home can answer "what happens next"
+   * without the user opening the Routines section.
+   */
+  'routines.nextRuns': {
+    input: z.void(),
+    output: z.array(
+      z.object({
+        routineId: z.string(),
+        prompt: z.string(),
+        contactName: z.string().nullable(),
+        /** Epoch ms, or null when the engine cannot say. */
+        nextRun: z.number().nullable()
+      })
+    )
+  },
+
   'contacts.list': {
     input: z.void(),
     output: z.array(contactSchema)

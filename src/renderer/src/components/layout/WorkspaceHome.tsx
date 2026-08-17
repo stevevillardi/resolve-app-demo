@@ -1,25 +1,45 @@
 import { useEffect, useState } from 'react'
-import { GitBranch, MessagesSquare, Square } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarClock,
+  GitBranch,
+  Loader2,
+  MessagesSquare,
+  Square
+} from 'lucide-react'
+import { Bar, BarChart } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ChartContainer } from '@/components/ui/chart'
 import { EmptyPane } from '@/components/common/EmptyPane'
 import { ListRow } from '@/components/common/ListRow'
 import { PaneBody } from '@/components/common/PaneBody'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { RunPulse } from '@/components/common/RunIndicator'
 import { Section } from '@/components/common/Section'
+import { useAuthStatus, useRefreshAuth } from '@/hooks/useAuth'
 import { useBranches } from '@/hooks/useBranches'
 import { useContacts } from '@/hooks/useConversations'
 import { useActiveRuns, useCancelRun, useMessagePreviews } from '@/hooks/useMessages'
 import { usePersonas } from '@/hooks/usePersonas'
+import { useNextRuns } from '@/hooks/useRoutines'
 import { useUsageEvents } from '@/hooks/useUsage'
-import { formatElapsed, recentActivity, spendWindow } from '@/lib/home'
+import {
+  authBannerFor,
+  dailySpend,
+  formatElapsed,
+  formatUpcoming,
+  recentActivity,
+  spendWindow,
+  upcomingRuns
+} from '@/lib/home'
 import { formatListTimestamp, repoName } from '@/lib/format'
 import { formatCostSummary, formatTokens } from '@/lib/usage'
 import { useUiStore } from '@/store/useUiStore'
 
 const RECENT_LIMIT = 6
 const SPEND_DAYS = 7
+const UPCOMING_LIMIT = 3
 
 /**
  * Which of the two screens this is.
@@ -52,6 +72,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   const setSection = useUiStore((state) => state.setSection)
   const setSelected = useUiStore((state) => state.setSelectedConversation)
   const setSelectedBranch = useUiStore((state) => state.setSelectedBranch)
+  const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
 
   const { data: contacts = [], isPending: contactsPending } = useContacts()
   const { data: personas = [] } = usePersonas()
@@ -61,6 +82,9 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   // Only Home shows these, and the query stats the filesystem, so Chats does
   // not pay for a list it will not render.
   const { data: branches = [] } = useBranches()
+  const { data: nextRunRows = [] } = useNextRuns()
+  const { data: authStatus } = useAuthStatus()
+  const { refresh: refreshAuth, isPending: refreshingAuth } = useRefreshAuth()
   const { cancel } = useCancelRun()
 
   // Runs are timed, so this screen has to re-render on its own — nothing else
@@ -75,6 +99,9 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
 
   const recent = recentActivity(previews, contacts, personas, RECENT_LIMIT)
   const spend = spendWindow(events, now, SPEND_DAYS)
+  const spendByDay = dailySpend(events, now, SPEND_DAYS)
+  const upcoming = variant === 'home' ? upcomingRuns(nextRunRows, UPCOMING_LIMIT) : []
+  const banner = variant === 'home' ? authBannerFor(authStatus) : null
   const repoCount = new Set(contacts.map((contact) => contact.repoPath)).size
   // Only the ones with something in them. A branch with no diff against the
   // repo is not waiting on anybody.
@@ -125,6 +152,29 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
     <div className="bg-background flex h-full min-h-0 flex-col">
       <PaneHeader title={variant === 'chats' ? 'Chats' : 'Overview'} />
       <PaneBody measure="wide">
+        {/* Degraded auth, on the screen the app opens to — the sidebar dot
+            already knows, but a dot is not a sentence. Rejected GitHub tokens
+            offer the reconnect dialog; a backend probe failure offers the same
+            re-check the onboarding cards carry. */}
+        {banner && (
+          <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3">
+            <AlertTriangle className="text-destructive size-4 shrink-0" />
+            <p className="min-w-0 flex-1 text-sm text-pretty">{banner.message}</p>
+            {banner.kind === 'github' ? (
+              <Button variant="outline" size="sm" onClick={() => setDialog('github')}>
+                Reconnect…
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={refreshAuth} disabled={refreshingAuth}>
+                {refreshingAuth && (
+                  <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
+                )}
+                Check again
+              </Button>
+            )}
+          </div>
+        )}
+
         {runs.length > 0 && (
           <Section
             title={runs.length === 1 ? '1 turn running' : `${runs.length} turns running`}
@@ -240,11 +290,53 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
           </Section>
         )}
 
+        {/*
+          What fires next, without opening Routines. The tray answers this for
+          someone glancing at the menu bar; Home answers it for someone sitting
+          in the app. Same data, same absolute-time rule.
+        */}
+        {variant === 'home' && upcoming.length > 0 && (
+          <Section title="Scheduled" description="The next unattended work.">
+            <div className="grid gap-1.5 @4xl/pane:grid-cols-3">
+              {upcoming.map((run) => (
+                <ListRow
+                  key={run.routineId}
+                  active={false}
+                  align="center"
+                  bordered
+                  leading={<CalendarClock className="text-muted-foreground size-4 shrink-0" />}
+                  onSelect={() => {
+                    setSelectedRoutineId(run.routineId)
+                    setSection('routines')
+                  }}
+                >
+                  <span className="block truncate text-row">{run.prompt}</span>
+                  <span className="text-muted-foreground block truncate text-xs">
+                    {run.contactName ? `${run.contactName} · ` : ''}
+                    {formatUpcoming(run.nextRun, now)}
+                  </span>
+                </ListRow>
+              ))}
+            </div>
+          </Section>
+        )}
+
         {/* Home only. In Chats this is a section about money in a pane about
             conversations — the Usage section already owns it, and the point of
             splitting the two screens was to stop each one being everything. */}
         {variant === 'home' && spend.turns > 0 && (
           <Section title={`Last ${spend.days} days`}>
+            {/* A shape, not a chart: no axes, no legend, no tooltip config —
+                the Usage section owns real charts. Seven bars answer "was this
+                week's spend flat or spiky" at a glance, which a total cannot. */}
+            <ChartContainer
+              config={{ cost: { label: 'Spend', color: 'var(--chart-1)' } }}
+              className="mb-2 aspect-auto h-12 w-full max-w-md"
+            >
+              <BarChart data={spendByDay} margin={{ left: 0, right: 0, top: 0, bottom: 0 }}>
+                <Bar dataKey="cost" fill="var(--color-cost)" radius={2} isAnimationActive={false} />
+              </BarChart>
+            </ChartContainer>
             <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-6 gap-y-1 text-xs">
               <span>
                 <span className="text-foreground font-mono tabular-nums">
@@ -266,7 +358,9 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
                 <span className="text-foreground font-mono tabular-nums">{contacts.length}</span>{' '}
                 {contacts.length === 1 ? 'contact' : 'contacts'} across{' '}
                 <span className="text-foreground font-mono tabular-nums">{repoCount}</span>{' '}
-                {repoCount === 1 ? 'repo' : 'repos'}
+                {repoCount === 1 ? 'repo' : 'repos'}, running{' '}
+                <span className="text-foreground font-mono tabular-nums">{personas.length}</span>{' '}
+                {personas.length === 1 ? 'persona' : 'personas'}
               </span>
             </div>
           </Section>
