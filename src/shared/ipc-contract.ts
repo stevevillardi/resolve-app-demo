@@ -761,6 +761,24 @@ export const ipcContract = {
   // reply arrives on the push channel (src/shared/agent.ts), keyed by the runId
   // returned here. A turn can take minutes, which is far too long to hold an
   // invoke open.
+  /**
+   * The persisted tool record for a thread (Phase 17, doc 15 item 1): which
+   * tools each turn ran and how each ended — name and status only, never
+   * arguments. messageId is null for calls whose turn died before its reply
+   * was written; the renderer shows those as interrupted.
+   */
+  'messages.toolCalls': {
+    input: z.object({ contactId: z.string() }),
+    output: z.array(
+      z.object({
+        id: z.string(),
+        messageId: z.string().nullable(),
+        name: z.string(),
+        status: z.enum(['running', 'completed', 'failed']),
+        createdAt: z.number()
+      })
+    )
+  },
   'messages.list': {
     input: z.object({ contactId: z.string() }),
     output: z.array(messageSchema)

@@ -4,7 +4,7 @@ import { callProcedure, ipcErrorMessage, onAgentEvent, onRunsChanged } from '@/l
 import { useRunStore } from '@/store/useRunStore'
 import { contactsKey } from './useConversations'
 import type { PersistedMessage } from '@/types'
-import type { ActiveRun } from '../../../shared/ipc-contract'
+import type { ActiveRun, IpcOutput } from '../../../shared/ipc-contract'
 
 /**
  * Thread reads and the send/stop pair (Phase 6).
@@ -15,6 +15,8 @@ import type { ActiveRun } from '../../../shared/ipc-contract'
  * lands — so the query cache stays the single source of finished truth and the
  * store holds only what is still in flight.
  */
+
+export type PersistedToolCall = IpcOutput<'messages.toolCalls'>[number]
 
 export const messagesKey = (contactId: string): readonly unknown[] => ['messages', contactId]
 export const messagePreviewsKey = ['messages', 'previews'] as const
@@ -128,6 +130,18 @@ export function useCancelRun(): { cancel: (runId: string) => void } {
  * The whole set rather than this contact's, because what disables a composer is
  * a turn on a *sibling* contact bound to the same repo (blueprint §15D).
  */
+/**
+ * The persisted tool record for a thread (Phase 17). Keyed under the thread's
+ * messages key, so the invalidation a finished turn already does refetches
+ * this too — no second wiring to forget.
+ */
+export function useToolCalls(contactId: string): UseQueryResult<PersistedToolCall[]> {
+  return useQuery({
+    queryKey: [...messagesKey(contactId), 'toolCalls'] as const,
+    queryFn: () => callProcedure('messages.toolCalls', { contactId })
+  })
+}
+
 export function useActiveRuns(): UseQueryResult<ActiveRun[]> {
   const queryClient = useQueryClient()
 

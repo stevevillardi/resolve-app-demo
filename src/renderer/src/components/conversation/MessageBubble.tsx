@@ -140,6 +140,12 @@ export function MessageBubble({
                   : 'bg-bubble-inbound text-bubble-inbound-foreground rounded-[var(--radius-bubble)] rounded-bl-md'
               )}
             >
+              {/* History: the turn's persisted tool record, above the reply it
+                  produced — same reading order as the live stream, where the
+                  work scrolls past before the answer lands. */}
+              {!isOutbound && status === 'sent' && (toolCalls ?? []).length > 0 && (
+                <ToolCallTimeline calls={toolCalls ?? []} className="mb-2" />
+              )}
               {isOutbound ? (
                 <p className="whitespace-pre-wrap">{content}</p>
               ) : (

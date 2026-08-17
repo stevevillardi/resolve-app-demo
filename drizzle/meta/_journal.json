@@ -78,6 +78,13 @@
       "when": 1786920571006,
       "tag": "0010_full_access_scope_pairing",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1786945096780,
+      "tag": "0011_add_tool_calls",
+      "breakpoints": true
     }
   ]
 }

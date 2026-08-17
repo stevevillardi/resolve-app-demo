@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto'
-import { asc, desc, eq, sql } from 'drizzle-orm'
+import { asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toMessage } from '../db/mappers'
-import { messages } from '../db/schema'
+import { messages, toolCalls } from '../db/schema'
 import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
 import { emitAgentEvent, emitRunsChanged } from './agent-events'
@@ -80,6 +80,33 @@ interface Run {
 const runs = new Map<string, Run>()
 
 // --- Reads ------------------------------------------------------------------
+
+/**
+ * The persisted tool record for a thread (Phase 17, doc 15 item 1): name and
+ * status per call, stamped with the message the turn ended in. Never
+ * arguments — see the table's comment in schema.ts.
+ */
+export function listToolCalls(contactId: string): {
+  id: string
+  messageId: string | null
+  name: string
+  status: 'running' | 'completed' | 'failed'
+  createdAt: number
+}[] {
+  return initDb()
+    .select()
+    .from(toolCalls)
+    .where(eq(toolCalls.contactId, contactId))
+    .orderBy(asc(toolCalls.createdAt))
+    .all()
+    .map((row) => ({
+      id: row.id,
+      messageId: row.messageId,
+      name: row.name,
+      status: row.status,
+      createdAt: row.createdAt.getTime()
+    }))
+}
 
 export function listMessages(contactId: string): PersistedMessage[] {
   return initDb()
@@ -360,6 +387,10 @@ async function runTurn(
   // shed), and only before anything has streamed — past that point a restart
   // would silently discard output the user already saw.
   let canHealDeadResume = Boolean(contact.backendSessionId)
+  // Persisted per call as it happens — name and status only, never arguments
+  // (doc 15 item 1). Row ids kept so finish() can stamp them with the message
+  // this turn ends in; the backend's toolCallId is only unique per turn.
+  const toolRowIds = new Map<string, string>()
 
   try {
     // The first thing the turn does, because it decides where the turn runs.
@@ -394,6 +425,32 @@ async function runTurn(
           break attempts
         }
         if (event.type === 'text_message') streamed += event.text
+        if (event.type === 'tool_start') {
+          const rowId = randomUUID()
+          toolRowIds.set(event.toolCallId, rowId)
+          initDb()
+            .insert(toolCalls)
+            .values({
+              id: rowId,
+              contactId: contact.id,
+              messageId: null,
+              toolCallId: event.toolCallId,
+              name: event.name,
+              status: 'running',
+              createdAt: new Date()
+            })
+            .run()
+        }
+        if (event.type === 'tool_end') {
+          const rowId = toolRowIds.get(event.toolCallId)
+          if (rowId) {
+            initDb()
+              .update(toolCalls)
+              .set({ status: event.status })
+              .where(eq(toolCalls.id, rowId))
+              .run()
+          }
+        }
         emitAgentEvent(runId, event)
       }
       // The stream ended without a `done` (a cancelled turn); nothing to retry.
@@ -406,7 +463,9 @@ async function runTurn(
     failure = error instanceof Error ? error.message : String(error)
     emitAgentEvent(runId, { type: 'error', kind: 'unknown', message: failure })
   } finally {
-    finish(runId, run, activeSession, prompt, done?.finalText ?? streamed, done, failure)
+    finish(runId, run, activeSession, prompt, done?.finalText ?? streamed, done, failure, [
+      ...toolRowIds.values()
+    ])
   }
 }
 
@@ -425,7 +484,8 @@ function finish(
   prompt: string,
   finalText: string,
   done: Extract<AgentEvent, { type: 'done' }> | null,
-  failure: string | null
+  failure: string | null,
+  toolRowIds: string[] = []
 ): void {
   const { contactId, origin, groupId } = run
   try {
@@ -433,7 +493,19 @@ function finish(
     // billable tokens all the same — so the two are recorded independently
     // rather than one gating the other.
     if (finalText.trim()) {
-      insertMessage(contactId, 'assistant', finalText)
+      const reply = insertMessage(contactId, 'assistant', finalText)
+
+      // Stamp the turn's tool rows with the message it ended in, so history
+      // can render the calls with the reply they produced. A turn that dies
+      // before this leaves rows with a null messageId and status 'running' —
+      // rendered as interrupted, which is the truth.
+      if (toolRowIds.length > 0) {
+        initDb()
+          .update(toolCalls)
+          .set({ messageId: reply.id })
+          .where(inArray(toolCalls.id, toolRowIds))
+          .run()
+      }
 
       // The Group's copy of the same reply (§8). The `messages` row above is
       // the conversation; this is the Group's record that it happened, and the

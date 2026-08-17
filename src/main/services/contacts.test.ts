@@ -418,8 +418,6 @@ describe('rebindPersona', () => {
 
   it('rejects an unknown contact', () => {
     seedOtherPersona()
-    expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(
-      /No such contact/
-    )
+    expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/No such contact/)
   })
 })
