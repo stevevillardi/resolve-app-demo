@@ -15,6 +15,7 @@ import { installEditableFieldMenu } from './context-menu'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { beginQuit, isQuitting } from './lifecycle'
+import { onRunsChangedInMain } from './services/agent-events'
 import { nodeCronEngine } from './services/cron-engine'
 import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
@@ -130,6 +131,9 @@ app.whenReady().then(() => {
   // because not depending on one is the entire point of the phase.
   startScheduler(nodeCronEngine(), refreshTrayMenu)
   createTray(showMainWindow)
+  // The tray's "N turns running" line goes stale exactly when the run set
+  // changes, which is also the only time it is worth redrawing.
+  onRunsChangedInMain(refreshTrayMenu)
 
   installApplicationMenu()
 

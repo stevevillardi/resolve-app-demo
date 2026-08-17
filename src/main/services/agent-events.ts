@@ -54,9 +54,23 @@ export function emitAgentEvent(runId: string, event: AgentEvent): void {
   send({ kind: 'event', runId, event })
 }
 
+/**
+ * Main-side listeners for the same signal the renderer gets — the tray's
+ * running-turn line lives in main and has no window to receive a push.
+ * A registry rather than a direct import of tray.ts, which would close an
+ * import cycle (tray → messaging → this file).
+ */
+const runsChangedListeners = new Set<() => void>()
+
+export function onRunsChangedInMain(listener: () => void): () => void {
+  runsChangedListeners.add(listener)
+  return () => runsChangedListeners.delete(listener)
+}
+
 /** Signals that the set of in-flight runs changed, so `runs.list` is stale. */
 export function emitRunsChanged(): void {
   send({ kind: 'runs-changed' })
+  for (const listener of runsChangedListeners) listener()
 }
 
 /**
