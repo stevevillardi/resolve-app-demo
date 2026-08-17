@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { is } from '@electron-toolkit/utils'
 import { existsSync } from 'fs'
 import { registerProcedure } from '../registerProcedure'
 import { getAppState } from '../../services/app-state'
@@ -11,4 +12,8 @@ registerProcedure('workspace.getRoot', () => {
 
 registerProcedure('workspace.chooseRoot', async () => ({ path: await chooseWorkspaceRoot() }))
 
-registerProcedure('appInfo.get', () => ({ version: app.getVersion(), platform: process.platform }))
+registerProcedure('appInfo.get', () => ({
+  version: app.getVersion(),
+  platform: process.platform,
+  dev: is.dev
+}))

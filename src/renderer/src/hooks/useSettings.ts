@@ -32,3 +32,15 @@ export function useAppInfo(): UseQueryResult<IpcOutput<'appInfo.get'>> {
     staleTime: Infinity
   })
 }
+
+/**
+ * The dev reset. The response races the relaunch and may never resolve —
+ * isPending simply stays true until the process dies, which reads correctly
+ * as "resetting…".
+ */
+export function useResetApp(): { reset: () => void; isPending: boolean } {
+  const mutation = useMutation({
+    mutationFn: () => callProcedure('dev.resetApp', undefined)
+  })
+  return { reset: () => mutation.mutate(), isPending: mutation.isPending }
+}

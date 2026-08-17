@@ -1,15 +1,30 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { createDb, type AppDatabase } from './create'
+import { createDb, rawHandle, type AppDatabase } from './create'
 
 export type { AppDatabase }
+
+/** One place for the filename, so the reset service cannot drift from it. */
+export const DB_FILE_NAME = 'persona-router.db'
 
 let db: AppDatabase | null = null
 
 export function initDb(): AppDatabase {
   if (db) return db
-  db = createDb(join(app.getPath('userData'), 'persona-router.db'), getMigrationsFolder())
+  db = createDb(join(app.getPath('userData'), DB_FILE_NAME), getMigrationsFolder())
   return db
+}
+
+/**
+ * Closes the underlying SQLite handle and forgets it (Phase 18, for the dev
+ * reset). Deleting the file while a handle is open leaks an fd to a dead
+ * inode on macOS and fails outright on Windows; nothing else may unlink the
+ * database without coming through here first. The next initDb() reopens.
+ */
+export function closeDb(): void {
+  if (!db) return
+  rawHandle(db)?.close()
+  db = null
 }
 
 function getMigrationsFolder(): string {
