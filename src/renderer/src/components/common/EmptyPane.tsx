@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { EmptyState } from './EmptyState'
+import { PANE_STRIP } from './PaneHeader'
 
 interface EmptyPaneProps {
   icon?: LucideIcon
@@ -15,20 +16,17 @@ interface EmptyPaneProps {
  * standing in for the `PaneHeader` that isn't there, and a centred
  * `EmptyState`. Worth one component for two reasons beyond the duplication.
  *
- * The strip is not decoration. With `titleBarStyle: 'hiddenInset'` the app has
- * to nominate its own draggable chrome, and a pane that omits it leaves the top
- * 48px of the window undraggable — so which section you happened to be on
- * decided whether you could move the window by its top edge.
- *
- * And it carries the border every `PaneHeader` draws. Without it the hairline
- * that runs unbroken across the window stopped dead at the pane divider on
- * exactly the screen you see most: selection is not persisted, so this is what
- * every launch opens on.
+ * The strip is `PANE_STRIP` rather than a local copy of it. It was a local copy,
+ * and that is precisely how the title strip ended up two-tone on a fresh
+ * install: `bg-card` was added to `PaneHeader` and this copy kept
+ * `bg-background`, so the seam under the traffic lights reopened on the one
+ * screen with no contacts to show — which every launch opens on, since selection
+ * is not persisted.
  */
 export function EmptyPane({ icon, title, description, action }: EmptyPaneProps): React.JSX.Element {
   return (
     <div className="bg-background flex h-full flex-col">
-      <div className="border-border drag-region h-12 shrink-0 border-b" />
+      <div className={PANE_STRIP} />
       <EmptyState
         icon={icon}
         title={title}

@@ -15,6 +15,7 @@ import { ConversationList } from '@/components/conversation/ConversationList'
 import { PersonaList } from '@/components/persona/PersonaList'
 import { SkillList } from '@/components/persona/SkillList'
 import { RoutineList } from '@/components/routines/RoutineList'
+import { PANE_STRIP } from '@/components/common/PaneHeader'
 import { UsageScopeList } from '@/components/usage/UsageScopeList'
 import { useCreatePersona } from '@/hooks/usePersonas'
 import { useCreateSkill } from '@/hooks/useSkills'
@@ -183,7 +184,7 @@ export function ListPanel(): React.JSX.Element {
           strip up: with the rail's divider stopped above (NavRail.tsx) the
           lights now sit in an unbroken surface, and the title moved down to
           where it can be a heading rather than a label wedged beside chrome. */}
-      <div className="border-border drag-region h-12 shrink-0 border-b" />
+      <div className={PANE_STRIP} />
 
       <div className="border-border drag-region shrink-0 border-b">
         {/* The actions stay with the title rather than in the strip above: a "+"

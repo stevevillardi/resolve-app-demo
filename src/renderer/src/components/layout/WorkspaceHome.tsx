@@ -150,7 +150,14 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
-      <PaneHeader title={variant === 'chats' ? 'Chats' : 'Overview'} />
+      {/* Home is the one pane that abuts the nav rail, so its title is kept for
+          assistive tech but taken off the strip: at this pane's left padding it
+          would sit 9px from the green traffic light. Chats has a list panel in
+          between and is nowhere near them, so it keeps its visible title. */}
+      <PaneHeader
+        title={variant === 'chats' ? 'Chats' : 'Overview'}
+        titleHidden={variant === 'home'}
+      />
       <PaneBody measure="wide">
         {/* Degraded auth, on the screen the app opens to — the sidebar dot
             already knows, but a dot is not a sentence. Rejected GitHub tokens

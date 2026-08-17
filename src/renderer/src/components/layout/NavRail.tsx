@@ -11,9 +11,11 @@ import { Settings } from 'lucide-react'
 import { ThemeMenu } from './ThemeMenu'
 import { GitHubStatusButton } from '@/components/github/GitHubStatusButton'
 import { RunIndicator } from '@/components/common/RunIndicator'
+import { PANE_STRIP } from '@/components/common/PaneHeader'
 import { useActiveRuns } from '@/hooks/useMessages'
 import { NAV_ITEMS, RAIL_BUTTON } from '@/lib/nav-items'
 import { useUiStore } from '@/store/useUiStore'
+import { cn } from '@/lib/utils'
 
 export function NavRail(): React.JSX.Element {
   const section = useUiStore((state) => state.section)
@@ -45,12 +47,12 @@ export function NavRail(): React.JSX.Element {
        */
       className="border-transparent after:absolute after:-right-px after:top-12 after:bottom-0 after:w-px after:bg-sidebar-border after:content-['']"
     >
-      {/* Holds no content: the traffic lights are inset over it. Its bottom
-          border is the left end of the one hairline that crosses the whole
-          window under the title strip — `border-border`, not
-          `border-sidebar-border`, so it matches the list panel's half of that
-          same line exactly rather than nearly. */}
-      <SidebarHeader className="drag-region border-border h-12 justify-center border-b p-0" />
+      {/* Holds no content: the traffic lights are inset over it. `PANE_STRIP`
+          rather than the rail's own classes, so this is the same surface and the
+          same hairline as the list panel's and every pane's — including
+          `border-border` over `border-sidebar-border`, which makes the line
+          across the window match exactly rather than nearly. */}
+      <SidebarHeader className={cn(PANE_STRIP, 'justify-center p-0')} />
 
       <SidebarContent className="px-2">
         <SidebarMenu className="gap-1">
