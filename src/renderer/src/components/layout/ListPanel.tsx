@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Search, X } from 'lucide-react'
+import { LibraryBig, Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   InputGroup,
@@ -10,6 +10,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
+import { StarterLibraryDialog } from '@/components/onboarding/StarterLibraryDialog'
 import { ConversationList } from '@/components/conversation/ConversationList'
 import { PersonaList } from '@/components/persona/PersonaList'
 import { SkillList } from '@/components/persona/SkillList'
@@ -140,6 +141,7 @@ export function ListPanel(): React.JSX.Element {
   }
 
   const { create: createPersona } = useCreatePersona()
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const { create: createSkill } = useCreateSkill()
   const { create: createRoutine } = useCreateRoutine()
   const contacts = useContacts().data ?? []
@@ -174,25 +176,47 @@ export function ListPanel(): React.JSX.Element {
       <div className="border-border drag-region shrink-0 border-b">
         <div className="flex h-12 items-center justify-between gap-2 pr-2 pl-4">
           <h2 className="truncate text-sm font-semibold tracking-tight">{config.title}</h2>
-          {config.newLabel && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={onNew}
-                    disabled={!canCreate}
-                    aria-label={config.newLabel}
-                    className="no-drag"
-                  >
-                    <Plus className="size-4" />
-                  </Button>
-                }
-              />
-              <TooltipContent side="bottom">{config.newLabel}</TooltipContent>
-            </Tooltip>
-          )}
+          <span className="flex items-center">
+            {/* The catalog's durable re-entry point: onboarding's chooser is
+              one-shot, and both of these sections are made of what it seeds. */}
+            {(section === 'personas' || section === 'skills') && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setLibraryOpen(true)}
+                      aria-label="Browse starter library"
+                      className="no-drag"
+                    >
+                      <LibraryBig className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">Browse starter library</TooltipContent>
+              </Tooltip>
+            )}
+            {config.newLabel && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={onNew}
+                      disabled={!canCreate}
+                      aria-label={config.newLabel}
+                      className="no-drag"
+                    >
+                      <Plus className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">{config.newLabel}</TooltipContent>
+              </Tooltip>
+            )}
+          </span>
         </div>
         {config.searchPlaceholder && (
           // InputGroup rather than an absolutely-positioned icon: the icon is a
@@ -249,6 +273,8 @@ export function ListPanel(): React.JSX.Element {
           </ErrorBoundary>
         </div>
       </ScrollArea>
+
+      <StarterLibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} />
     </div>
   )
 }
