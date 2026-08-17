@@ -66,6 +66,23 @@ export function streamText(stream: ThreadStream): string {
 }
 
 /**
+ * `mcp__github__list_issues` → `github · list_issues`.
+ *
+ * The qualified name is how both the SDK and the deny list refer to a tool, so
+ * it is the right thing to key on and the wrong thing to read. Which *server* a
+ * call went to survives the shortening rather than being trimmed away with the
+ * prefix: that is the part a human is governing, and two servers offering a
+ * `search` tool would otherwise render identically.
+ *
+ * Non-MCP names are returned untouched — `Bash` and `Edit` are already what
+ * they should read as.
+ */
+export function toolCallLabel(name: string): string {
+  const match = /^mcp__(.+?)__(.+)$/.exec(name)
+  return match ? `${match[1]} · ${match[2]}` : name
+}
+
+/**
  * Replaces one call by id, copying rather than mutating.
  *
  * The purity guard in stream.test.ts is not decoration: `applyAgentEvent` is

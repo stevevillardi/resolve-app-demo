@@ -267,6 +267,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               content={streamed}
               status="streaming"
               activity={live.turn.stream.activity}
+              toolCalls={live.turn.stream.toolCalls}
               senderName={personaFor(live.contactId)?.name}
               senderColor={personaFor(live.contactId)?.avatarColor}
               backend={personaFor(live.contactId)?.backend}

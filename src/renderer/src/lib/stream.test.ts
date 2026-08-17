@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { applyAgentEvent, emptyStream, streamText, type ThreadStream } from './stream'
+import {
+  applyAgentEvent,
+  emptyStream,
+  streamText,
+  toolCallLabel,
+  type ThreadStream
+} from './stream'
 import type { AgentEvent } from '../../../shared/agent'
 
 function fold(events: AgentEvent[], from: ThreadStream = emptyStream): ThreadStream {
@@ -199,5 +205,78 @@ describe('purity', () => {
     const before = { ...emptyStream }
     applyAgentEvent(before, { type: 'text_delta', text: 'hi' })
     expect(before).toEqual(emptyStream)
+  })
+})
+
+describe('the tool-call timeline', () => {
+  it('records each call in the order it started', () => {
+    const stream = fold([
+      { type: 'tool_start', toolCallId: 't1', name: 'Bash', detail: 'rg auth' },
+      { type: 'tool_start', toolCallId: 't2', name: 'Read', detail: '/a/b.ts' }
+    ])
+
+    expect(stream.toolCalls.map((call) => call.id)).toEqual(['t1', 't2'])
+    expect(stream.toolCalls.every((call) => call.status === 'running')).toBe(true)
+  })
+
+  it('marks the one that finished, and only that one', () => {
+    const stream = fold([
+      { type: 'tool_start', toolCallId: 't1', name: 'Bash', detail: 'rg auth' },
+      { type: 'tool_start', toolCallId: 't2', name: 'Read', detail: '/a/b.ts' },
+      { type: 'tool_end', toolCallId: 't1', name: 'Bash', status: 'completed' }
+    ])
+
+    expect(stream.toolCalls.find((call) => call.id === 't1')?.status).toBe('completed')
+    expect(stream.toolCalls.find((call) => call.id === 't2')?.status).toBe('running')
+  })
+
+  it('keeps a failure visible rather than dropping it', () => {
+    // A denied tool is often the most informative thing in a turn — it is the
+    // sandbox working, and the user should be able to see that it did.
+    const stream = fold([
+      { type: 'tool_start', toolCallId: 't1', name: 'Write', detail: '/etc/hosts' },
+      { type: 'tool_end', toolCallId: 't1', name: 'Write', status: 'failed' }
+    ])
+
+    expect(stream.toolCalls[0].status).toBe('failed')
+  })
+
+  it('survives an end for a call it never saw start', () => {
+    // Events can be dropped between main and the renderer. Inventing a call
+    // from an end event would put a phantom row in the timeline; ignoring it
+    // leaves the timeline short, which is the lesser wrong.
+    const stream = fold([
+      { type: 'tool_end', toolCallId: 'ghost', name: 'Bash', status: 'completed' }
+    ])
+    expect(stream.toolCalls).toEqual([])
+  })
+
+  it('does not mutate the calls it was given', () => {
+    const before = fold([{ type: 'tool_start', toolCallId: 't1', name: 'Bash', detail: 'rg auth' }])
+    const snapshot = before.toolCalls[0]
+    fold([{ type: 'tool_end', toolCallId: 't1', name: 'Bash', status: 'completed' }], before)
+
+    expect(snapshot.status).toBe('running')
+  })
+
+  it('starts empty and stays empty for a turn that calls nothing', () => {
+    expect(fold([{ type: 'text_message', text: 'No tools needed.' }]).toolCalls).toEqual([])
+  })
+})
+
+describe('toolCallLabel', () => {
+  it('names the server as well as the tool', () => {
+    // Which server a call reached is the thing being governed. Two servers each
+    // offering `search` would otherwise render identically.
+    expect(toolCallLabel('mcp__github__list_issues')).toBe('github · list_issues')
+  })
+
+  it('leaves a built-in tool name alone', () => {
+    expect(toolCallLabel('Bash')).toBe('Bash')
+    expect(toolCallLabel('ToolSearch')).toBe('ToolSearch')
+  })
+
+  it('keeps an underscored tool name whole', () => {
+    expect(toolCallLabel('mcp__github__create_pull_request')).toBe('github · create_pull_request')
   })
 })

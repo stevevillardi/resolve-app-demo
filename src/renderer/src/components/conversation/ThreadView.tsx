@@ -164,6 +164,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               status="streaming"
               backend={persona.backend}
               activity={turn.stream.activity}
+              toolCalls={turn.stream.toolCalls}
             />
           )}
 

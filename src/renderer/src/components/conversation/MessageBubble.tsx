@@ -3,8 +3,10 @@ import { MarkdownMessage } from '@/components/markdown/MarkdownMessage'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { Button } from '@/components/ui/button'
 import { StreamingIndicator } from './StreamingIndicator'
+import { ToolCallTimeline } from './ToolCallTimeline'
 import { formatTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import type { ToolCall } from '@/lib/stream'
 import type { MessageBubbleError, MessageBubbleStatus, MessageRole, PersonaBackend } from '@/types'
 
 interface MessageBubbleProps {
@@ -22,6 +24,16 @@ interface MessageBubbleProps {
    * command it is running, or the file it is reading. Null between tools.
    */
   activity?: string | null
+  /**
+   * What it has done so far this turn.
+   *
+   * Distinct from `activity` above, which is one current line that is replaced
+   * as work moves on. This is the record, and it is what makes a tool call
+   * visible as work rather than something to infer from the reply — the thing
+   * blueprint §9 objects to, and sharpest for an MCP call, which can read or
+   * write GitHub while leaving no trace in the text at all.
+   */
+  toolCalls?: ToolCall[]
 }
 
 const ERROR_TITLE: Record<MessageBubbleError['kind'], string> = {
@@ -44,7 +56,8 @@ export function MessageBubble({
   senderName,
   senderColor,
   onRetry,
-  activity
+  activity,
+  toolCalls
 }: MessageBubbleProps): React.JSX.Element {
   const isOutbound = role === 'user'
 
@@ -116,11 +129,19 @@ export function MessageBubble({
           <MarkdownMessage content={content} />
         )}
         {status === 'streaming' && (
-          <StreamingIndicator
-            backend={backend}
-            className={cn(content.trim() && 'mt-2')}
-            activity={activity ?? undefined}
-          />
+          <>
+            {/* Above the indicator: what has happened reads top-down, and what
+                is happening now stays last, where the eye already is. */}
+            <ToolCallTimeline
+              calls={toolCalls ?? []}
+              className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
+            />
+            <StreamingIndicator
+              backend={backend}
+              className={cn((content.trim() || (toolCalls ?? []).length > 0) && 'mt-2')}
+              activity={activity ?? undefined}
+            />
+          </>
         )}
       </div>
       {isOutbound && timestamp !== undefined && (
