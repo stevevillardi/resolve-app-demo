@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { AlertTriangle, Loader2, Sparkles, Terminal } from 'lucide-react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
+import { ClaudeMark, CodexMark } from '@/components/brand/BrandMarks'
 import { Button } from '@/components/ui/button'
 import { DeviceCodeDisplay } from '@/components/common/DeviceCodeDisplay'
 import { Github } from '@/components/github/GithubMark'
@@ -69,7 +70,7 @@ export function OnboardingFlow(): React.JSX.Element {
         <div className="flex flex-col gap-3">
           {/* --- Claude ---------------------------------------------------- */}
           <AuthStepCard
-            icon={Sparkles}
+            icon={ClaudeMark}
             title="Claude"
             description="Reuses your Claude Code login if you already have one."
             connected={Boolean(claudeStatus?.authenticated)}
@@ -95,7 +96,7 @@ export function OnboardingFlow(): React.JSX.Element {
 
           {/* --- Codex ----------------------------------------------------- */}
           <AuthStepCard
-            icon={Terminal}
+            icon={CodexMark}
             title="Codex"
             description="Reuses your Codex login, or sign in with ChatGPT."
             connected={Boolean(codexStatus?.authenticated)}

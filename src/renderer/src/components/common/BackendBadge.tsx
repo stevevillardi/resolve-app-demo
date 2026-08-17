@@ -1,4 +1,4 @@
-import { Sparkles, SquareTerminal } from 'lucide-react'
+import { ClaudeMark, CodexMark } from '@/components/brand/BrandMarks'
 import { cn } from '@/lib/utils'
 import type { PersonaBackend } from '@/types'
 
@@ -7,12 +7,17 @@ interface BackendBadgeProps {
   className?: string
 }
 
-// The backend is an implementation fact, not a brand — it stays in muted ink
-// with a glyph rather than taking a colour of its own, so it never competes
-// with the scope chips beside it.
+// The real marks now — `Sparkles` and `SquareTerminal` were placeholders for a
+// lucide version that had brand icons, and onboarding had drifted to a third
+// glyph for the same two things.
+//
+// Still muted ink rather than brand colour, which is the older decision and the
+// one worth keeping: the backend is an implementation fact sitting next to the
+// scope chips, and two saturated logos would out-shout the permissions that are
+// the actual point of the row.
 const BACKEND = {
-  claude: { label: 'claude', Icon: Sparkles },
-  codex: { label: 'codex', Icon: SquareTerminal }
+  claude: { label: 'claude', Icon: ClaudeMark },
+  codex: { label: 'codex', Icon: CodexMark }
 } as const
 
 export function BackendBadge({ backend, className }: BackendBadgeProps): React.JSX.Element {

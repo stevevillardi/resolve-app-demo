@@ -4,6 +4,12 @@ import { cn } from '@/lib/utils'
 interface SegmentedControlOption<T extends string> {
   value: T
   label: string
+  /**
+   * Drawn before the label, at the label's own size. For segments naming a
+   * *thing* rather than a level — the two backends have marks, `read_only` and
+   * `full` do not and should not acquire decorative ones.
+   */
+  icon?: React.ComponentType<{ className?: string }>
 }
 
 interface SegmentedControlProps<T extends string> {
@@ -57,7 +63,9 @@ export function SegmentedControl<T extends string>({
   // A stable dependency even when the caller passes an inline array literal, so
   // the observer is rebuilt when the options really change rather than on every
   // render.
-  const shape = options.map((option) => `${option.value}|${option.label}`).join(',')
+  const shape = options
+    .map((option) => `${option.value}|${option.label}|${option.icon ? '1' : '0'}`)
+    .join(',')
 
   useLayoutEffect(() => {
     const measure = (): void => {
@@ -138,6 +146,7 @@ export function SegmentedControl<T extends string>({
               onChange={() => onChange(option.value)}
               className="sr-only"
             />
+            {option.icon && <option.icon className="mr-1 inline-block size-3 align-[-1px]" />}
             {option.label}
           </label>
         )

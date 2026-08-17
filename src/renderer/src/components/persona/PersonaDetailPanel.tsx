@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ClaudeMark, CodexMark } from '@/components/brand/BrandMarks'
 import { CheckRow } from '@/components/common/CheckRow'
 import { FieldGrid, FieldGridSpan } from '@/components/common/FieldGrid'
 import { BackendBadge } from '@/components/common/BackendBadge'
@@ -40,10 +41,12 @@ import type {
 /** Stands in for `model: null` — Select can't carry null as a value. */
 const DEFAULT_MODEL = '__default__'
 
-const BACKEND_OPTIONS: { value: PersonaBackend; label: string }[] = [
-  { value: 'claude', label: 'Claude' },
-  { value: 'codex', label: 'Codex' }
-]
+// The only segmented control in the app whose options name a *thing* rather
+// than a level, which is why it is the only one carrying icons.
+const BACKEND_OPTIONS = [
+  { value: 'claude', label: 'Claude', icon: ClaudeMark },
+  { value: 'codex', label: 'Codex', icon: CodexMark }
+] as const satisfies readonly { value: PersonaBackend; label: string; icon: unknown }[]
 
 const SANDBOX_OPTIONS: { value: SandboxLevel; label: string }[] = [
   { value: 'read_only', label: 'Read only' },
