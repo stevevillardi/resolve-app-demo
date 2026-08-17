@@ -1,6 +1,6 @@
 # Phase 16 — UI second pass
 
-**Status:** In progress
+**Status:** Done — the list below was closed in [Phase 17](17-v1-wrap.md)
 **Blueprint refs:** §10 (UI/UX component mapping — including the schedule picker it has always specified), §9 (GitHub)
 **Depends on:** Phase 13 (the primitives this extends), Phase 14 (the capability fields the context panel now shows)
 **Numbered 16** because 15 was already taken by
@@ -71,15 +71,17 @@ measure the pane. Verified in the built CSS rather than assumed: the variants co
 
 ---
 
-## Still open
+## Still open — closed in Phase 17
 
-- Group thread view at both widths — the least-reviewed screen, because the sweep only photographs
-  it seeded.
-- `BreakdownRows` in the usage dashboard still uses fixed `w-28`/`w-16` columns, so names truncate
-  at 112px regardless of available width.
-- The `ConfirmDeleteDialog` call sites have still never been read side by side; Phase 13 gave two of
-  the four a `consequence` band.
-- `DeviceCodeDisplay` — the one screen copied from under time pressure, since the code expires.
+- ~~Group thread view at both widths~~ — reviewed in the Phase 17 sweep.
+- ~~`BreakdownRows` fixed `w-28`/`w-16` columns~~ — the name column now shares the flexible width
+  with the bar (1:2); the numeric columns stay fixed on purpose, tabular figures want a constant
+  column.
+- ~~The `ConfirmDeleteDialog` call sites read side by side~~ — done; the persona dialog's refusal
+  now names the bound contacts in a consequence band and the skill dialogs moved their affected
+  personas into the same band, one visual grammar across all of them.
+- ~~`DeviceCodeDisplay`~~ — gained the countdown both device flows always knew (`expiresAt`),
+  ticking to an honest expired state.
 
 ## Notes for whoever picks this up
 
