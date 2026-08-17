@@ -1,6 +1,6 @@
 # Phase 13 — UI final pass
 
-**Status:** In progress
+**Status:** Done — every acceptance check verified, including the pane-boundary and empty-state audits.
 **Blueprint refs:** §10 (UI/UX component mapping), §16 (the three journeys this has to hold up under)
 **Depends on:** Phase 6 (real messaging data), Phase 2 (the visual language this extends)
 **Relationship to Phase 11:** Phase 11 is the _integration_ pass — run all three journeys end to
@@ -63,23 +63,23 @@ the one screen the sweep misses.
 
 Beyond the items already scoped below:
 
-- [ ] **The thread header prints the full absolute repo path** and it consumes the entire header —
+- [x] **The thread header prints the full absolute repo path** and it consumes the entire header —
       `/private/var/folders/6d/0rkvg…/billing-api`. The list rows already show `repoName()`; the
       header should too, with the full path in a tooltip.
-- [ ] **A short thread sits at the top of the pane**, leaving ~800px between the last message and
+- [x] **A short thread sits at the top of the pane**, leaving ~800px between the last message and
       the composer. Thread content should be bottom-aligned.
-- [ ] **`BranchDetail` has no header at all**, so its title floats in the middle of an otherwise
+- [x] **`BranchDetail` has no header at all**, so its title floats in the middle of an otherwise
       empty pane and the header rule that runs unbroken across every other screen just stops at the
       pane divider. Its actions sit at the bottom of the scrolling body rather than in a header.
       Confirms item 4 below and then some.
-- [ ] **`BranchDetail`'s subtitle repeats the repo name twice** — "checkout-service · Refactor
+- [x] **`BranchDetail`'s subtitle repeats the repo name twice** — "checkout-service · Refactor
       Buddy · checkout-service · 88c574d" — because `contactName` already contains it.
-- [ ] **The five "nothing selected" panes have no bottom border on their drag strip**, so the same
+- [x] **The five "nothing selected" panes have no bottom border on their drag strip**, so the same
       rule stops dead at the divider there too. Visible on every launch.
-- [ ] **`SegmentedControl` confirmed**: on the usage dashboard "All" is rendered as wide as
+- [x] **`SegmentedControl` confirmed**: on the usage dashboard "All" is rendered as wide as
       "Summaries", and "All" as wide as "30 days". Every segment takes the longest label's width,
       so the active thumb is routinely two or three times wider than the word inside it.
-- [ ] `NewContactFlow` is in better shape than the brief assumed — it already has a step indicator,
+- [x] `NewContactFlow` is in better shape than the brief assumed — it already has a step indicator,
       scope chips and a footer tray. Its selectable rows are still a fourth hand-rolled row style.
 
 ## Scope
@@ -154,21 +154,51 @@ feature.
 
 ## Acceptance checks
 
-- [ ] Launching with no conversation selected lands on something useful, not an empty pane.
-- [ ] Every list row in the app comes from `ListRow`; no section hand-rolls its own.
-- [ ] All five sections have an empty state that names the next action, verified with an empty
-      database and with a non-matching search.
-- [ ] A throw inside one pane leaves the nav rail and list panel usable.
-- [ ] Every screen re-checked in both themes at a narrow and a wide window.
-- [ ] `npm run lint`, `npm run typecheck`, `npm test` green; new pure logic has tests.
+- [x] Launching with no conversation selected lands on something useful, not an empty pane.
+      `WorkspaceHome` — running turns, recent conversations, a week's spend.
+- [x] Every list row in the app comes from `ListRow`; no section hand-rolls its own. Checkable
+      mechanically now: every row carries `data-testid="list-row"`.
+- [x] All sections have an empty state that names the next action, verified with an empty database
+      and with a non-matching search. Three gaps closed; one reported gap turned out not to exist.
+- [x] A throw inside one pane leaves the nav rail and list panel usable. Verified by making
+      `PersonaList` throw and running the sweep.
+- [x] Every screen re-checked in both themes at a narrow and a wide window — that is what
+      `npm run screens` is.
+- [x] `npm run lint`, `npm run typecheck`, `npm test` green; new pure logic has tests.
+      973 unit tests, 47 E2E.
+
+## Beyond the original scope
+
+Landed here because the sweep or the work surfaced them:
+
+| Fix                    | What was wrong                                                                                                                                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Type scale             | 76 arbitrary `text-[Npx]` values interleaved with `text-xs`/`text-sm`. Five named `@theme` steps; font-size only, no paired line-height, so the 32-file rename stays provably neutral.                                                                                                            |
+| `SegmentedControl`     | Every segment `flex-1`, so all took the longest label's width — "All" as wide as "Summaries". Segments size to content; the thumb is measured off the selected label rather than computed, because the old arithmetic only worked while they were equal.                                          |
+| **NUL bytes**          | `BranchDetail.tsx` joined a React key with a literal `\0`. A file containing one is _binary_ to grep, silently, so it vanishes from every grep-based sweep — which is how the type-scale codemod missed it. `find src -name '*.tsx' -exec file {} + \| grep -v text` finds this class of problem. |
+| Contact management     | `contacts.delete` had existed since Phase 12 and nothing called it; renaming was impossible. `contacts.update` takes `{ id, displayName }` only — every other column is load-bearing.                                                                                                             |
+| Context panel          | Blueprint §5 had no surface. `contacts.context` returns the literal string both adapters receive, resolved in main because the renderer cannot see `contextForRepo`'s filtering, `siblingBranchesFor`'s disk reads, or the headings in `adapters/context.ts`.                                     |
+| Thread header          | Printed the full absolute repo path across the whole header. Repo name now, path on hover.                                                                                                                                                                                                        |
+| Thread alignment       | A short thread sat at the top with ~800px to the composer. `min-h-full justify-end`.                                                                                                                                                                                                              |
+| Dead primitives        | `avatar`, `badge`, `card`, `tabs` — zero importers, deleted.                                                                                                                                                                                                                                      |
+| Pre-existing red suite | Two E2E specs had been failing on `main` since 8ca3dec: migration 0009 made `mcpServerIds` required and their persona drafts were never updated.                                                                                                                                                  |
 
 ## Notes for whoever picks this up
 
-- **Iteration loop.** `npx electron-vite dev` (note: `--rendererOnly` skips _rebuilding_ main and
-  preload, it does not stop Electron launching), then drive `http://localhost:5173` with Playwright.
-  The renderer boots through `auth.getStatus` with no fallback, so stub `window.api` and click the
-  splash's **Try again** — that retry path is how you get in. Stash the stub in `localStorage` so it
-  survives the reloads a failed HMR update forces.
+- **Iteration loop.** `npm run screens` builds the app and photographs every screen into
+  `test-results/screens/` — two profiles, both themes, two widths, ~110 PNGs. Its own Playwright
+  project, so it never joins `npm run test:e2e`. Compare the directory before a change against the
+  same directory after; there are deliberately no golden baselines, because relative timestamps and
+  the live clock would make them permanently red.
+  (The older recipe — `npx electron-vite dev` plus a stubbed `window.api` — still works and is
+  faster for a tight loop, but it drives fake data.)
+- `e2e/screenshots/showcase.ts` seeds the sweep and **never starts a turn**, so it bills nothing.
+  If a section photographs its empty state, seed it there rather than accepting the gap: the pane
+  most in need of review is the one the sweep is not looking at, which is exactly how `BranchDetail`
+  stayed the worst screen in the app for three phases.
+- An empty list still has a button in its body — the empty state's call to action. Clicking it opens
+  a dialog whose backdrop swallows every later click, and the failure surfaces as a timeout several
+  steps away. `selectFirstRow` in the sweep guards against it; this cost time twice.
 - Screenshot before _and_ after every extraction. Items 2 and 4 are meant to be visually neutral,
   and that is only checkable by comparison.
 - `lucide-react` v1 has no brand marks — `Github` comes from `components/github/GithubMark.tsx`.

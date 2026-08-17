@@ -13,6 +13,7 @@ import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
+import { ListRow } from '@/components/common/ListRow'
 import { Github } from '@/components/github/GithubMark'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { useAuthStatus } from '@/hooks/useAuth'
@@ -203,13 +204,6 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
     }
   }
 
-  const rowClass = (selected: boolean): string =>
-    cn(
-      'flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors',
-      'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-      selected ? 'border-primary bg-accent' : 'border-border hover:bg-accent/50'
-    )
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -221,25 +215,26 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
         {step === 'persona' && (
           <div className="flex flex-col gap-1.5">
             {personaTemplates.map((template) => (
-              <button
+              <ListRow
                 key={template.id}
-                type="button"
-                onClick={() => setPersonaId(template.id)}
-                className={rowClass(personaId === template.id)}
+                active={personaId === template.id}
+                onSelect={() => setPersonaId(template.id)}
+                align="center"
+                bordered
+                leading={<AvatarColorSwatch name={template.name} color={template.avatarColor} />}
+                trailing={
+                  personaId === template.id ? <Check className="size-4 shrink-0" /> : undefined
+                }
               >
-                <AvatarColorSwatch name={template.name} color={template.avatarColor} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate text-row font-medium">{template.name}</span>
-                    <BackendBadge backend={template.backend} />
-                  </span>
-                  <span className="mt-1 flex flex-wrap gap-1">
-                    <ScopeChip axis="sandbox" value={template.sandbox} />
-                    <ScopeChip axis="github" value={template.githubScope} />
-                  </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate text-row font-medium">{template.name}</span>
+                  <BackendBadge backend={template.backend} />
                 </span>
-                {personaId === template.id && <Check className="size-4 shrink-0" />}
-              </button>
+                <span className="mt-1 flex flex-wrap gap-1">
+                  <ScopeChip axis="sandbox" value={template.sandbox} />
+                  <ScopeChip axis="github" value={template.githubScope} />
+                </span>
+              </ListRow>
             ))}
           </div>
         )}
@@ -320,24 +315,27 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                   />
                 )}
                 {repos.data?.map((option: RepoOption) => (
-                  <button
+                  <ListRow
                     key={option.id}
-                    type="button"
-                    onClick={() => setRepoId(option.id)}
-                    className={rowClass(repoId === option.id)}
-                  >
-                    <FolderGit2 className="text-muted-foreground size-4 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate font-mono text-xs">
-                      {option.fullName}
-                    </span>
-                    {!option.localPath && (
-                      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-meta">
-                        <CloudDownload className="size-3" />
-                        clone
+                    active={repoId === option.id}
+                    onSelect={() => setRepoId(option.id)}
+                    align="center"
+                    bordered
+                    leading={<FolderGit2 className="text-muted-foreground size-4 shrink-0" />}
+                    trailing={
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {!option.localPath && (
+                          <span className="text-muted-foreground flex items-center gap-1 text-meta">
+                            <CloudDownload className="size-3" />
+                            clone
+                          </span>
+                        )}
+                        {repoId === option.id && <Check className="size-4" />}
                       </span>
-                    )}
-                    {repoId === option.id && <Check className="size-4 shrink-0" />}
-                  </button>
+                    }
+                  >
+                    <span className="block truncate font-mono text-xs">{option.fullName}</span>
+                  </ListRow>
                 ))}
               </div>
             )}
@@ -349,33 +347,32 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             {ISOLATION_OPTIONS.map((option) => {
               const unavailable = option.needsGit && !isGitRepo
               return (
-                <button
+                <ListRow
                   key={option.value}
-                  type="button"
+                  active={chosenIsolation === option.value}
+                  onSelect={() => setIsolation(option.value)}
                   disabled={unavailable}
-                  onClick={() => setIsolation(option.value)}
-                  className={cn(
-                    rowClass(chosenIsolation === option.value),
-                    'items-start disabled:cursor-not-allowed disabled:opacity-50'
-                  )}
+                  bordered
+                  trailing={
+                    chosenIsolation === option.value ? (
+                      <Check className="mt-0.5 size-4 shrink-0" />
+                    ) : undefined
+                  }
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1.5 text-sm font-medium">
-                      {option.label}
-                      {option.value === suggestedIsolation && !unavailable && (
-                        <span className="text-muted-foreground text-meta font-normal">
-                          Recommended
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
-                      {unavailable
-                        ? 'Needs a git repository — this folder isn’t one.'
-                        : option.description}
-                    </p>
-                  </div>
-                  {chosenIsolation === option.value && <Check className="mt-0.5 size-4 shrink-0" />}
-                </button>
+                  <p className="flex items-center gap-1.5 text-sm font-medium">
+                    {option.label}
+                    {option.value === suggestedIsolation && !unavailable && (
+                      <span className="text-muted-foreground text-meta font-normal">
+                        Recommended
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    {unavailable
+                      ? 'Needs a git repository — this folder isn’t one.'
+                      : option.description}
+                  </p>
+                </ListRow>
               )
             })}
           </div>

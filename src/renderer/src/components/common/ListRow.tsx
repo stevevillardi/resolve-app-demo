@@ -19,6 +19,8 @@ interface ListRowProps {
    * no enclosing list to imply they belong together.
    */
   bordered?: boolean
+  /** An option that exists but cannot be picked here, and says why in its body. */
+  disabled?: boolean
   children: React.ReactNode
   className?: string
 }
@@ -33,9 +35,9 @@ interface ListRowProps {
  * versus `items-center` and `px-2` versus `px-2.5`. So the lists felt subtly
  * unlike each other as you moved between sections, for no decided reason.
  *
- * The three props below exist to absorb those six, and are the whole variation
- * between them. A seventh caller wanting an eighth prop is a caller that is not
- * a list row.
+ * The four props below exist to absorb those callers and are the whole
+ * variation between them. A caller wanting a fifth is a caller that is not a
+ * list row.
  */
 export function ListRow({
   active,
@@ -44,6 +46,7 @@ export function ListRow({
   trailing,
   align = 'start',
   bordered = false,
+  disabled = false,
   children,
   className
 }: ListRowProps): React.JSX.Element {
@@ -51,6 +54,7 @@ export function ListRow({
     <button
       type="button"
       onClick={onSelect}
+      disabled={disabled}
       data-active={active}
       // Not for styling — it is how the screenshot sweep selects a row in any
       // section without knowing what that section's rows say, and how
@@ -62,6 +66,7 @@ export function ListRow({
         'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
         align === 'center' ? 'items-center' : 'items-start',
         bordered ? 'border-border border px-2.5 py-2' : 'px-2 py-2',
+        disabled && 'disabled:cursor-not-allowed disabled:opacity-50',
         active
           ? bordered
             ? 'border-primary bg-accent text-accent-foreground'
