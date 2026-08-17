@@ -228,6 +228,9 @@ export function OnboardingFlow(): React.JSX.Element {
                       <DeviceCodeDisplay
                         userCode={codex.state.userCode}
                         verificationUri={codex.state.verificationUri}
+                        {...(codex.state.expiresAt !== undefined
+                          ? { expiresAt: codex.state.expiresAt }
+                          : {})}
                       />
                       <Button
                         variant="ghost"
@@ -292,6 +295,9 @@ export function OnboardingFlow(): React.JSX.Element {
                         userCode={github.state.userCode}
                         verificationUri={github.state.verificationUri}
                         instruction="Enter this code on GitHub:"
+                        {...(github.state.expiresAt !== undefined
+                          ? { expiresAt: github.state.expiresAt }
+                          : {})}
                       />
                       <Button
                         variant="ghost"

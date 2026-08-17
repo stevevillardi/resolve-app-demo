@@ -78,6 +78,7 @@ export function GitHubConnectDialog({
             userCode={flow.state.userCode}
             verificationUri={flow.state.verificationUri}
             instruction="Enter this code on GitHub:"
+            {...(flow.state.expiresAt !== undefined ? { expiresAt: flow.state.expiresAt } : {})}
           />
         )}
 

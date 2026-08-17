@@ -41,8 +41,21 @@ function SkillRowMenu({
           description={
             usedBy.length === 0
               ? 'No persona attaches this skill, so nothing else changes.'
-              : `${usedBy.length === 1 ? 'This persona attaches' : 'These personas attach'} it and will lose those instructions: ${usedBy.map((p) => p.name).join(', ')}.`
+              : `${usedBy.length === 1 ? 'This persona attaches' : 'These personas attach'} it and will silently lose those instructions.`
           }
+          {...(usedBy.length > 0
+            ? {
+                consequence: (
+                  <ul className="flex flex-col gap-0.5">
+                    {usedBy.map((persona) => (
+                      <li key={persona.id} className="truncate">
+                        {persona.name}
+                      </li>
+                    ))}
+                  </ul>
+                )
+              }
+            : {})}
           onConfirm={() =>
             remove(skill.id, () => {
               setConfirmingDelete(false)

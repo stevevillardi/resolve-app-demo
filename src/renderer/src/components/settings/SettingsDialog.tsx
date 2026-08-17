@@ -177,6 +177,9 @@ function SettingsContent(): React.JSX.Element {
                     <DeviceCodeDisplay
                       userCode={codexLogin.state.userCode}
                       verificationUri={codexLogin.state.verificationUri}
+                      {...(codexLogin.state.expiresAt !== undefined
+                        ? { expiresAt: codexLogin.state.expiresAt }
+                        : {})}
                     />
                     <Button
                       variant="ghost"

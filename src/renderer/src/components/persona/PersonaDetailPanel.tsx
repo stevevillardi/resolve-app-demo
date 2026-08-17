@@ -401,6 +401,21 @@ function PersonaForm({
             ? 'This removes the persona and its instructions. Skills it attaches are untouched.'
             : `${boundContacts.length} contact${boundContacts.length === 1 ? ' is' : 's are'} still bound to it, so this will be refused.`
         }
+        {...(boundContacts.length > 0
+          ? {
+              // The doc-16 side-by-side read: the skill dialog names what a
+              // delete touches, so this one names what blocks it.
+              consequence: (
+                <ul className="flex flex-col gap-0.5">
+                  {boundContacts.map((contact) => (
+                    <li key={contact.id} className="truncate">
+                      {contact.displayName}
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          : {})}
         onConfirm={() => remove(persona.id, () => setSelectedId(null))}
       />
     </div>
