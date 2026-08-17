@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Layers, Loader2, Pencil, RefreshCcw, Trash2, UserRoundPen } from 'lucide-react'
+import { Layers, Loader2, Pencil, RefreshCcw, Trash2, UserRoundPen, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ListRow } from '@/components/common/ListRow'
 import { useDeleteContact, useRebindPersona, useRenameContact } from '@/hooks/useConversations'
+import { revealLocalPath } from '@/hooks/useDiffs'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useUiStore } from '@/store/useUiStore'
 import type { Contact, PersonaBackend } from '@/types'
@@ -41,12 +42,15 @@ interface ContactActionItemsProps {
   kind: 'dropdown' | 'context'
   /** The contact the recreate flow prefills from. */
   contactId: string
+  /** Where its session actually works — the worktree when isolated. */
+  workingPath: string
   onOpen: (dialog: ContactDialogKind) => void
 }
 
 export function ContactActionItems({
   kind,
   contactId,
+  workingPath,
   onOpen
 }: ContactActionItemsProps): React.JSX.Element {
   const Item = kind === 'dropdown' ? DropdownMenuItem : ContextMenuItem
@@ -59,6 +63,10 @@ export function ContactActionItems({
       <Item onClick={() => onOpen('context')}>
         <Layers />
         What it works with…
+      </Item>
+      <Item onClick={() => revealLocalPath(workingPath)}>
+        <FolderOpen />
+        Reveal working folder
       </Item>
       <Item onClick={() => onOpen('rename')}>
         <Pencil />
