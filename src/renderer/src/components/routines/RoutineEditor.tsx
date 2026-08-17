@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, Clock, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -38,6 +39,10 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
   const [prompt, setPrompt] = useState(routine.prompt)
   const [enabled, setEnabled] = useState(routine.enabled)
   const [contactId, setContactId] = useState(routine.contactId)
+  // Kept as the typed string so "12." mid-keystroke survives; parsed at save.
+  const [budgetText, setBudgetText] = useState(
+    routine.monthlyBudgetUsd === null ? '' : String(routine.monthlyBudgetUsd)
+  )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const contacts = useContacts().data ?? []
@@ -50,6 +55,13 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
 
   const contact = contacts.find((c) => c.id === contactId)
   const persona = personaTemplates.find((p) => p.id === contact?.personaTemplateId)
+
+  const parsedBudget = ((): number | null => {
+    const trimmed = budgetText.trim()
+    if (trimmed === '') return null
+    const value = Number(trimmed)
+    return Number.isFinite(value) && value > 0 ? value : null
+  })()
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
@@ -92,7 +104,7 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
                   schedule,
                   prompt,
                   enabled,
-                  monthlyBudgetUsd: routine.monthlyBudgetUsd
+                  monthlyBudgetUsd: parsedBudget
                 })
               }
             >
@@ -162,6 +174,25 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
               error={cronError}
               nextRuns={nextRuns}
             />
+          </Field>
+
+          <Field
+            label="Monthly budget"
+            htmlFor="routine-budget"
+            hint="Alerts when this routine's month crosses it — nothing is stopped. Empty means no budget."
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground text-sm">$</span>
+              <Input
+                id="routine-budget"
+                className="w-28 text-right font-mono tabular-nums"
+                inputMode="decimal"
+                placeholder="none"
+                value={budgetText}
+                onChange={(event) => setBudgetText(event.target.value)}
+              />
+              <span className="text-muted-foreground text-sm">/ month</span>
+            </div>
           </Field>
 
           <FieldGridSpan>
