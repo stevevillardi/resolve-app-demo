@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { IpcProcedureName } from '../shared/ipc-contract'
 import { AGENT_EVENT_CHANNEL, type AgentEvent, type AgentStreamMessage } from '../shared/agent'
 import { MENU_ACTION_CHANNEL, type MenuActionId } from '../shared/menu'
+import { NAVIGATE_CHANNEL, type NavigateTarget } from '../shared/navigation'
 
 const IPC_CHANNEL = 'ipc-invoke'
 
@@ -60,6 +61,15 @@ const api = {
     const listener = (_event: IpcRendererEvent, action: MenuActionId): void => callback(action)
     ipcRenderer.on(MENU_ACTION_CHANNEL, listener)
     return () => ipcRenderer.removeListener(MENU_ACTION_CHANNEL, listener)
+  },
+
+  // Notification clicks arrive here as destinations rather than verbs — the
+  // shell maps the target onto the same selection the sidebar sets. Same
+  // IpcRendererEvent-dropping rule as everything above.
+  onNavigate: (callback: (target: NavigateTarget) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, target: NavigateTarget): void => callback(target)
+    ipcRenderer.on(NAVIGATE_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(NAVIGATE_CHANNEL, listener)
   }
 }
 

@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import { NAVIGATE_CHANNEL, type NavigateTarget } from '../shared/navigation'
 
 /**
  * The one answer to "which window?" (Phase 20).
@@ -58,4 +59,20 @@ export function showMainWindow(): void {
 export function isWindowAttended(): boolean {
   const window = getMainWindow()
   return window !== null && window.isVisible() && !window.isMinimized() && window.isFocused()
+}
+
+/**
+ * Focuses the app and lands the renderer on a destination.
+ *
+ * Show first, send second — the same ordering the application menu uses, and
+ * for the same reason: a target that lands in a hidden window looks like a
+ * click that did nothing. If the factory had to create a window, the send
+ * reaches a renderer that has not subscribed yet and is dropped — accepted,
+ * not queued: with tray residency close *hides*, so the normal case is a live
+ * window, and replaying a stale target into a fresh boot would surprise more
+ * than landing on the default screen does.
+ */
+export function navigateTo(target: NavigateTarget): void {
+  showMainWindow()
+  getMainWindow()?.webContents.send(NAVIGATE_CHANNEL, target)
 }
