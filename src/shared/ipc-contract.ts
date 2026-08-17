@@ -384,6 +384,16 @@ export const ipcContract = {
     })
   },
 
+  /** OS notifications on/off. Default ON — absence of the flag means enabled. */
+  'notifications.get': {
+    input: z.void(),
+    output: z.object({ enabled: z.boolean() })
+  },
+  'notifications.set': {
+    input: z.object({ enabled: z.boolean() }),
+    output: z.object({ enabled: z.boolean() })
+  },
+
   /**
    * Wipes the app back to a fresh install and relaunches (Phase 18). Dev
    * tooling: profile, secrets, worktrees and persona branches all go; the

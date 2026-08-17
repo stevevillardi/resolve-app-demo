@@ -24,6 +24,32 @@ export function useChooseWorkspaceRoot(): { choose: () => void; isPending: boole
   return { choose: () => mutation.mutate(), isPending: mutation.isPending }
 }
 
+export const notificationsKey = ['notifications'] as const
+
+export function useNotificationSettings(): {
+  enabled: boolean
+  setEnabled: (enabled: boolean) => void
+  isLoading: boolean
+} {
+  const queryClient = useQueryClient()
+  const query = useQuery({
+    queryKey: notificationsKey,
+    queryFn: () => callProcedure('notifications.get', undefined)
+  })
+  const mutation = useMutation({
+    mutationFn: (enabled: boolean) => callProcedure('notifications.set', { enabled }),
+    onSuccess: (result) => queryClient.setQueryData(notificationsKey, result)
+  })
+
+  return {
+    // Default ON mirrors main's reading of the flag — while loading, the
+    // switch shows the state the app is actually in.
+    enabled: query.data?.enabled ?? true,
+    setEnabled: (enabled) => mutation.mutate(enabled),
+    isLoading: query.isLoading
+  }
+}
+
 export function useAppInfo(): UseQueryResult<IpcOutput<'appInfo.get'>> {
   return useQuery({
     queryKey: ['appInfo'] as const,

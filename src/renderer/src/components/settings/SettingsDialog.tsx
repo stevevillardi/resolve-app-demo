@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  Bell,
   ExternalLink,
   FlaskConical,
   FolderOpen,
@@ -36,9 +37,11 @@ import {
   useSetAnthropicApiKey,
   useSetOpenAiApiKey
 } from '@/hooks/useAuth'
+import { Switch } from '@/components/ui/switch'
 import {
   useAppInfo,
   useChooseWorkspaceRoot,
+  useNotificationSettings,
   useResetApp,
   useWorkspaceRoot
 } from '@/hooks/useSettings'
@@ -93,6 +96,7 @@ function SettingsContent(): React.JSX.Element {
 
   const { data: workspace } = useWorkspaceRoot()
   const { choose, isPending: choosing } = useChooseWorkspaceRoot()
+  const notifications = useNotificationSettings()
   const { data: appInfo } = useAppInfo()
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [confirmingReset, setConfirmingReset] = useState(false)
@@ -276,6 +280,23 @@ function SettingsContent(): React.JSX.Element {
               Changing this affects future clones only; existing contacts keep their repositories
               where they are.
             </p>
+          </div>
+        </section>
+
+        {/* --- Notifications -------------------------------------------- */}
+        <section className="flex flex-col gap-2.5">
+          <SectionLabel>Notifications</SectionLabel>
+          <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border p-4">
+            <Bell className="text-muted-foreground size-5 shrink-0" />
+            <p className="text-muted-foreground min-w-0 flex-1 text-sm text-pretty">
+              A routine finishing, a reply landing while you’re elsewhere, a budget crossing — as
+              system notifications. Clicking one opens the conversation.
+            </p>
+            <Switch
+              checked={notifications.enabled}
+              onCheckedChange={notifications.setEnabled}
+              aria-label="OS notifications"
+            />
           </div>
         </section>
 
