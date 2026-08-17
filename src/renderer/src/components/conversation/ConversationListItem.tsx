@@ -1,6 +1,7 @@
 import { ListRow } from '@/components/common/ListRow'
 import { RunPulse } from '@/components/common/RunIndicator'
 import { formatListTimestamp, repoName } from '@/lib/format'
+import { formatBadge } from '@/lib/unread'
 import { formatCostSummary } from '@/lib/usage'
 import type { UsageSummary } from '@/types'
 
@@ -13,6 +14,8 @@ interface ConversationListItemProps {
   usage?: UsageSummary
   /** A turn is streaming for this row right now. */
   running?: boolean
+  /** Messages since this conversation was last on screen. 0 renders nothing. */
+  unread?: number
   /** Avatar for a contact; a stacked cluster of member avatars for a group. */
   leading: React.ReactNode
   /** Right-click actions for this row — see ListRow's prop of the same name. */
@@ -28,6 +31,7 @@ export function ConversationListItem({
   active,
   usage,
   running = false,
+  unread = 0,
   leading,
   contextMenu,
   onSelect
@@ -43,6 +47,22 @@ export function ConversationListItem({
       onSelect={onSelect}
       leading={leading}
       {...(contextMenu ? { contextMenu } : {})}
+      {...(unread > 0
+        ? {
+            // The one iMessage-blue badge in the app, a deliberate new idiom
+            // (recorded in the phase doc): RunIndicator's doc rejects the
+            // notification-badge look for RUN counts, but unread messages are
+            // precisely what that look was invented for.
+            trailing: (
+              <span
+                aria-label={`${unread} unread`}
+                className="bg-primary text-primary-foreground min-w-5 shrink-0 rounded-full px-1.5 py-0.5 text-center font-mono text-micro tabular-nums"
+              >
+                {formatBadge(unread)}
+              </span>
+            )
+          }
+        : {})}
     >
       <span className="block">
         <span className="flex items-baseline justify-between gap-2">
