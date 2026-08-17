@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { IpcProcedureName } from '../shared/ipc-contract'
 import { AGENT_EVENT_CHANNEL, type AgentEvent, type AgentStreamMessage } from '../shared/agent'
+import { MENU_ACTION_CHANNEL, type MenuActionId } from '../shared/menu'
 
 const IPC_CHANNEL = 'ipc-invoke'
 
@@ -40,7 +41,16 @@ const api = {
   onUsageChanged: (callback: () => void): (() => void) =>
     subscribe((message) => {
       if (message.kind === 'usage-changed') callback()
-    })
+    }),
+
+  // The application menu's app-verbs (new contact, settings, palette) — main
+  // sends the id, the shell maps it onto the same store transitions the
+  // buttons use. Same IpcRendererEvent-dropping rule as subscribe() above.
+  onMenuAction: (callback: (action: MenuActionId) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, action: MenuActionId): void => callback(action)
+    ipcRenderer.on(MENU_ACTION_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(MENU_ACTION_CHANNEL, listener)
+  }
 }
 
 if (process.contextIsolated) {

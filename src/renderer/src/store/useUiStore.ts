@@ -37,7 +37,7 @@ export type UsageScope =
  * `command` joins them because the palette is the same shape of thing: a short
  * decision you finish and dismiss, not a place you work.
  */
-export type ModalDialog = 'newContact' | 'github' | 'command' | null
+export type ModalDialog = 'newContact' | 'github' | 'command' | 'settings' | null
 
 interface UiState {
   section: Section

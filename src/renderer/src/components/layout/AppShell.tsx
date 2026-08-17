@@ -10,6 +10,7 @@ import { CommandPalette } from '@/components/common/CommandPalette'
 import { useThemeSync } from '@/hooks/useThemeSync'
 import { useAuthRecoveryOnFocus, useVerifyGitHub } from '@/hooks/useAuth'
 import { useCommandPalette } from '@/hooks/useCommandPalette'
+import { useMenuActions } from '@/hooks/useMenuActions'
 import { useUiStore } from '@/store/useUiStore'
 
 // 64px so the inset macOS traffic lights (x:14, 3 × 12px buttons) sit fully
@@ -23,6 +24,7 @@ export function AppShell(): React.JSX.Element {
   useVerifyGitHub()
   useAuthRecoveryOnFocus()
   useCommandPalette()
+  useMenuActions()
   // Panel widths persist themselves to localStorage, so the shell reopens the
   // way you left it. react-resizable-panels v4 replaced the old `autoSaveId`
   // prop with this hook.
