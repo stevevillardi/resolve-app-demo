@@ -7,6 +7,7 @@ import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
 import { notifyTurnFinished } from '../notifications'
 import { emitAgentEvent, emitMessagesChanged, emitRunsChanged } from './agent-events'
+import { inactivityTimeoutMs, withInactivityTimeout } from './inactivity'
 import { summarizeTurn } from './compaction'
 import { clearBackendSessionId, getContact, setBackendSessionId } from './contacts'
 import { groupForRepo, insertGroupMessage } from './group-messages'
@@ -454,6 +455,11 @@ async function runTurn(
   // unique per turn.
   const toolRowIds = new Map<string, string>()
   let workStart: Awaited<ReturnType<typeof captureWorkStart>> | null = null
+  // Set by the watchdog before it aborts, and load-bearing: the abort makes
+  // the adapter yield its own SIGTERM-shaped error, and without this flag
+  // that error would overwrite the watchdog's wording — the user would read
+  // "exited with signal SIGTERM" instead of why the turn was stopped.
+  let timedOut = false
 
   try {
     // The first thing the turn does, because it decides where the turn runs.
@@ -467,7 +473,27 @@ async function runTurn(
     workStart = await captureWorkStart(workingPathFor(contact)).catch(() => null)
 
     attempts: while (true) {
-      for await (const event of adapter.run(activeSession, prompt, run.controller.signal)) {
+      // The watchdog measures silence, not duration — see inactivity.ts. It
+      // records why before aborting, so its wording wins the race against the
+      // abort-shaped error the adapter emits in response.
+      const timeoutMs = inactivityTimeoutMs()
+      const guarded = withInactivityTimeout(
+        adapter.run(activeSession, prompt, run.controller.signal),
+        timeoutMs,
+        () => {
+          timedOut = true
+          const minutes = Math.max(1, Math.round(timeoutMs / 60_000))
+          failure = `No activity for ${minutes} minute${minutes === 1 ? '' : 's'} — the turn was stopped.`
+          emitAgentEvent(runId, { type: 'error', kind: 'network', message: failure })
+          run.controller.abort()
+        }
+      )
+      for await (const event of guarded) {
+        // Everything after a watchdog stop is teardown noise: the adapter's
+        // reaction to being aborted. Its error must neither reach the renderer
+        // (it would replace the watchdog's message in the bubble) nor become
+        // the recorded failure.
+        if (timedOut && event.type === 'error') continue
         if (event.type === 'error') {
           // Self-heal: the model/backend changed under this contact (or the
           // vendor expired the thread), so the stored key points at a session
@@ -528,9 +554,13 @@ async function runTurn(
   } catch (error) {
     // Both adapters wrap their streams and guarantee a `done`, so reaching here
     // means something outside that wrapper failed. The thread still has to end
-    // in a terminal state rather than a bubble that spins forever.
-    failure = error instanceof Error ? error.message : String(error)
-    emitAgentEvent(runId, { type: 'error', kind: 'unknown', message: failure })
+    // in a terminal state rather than a bubble that spins forever. A watchdog
+    // stop keeps its own wording — whatever escaped after the abort is the
+    // teardown, not the story.
+    if (!timedOut) {
+      failure = error instanceof Error ? error.message : String(error)
+      emitAgentEvent(runId, { type: 'error', kind: 'unknown', message: failure })
+    }
   } finally {
     // Measured in the teardown so an adapter throw still gets its record; a
     // couple of git reads is what it costs. Never fails the turn.

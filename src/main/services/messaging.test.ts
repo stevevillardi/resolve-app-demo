@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
 import {
   contacts,
@@ -121,6 +121,7 @@ const {
 } = await import('./messaging')
 const { resetRunLocks } = await import('./run-lock')
 const { listGroupMessages } = await import('./group-messages')
+const { INACTIVITY_TIMEOUT_MS, setInactivityTimeoutForTests } = await import('./inactivity')
 
 beforeEach(() => {
   db = createTestDb()
@@ -139,11 +140,16 @@ beforeEach(() => {
 })
 
 describe('sendMessage', () => {
-  it('persists the user message before the turn runs', () => {
+  it('persists the user message before the turn runs', async () => {
     const { userMessage } = sendMessage('contact-a', 'review auth.ts')
 
     expect(userMessage.role).toBe('user')
     expect(listMessages('contact-a')[0].content).toBe('review auth.ts')
+
+    // The claim was asserted above, pre-turn. Draining here is hygiene: an
+    // unsettled turn outlives this test and writes its reply into the next
+    // test's fresh database.
+    await settle()
   })
 
   it('persists the assistant reply from done.finalText', async () => {
@@ -177,12 +183,15 @@ describe('sendMessage', () => {
     expect(db.select().from(usageEvents).all()[0].costUsd).toBeNull()
   })
 
-  it('resolves the persona skills into the session', () => {
+  it('resolves the persona skills into the session', async () => {
     sendMessage('contact-a', 'go')
     expect(harness.created[0].skillNames).toEqual(['Review checklist'])
+    // Hygiene, not a claim: an unsettled turn outlives the test and writes
+    // into the next one's database. Same in the sync tests below.
+    await settle()
   })
 
-  it('starts a turn sealed against the repository', () => {
+  it('starts a turn sealed against the repository', async () => {
     // The default, proven through the real turn loop rather than through
     // capabilitiesFor() alone: an ordinary Contact reaches no MCP server, is
     // offered no repo skill, and is told nothing the repository wrote. Every
@@ -209,10 +218,11 @@ describe('sendMessage', () => {
     expect(session.injectedSkillNames).toEqual([])
     expect(session.repoInstructions).toBeNull()
 
+    await settle()
     rmSync(repo, { recursive: true, force: true })
   })
 
-  it('carries what the persona was granted and the Contact trusts', () => {
+  it('carries what the persona was granted and the Contact trusts', async () => {
     // The join capabilitiesFor() cannot prove on its own: that the turn loop
     // actually consults it, per turn, and puts the result on the spec the
     // adapter reads. Both halves were tested in isolation before Phase 14 and
@@ -246,10 +256,11 @@ describe('sendMessage', () => {
     expect(session.repoSkills).toEqual([])
     expect(session.repoInstructions).toBe('Prefer small commits.')
 
+    await settle()
     rmSync(repo, { recursive: true, force: true })
   })
 
-  it('passes the persona model through, and omits it when null', () => {
+  it('passes the persona model through, and omits it when null', async () => {
     sendMessage('contact-a', 'go')
     expect(harness.created[0].model).toBeUndefined()
 
@@ -259,6 +270,7 @@ describe('sendMessage', () => {
     sendMessage('contact-model', 'go')
 
     expect(harness.created[1].model).toBe('claude-opus-5')
+    await settle()
   })
 
   it('rejects an unknown contact', () => {
@@ -348,7 +360,7 @@ describe('session resumption', () => {
       harness.scriptQueue = [deadResume, defaultScript()]
 
       sendMessage('contact-a', 'go')
-      await settle(30)
+      await settle()
 
       // Attempt 1 resumed the dead key; attempt 2 started clean.
       expect(harness.created.map((c) => c.resumedFrom)).toEqual(['stale-session', null])
@@ -362,7 +374,7 @@ describe('session resumption', () => {
       harness.scriptQueue = [deadResume, defaultScript()]
 
       sendMessage('contact-a', 'go')
-      await settle(30)
+      await settle()
 
       expect(emitted.filter(({ event }) => event.type === 'error')).toHaveLength(0)
     })
@@ -374,7 +386,7 @@ describe('session resumption', () => {
       harness.scriptQueue = [deadResume, deadResume]
 
       sendMessage('contact-a', 'go')
-      await settle(30)
+      await settle()
 
       expect(harness.created).toHaveLength(2)
       // The second failure is real and must reach the renderer.
@@ -388,7 +400,7 @@ describe('session resumption', () => {
       harness.script = deadResume
 
       sendMessage('contact-a', 'go')
-      await settle(30)
+      await settle()
 
       expect(harness.created).toHaveLength(1)
       expect(emitted.filter(({ event }) => event.type === 'error')).toHaveLength(1)
@@ -402,7 +414,7 @@ describe('session resumption', () => {
       ]
 
       sendMessage('contact-a', 'go')
-      await settle(30)
+      await settle()
 
       expect(harness.created).toHaveLength(1)
       expect(db.select().from(contacts).all()[0].backendSessionId).toBe('stale-session')
@@ -413,7 +425,7 @@ describe('session resumption', () => {
       harness.scriptQueue = [deadResume, defaultScript()]
 
       sendMessage('contact-a', 'go')
-      await settle(30)
+      await settle()
 
       expect(db.select().from(usageEvents).all()).toHaveLength(1)
     })
@@ -652,6 +664,59 @@ describe('cancelRun', () => {
   })
 })
 
+describe('the inactivity watchdog', () => {
+  afterEach(() => setInactivityTimeoutForTests(INACTIVITY_TIMEOUT_MS))
+
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+  it('stops a silent turn, and its wording survives the teardown', async () => {
+    setInactivityTimeoutForTests(20)
+    const stall = holdOpen()
+    harness.gate = stall
+
+    sendMessage('contact-a', 'go')
+    await settle()
+    await wait(60)
+
+    // The watchdog recorded why and then aborted.
+    expect(harness.lastSignal?.aborted).toBe(true)
+    const errors = emitted.filter((entry) => entry.event.type === 'error')
+    expect(errors).toHaveLength(1)
+    expect(errors[0].event).toMatchObject({
+      kind: 'network',
+      message: expect.stringContaining('No activity')
+    })
+
+    // The fake adapter ignores the abort (the real ones do not), so opening
+    // the gate stands in for the SDK teardown. What matters is what the
+    // teardown must NOT do: emit a second error or overwrite the wording.
+    stall.open()
+    harness.gate = null
+    await settle()
+
+    expect(listActiveRuns()).toEqual([])
+    expect(emitted.filter((entry) => entry.event.type === 'error')).toHaveLength(1)
+    expect(turnNotified[0].error).toMatch(/No activity/)
+  })
+
+  // Tested from the claim, not the flag: a user Stop travels the same abort
+  // path, and the bubble must say "stopped by you", never "went silent".
+  it('gives a user stop its own story, not the watchdog wording', async () => {
+    const stall = holdOpen()
+    harness.gate = stall
+
+    const { runId } = sendMessage('contact-a', 'go')
+    await settle()
+    cancelRun(runId)
+    stall.open()
+    harness.gate = null
+    await settle()
+
+    expect(emitted.some((entry) => entry.event.type === 'error')).toBe(false)
+    expect(turnNotified[0].error).toBeNull()
+  })
+})
+
 describe('retryTurn', () => {
   it('re-runs the tail user message without writing a second row', async () => {
     harness.throwOnRun = new Error('boom')
@@ -853,7 +918,7 @@ describe('mentionInGroup', () => {
     db.insert(groups).values({ id: GROUP, repoPath: REPO }).run()
   }
 
-  it('writes the mention to the group with no author', () => {
+  it('writes the mention to the group with no author', async () => {
     // A user_mention comes from the user, not a persona — it is the one group
     // message type with no contactId.
     seedGroup()
@@ -861,6 +926,9 @@ describe('mentionInGroup', () => {
 
     expect(groupMessage).toMatchObject({ type: 'user_mention', content: '@Reviewer take a look' })
     expect(groupMessage.contactId).toBeUndefined()
+    // Hygiene: an unsettled turn outlives the test and writes its agent_reply
+    // into the next test's database, where this group does not exist.
+    await settle()
   })
 
   it('routes to the contact real session, streaming on the same runId', async () => {
@@ -1103,7 +1171,7 @@ describe('tool-call persistence', () => {
   it('records each call by name and outcome, stamped with the reply', async () => {
     harness.script = TOOLED
     sendMessage('contact-a', 'go')
-    await settle(30)
+    await settle()
 
     const rows = db.select().from(toolCalls).all()
     expect(rows.map((row) => [row.name, row.status])).toEqual([
@@ -1133,7 +1201,7 @@ describe('tool-call persistence', () => {
       { type: 'done', finalText: 'Checked.', usage: USAGE }
     ]
     sendMessage('contact-a', 'go')
-    await settle(30)
+    await settle()
 
     const [row] = db.select().from(toolCalls).all()
     // Bounded with the visible marker, never raw.
@@ -1151,7 +1219,7 @@ describe('tool-call persistence', () => {
       { type: 'done', finalText: '', usage: null }
     ]
     sendMessage('contact-a', 'go')
-    await settle(30)
+    await settle()
 
     const [row] = db.select().from(toolCalls).all()
     expect(row.status).toBe('running')
@@ -1161,7 +1229,7 @@ describe('tool-call persistence', () => {
   it('dies with its contact', async () => {
     harness.script = TOOLED
     sendMessage('contact-a', 'go')
-    await settle(30)
+    await settle()
     expect(db.select().from(toolCalls).all().length).toBeGreaterThan(0)
 
     db.delete(contacts).run()
@@ -1212,7 +1280,7 @@ describe('work records (Phase 19)', () => {
   it('stamps no record on a turn that changed nothing', async () => {
     harness.script = defaultScript()
     sendMessage('contact-a', 'go')
-    await settle(30)
+    await settle()
 
     const reply = listMessages('contact-a').find((message) => message.role === 'assistant')
     expect(reply).toBeDefined()
