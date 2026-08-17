@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Trash2, Users2 } from 'lucide-react'
+import { Check, FolderGit2, Trash2, Users2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,6 +15,7 @@ import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ClaudeMark, CodexMark } from '@/components/brand/BrandMarks'
 import { CheckRow } from '@/components/common/CheckRow'
+import { ListRow } from '@/components/common/ListRow'
 import { FieldGrid, FieldGridSpan } from '@/components/common/FieldGrid'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
@@ -24,6 +25,7 @@ import { PaneHeader } from '@/components/common/PaneHeader'
 import { PaneBody } from '@/components/common/PaneBody'
 import { Field } from '@/components/common/Field'
 import { Section } from '@/components/common/Section'
+import { repoName } from '@/lib/format'
 import { useContacts } from '@/hooks/useConversations'
 import { useDeletePersona, usePersonas, useUpdatePersona } from '@/hooks/usePersonas'
 import { useModels } from '@/hooks/useModels'
@@ -87,6 +89,8 @@ function PersonaForm({
   const [skillIds, setSkillIds] = useState<string[]>(persona.skillIds)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const setSelectedId = useUiStore((state) => state.setSelectedPersonaId)
+  const setSection = useUiStore((state) => state.setSection)
+  const setSelectedConversation = useUiStore((state) => state.setSelectedConversation)
 
   const { save, isPending: saving, error: saveError } = useUpdatePersona()
   const { remove, isPending: deleting, error: deleteError, reset } = useDeletePersona()
@@ -283,19 +287,37 @@ function PersonaForm({
               Not bound to a repo yet. Create a contact to put this persona to work.
             </p>
           ) : (
-            <ul className="flex flex-col gap-1">
+            /*
+              Was a full absolute repo path against a raw `backendSessionId` —
+              a 36-character opaque id that answers no question anyone has, next
+              to 80 characters of path saying what its last segment says. Now:
+              where it works, how it is isolated, and a way to actually go
+              there, which is what you wanted when you read the list.
+            */
+            <FieldGrid columns={3} className="gap-1.5">
               {boundContacts.map((contact) => (
-                <li
+                <ListRow
                   key={contact.id}
-                  className="border-border flex items-center justify-between gap-2 rounded-lg border px-3 py-2"
+                  active={false}
+                  align="center"
+                  bordered
+                  leading={<FolderGit2 className="text-muted-foreground size-4 shrink-0" />}
+                  onSelect={() => {
+                    setSelectedConversation({ kind: 'contact', id: contact.id })
+                    setSection('chats')
+                  }}
+                  trailing={
+                    <span className="text-muted-foreground shrink-0 text-meta">
+                      {contact.isolation === 'worktree' ? 'own checkout' : 'your checkout'}
+                    </span>
+                  }
                 >
-                  <span className="truncate font-mono text-xs">{contact.repoPath}</span>
-                  <span className="text-muted-foreground shrink-0 font-mono text-meta">
-                    {contact.backendSessionId ?? 'no session yet'}
+                  <span className="block truncate text-row" title={contact.repoPath}>
+                    {repoName(contact.repoPath)}
                   </span>
-                </li>
+                </ListRow>
               ))}
-            </ul>
+            </FieldGrid>
           )}
         </Section>
       </PaneBody>

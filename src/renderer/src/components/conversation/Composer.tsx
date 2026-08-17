@@ -75,7 +75,11 @@ export function Composer({
   }
 
   return (
-    <div className="shrink-0 px-4 pt-2 pb-4">
+    // The same measure as the message column above it. Both thread views centre
+    // their messages at `max-w-4xl` while this was full-bleed, so on a wide
+    // window the field you reply in was visibly wider than everything you were
+    // replying to — two independent decisions about width inside one pane.
+    <div className="mx-auto w-full max-w-4xl shrink-0 px-4 pt-2 pb-4">
       <div
         className={cn(
           'bg-card border-border flex items-end gap-1.5 rounded-xl border p-1.5 transition-shadow',
