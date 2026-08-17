@@ -19,8 +19,9 @@ import { streamText } from '@/lib/stream'
 import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useAgentStreams, useGroupMessages, useMentionInGroup } from '@/hooks/useGroupMessages'
-import { useCancelRun } from '@/hooks/useMessages'
+import { useActiveRuns, useCancelRun, useMessagePreviews, useRetryTurn } from '@/hooks/useMessages'
 import { useMarkRead } from '@/hooks/useUnread'
+import { groupRetryTarget } from '@/lib/turn-tail'
 import { firstUnreadIndex } from '@/lib/unread'
 import { useRunStore } from '@/store/useRunStore'
 import { draftKey, useDraftStore } from '@/store/useDraftStore'
@@ -147,6 +148,9 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
 
   const runsByContact = useRunStore((state) => state.byContact)
   const { mention, error: mentionError, reset } = useMentionInGroup(groupId)
+  const { retry, error: retryError, reset: resetRetry } = useRetryTurn()
+  const { data: previews = [] } = useMessagePreviews()
+  const { data: activeRuns = [] } = useActiveRuns()
 
   // A branch request is the one row here that asks the user for something, and
   // the Branches panel is where the answer lives — so the button navigates
@@ -173,6 +177,18 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
 
   const contentRef = useRef<HTMLDivElement>(null)
   const streamed = live?.turn ? streamText(live.turn.stream) : ''
+
+  // Which member an "interrupted, retry?" notice should re-run. A
+  // user_mention row records neither its target nor its @token, so the
+  // target is recovered from the durable side effect the mention left: the
+  // member whose own thread holds the unanswered user row (lib/turn-tail.ts).
+  // Members with a run in the store OR in main's active set are excluded —
+  // the store covers the post-send window, the query covers a renderer
+  // reload while main is still mid-turn.
+  const liveIds = memberIds.filter(
+    (id) => runsByContact[id] || activeRuns.some((run) => run.contactId === id)
+  )
+  const retryTarget = groupRetryTarget(thread, previews, memberIds, liveIds)
 
   // Same boundary-at-open capture and read-on-open/arrival contract as
   // ThreadView — see the comments there.
@@ -311,6 +327,25 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               senderName={personaFor(live.contactId)?.name}
               senderColor={personaFor(live.contactId)?.avatarColor}
               senderSeed={personaFor(live.contactId)?.id}
+              onRetry={() => {
+                resetRetry()
+                retry(live.contactId, groupId)
+              }}
+            />
+          )}
+
+          {/* The durable version, for a mention whose failure did not survive
+              a reload — same rule as ThreadView's interrupted notice. */}
+          {retryTarget && (
+            <MessageBubble
+              role="assistant"
+              content=""
+              status="error"
+              error={{ kind: 'unknown', message: 'This turn was interrupted before it finished.' }}
+              onRetry={() => {
+                resetRetry()
+                retry(retryTarget, groupId)
+              }}
             />
           )}
         </div>
@@ -329,7 +364,9 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
         disabled={!parsed}
         hint={<span>Mention a persona with @ to route this to its own session.</span>}
         notice={
-          mentionError ?? (draft.trim() && !parsed ? 'Start with @ to choose who answers.' : null)
+          mentionError ??
+          retryError ??
+          (draft.trim() && !parsed ? 'Start with @ to choose who answers.' : null)
         }
         leadingAction={
           <MentionPicker

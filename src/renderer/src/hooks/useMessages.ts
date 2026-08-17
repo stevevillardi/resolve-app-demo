@@ -143,6 +143,39 @@ export function useSendMessage(contactId: string): {
   }
 }
 
+/**
+ * Re-runs an unanswered tail message via messages.retry.
+ *
+ * Takes the contact per call rather than per hook because the group thread
+ * computes its retry target at render time — whichever member's thread holds
+ * the unanswered row (lib/turn-tail.ts) — and a hook keyed to one contact
+ * could not follow that.
+ */
+export function useRetryTurn(): {
+  retry: (contactId: string, groupId?: string) => void
+  error: string | null
+  reset: () => void
+} {
+  const queryClient = useQueryClient()
+  const begin = useRunStore((state) => state.begin)
+
+  const mutation = useMutation({
+    mutationFn: ({ contactId, groupId }: { contactId: string; groupId?: string }) =>
+      callProcedure('messages.retry', { contactId, ...(groupId ? { groupId } : {}) }),
+    onSuccess: ({ runId }, { contactId }) => {
+      begin(contactId, runId)
+      void queryClient.invalidateQueries({ queryKey: messagesKey(contactId) })
+    }
+  })
+
+  return {
+    retry: (contactId, groupId) => mutation.mutate({ contactId, ...(groupId ? { groupId } : {}) }),
+    // A refused retry carries the same lock wording as a refused send.
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null,
+    reset: () => mutation.reset()
+  }
+}
+
 export function useCancelRun(): { cancel: (runId: string) => void } {
   const mutation = useMutation({
     mutationFn: (runId: string) => callProcedure('messages.cancel', { runId })
