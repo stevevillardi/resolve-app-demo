@@ -133,6 +133,51 @@ export function upcomingRuns(
     .slice(0, limit)
 }
 
+export interface MissedRun {
+  routineId: string
+  prompt: string
+  contactName: string | null
+  count: number
+  lastMissedAt: number
+}
+
+/**
+ * Routines with scheduled fires that never ran, most recently missed first
+ * (Phase 20, review §C2).
+ *
+ * Only routines currently carrying a miss appear — the counter is cleared by
+ * any attempt, so this is "what is outstanding", not a history. A routine
+ * whose contact is gone keeps its row with a null name rather than being
+ * dropped: deleting the contact cascades the routine away entirely, so this
+ * combination means something is wrong, and hiding it would be the wrong way
+ * to say so.
+ */
+export function missedRuns(
+  routines: {
+    id: string
+    contactId: string
+    prompt: string
+    missedRunCount: number
+    lastMissedAt: number | null
+  }[],
+  contacts: Contact[],
+  limit: number
+): MissedRun[] {
+  const contactById = new Map(contacts.map((contact) => [contact.id, contact]))
+
+  return routines
+    .filter((routine) => routine.missedRunCount > 0 && routine.lastMissedAt !== null)
+    .sort((a, b) => (b.lastMissedAt ?? 0) - (a.lastMissedAt ?? 0))
+    .slice(0, limit)
+    .map((routine) => ({
+      routineId: routine.id,
+      prompt: routine.prompt,
+      contactName: contactById.get(routine.contactId)?.displayName ?? null,
+      count: routine.missedRunCount,
+      lastMissedAt: routine.lastMissedAt as number
+    }))
+}
+
 /**
  * Absolute and local, the tray's rule for the same data (tray-menu.ts): a
  * static snapshot must not say "in 12 minutes", because that starts lying the

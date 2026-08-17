@@ -197,6 +197,25 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
           ) : (
             <p className="text-muted-foreground text-xs">Hasn&apos;t run yet.</p>
           )}
+          {/* The silence review §C2 ends: a laptop asleep at 9:00 skips the
+              fire outright (a recorded Phase 8 decision), and until now the
+              only trace was a console.warn. Run now — the button above — is
+              the catch-up, and clears this. */}
+          {routine.missedRunCount > 0 && (
+            <div className="border-scope-elevated/40 bg-scope-elevated-bg/30 rounded-lg border p-3">
+              <p className="text-scope-elevated text-meta font-medium">
+                Missed{' '}
+                {routine.missedRunCount === 1
+                  ? '1 scheduled run'
+                  : `${routine.missedRunCount} scheduled runs`}
+                {routine.lastMissedAt ? `, last ${formatRelative(routine.lastMissedAt)}` : ''}
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs text-pretty">
+                Schedules don&apos;t fire while the app is closed or the machine sleeps, and a
+                missed fire is never run late. Run now catches up.
+              </p>
+            </div>
+          )}
         </Section>
       </PaneBody>
 

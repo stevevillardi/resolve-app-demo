@@ -22,13 +22,14 @@ import { useBranches } from '@/hooks/useBranches'
 import { useContacts } from '@/hooks/useConversations'
 import { useActiveRuns, useCancelRun, useMessagePreviews } from '@/hooks/useMessages'
 import { usePersonas } from '@/hooks/usePersonas'
-import { useNextRuns } from '@/hooks/useRoutines'
+import { useNextRuns, useRoutines } from '@/hooks/useRoutines'
 import { useUsageEvents } from '@/hooks/useUsage'
 import {
   authBannerFor,
   dailySpend,
   formatElapsed,
   formatUpcoming,
+  missedRuns,
   recentActivity,
   spendWindow,
   upcomingRuns
@@ -83,6 +84,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   // not pay for a list it will not render.
   const { data: branches = [] } = useBranches()
   const { data: nextRunRows = [] } = useNextRuns()
+  const { data: routines = [] } = useRoutines()
   const { data: authStatus } = useAuthStatus()
   const { refresh: refreshAuth, isPending: refreshingAuth } = useRefreshAuth()
   const { cancel } = useCancelRun()
@@ -101,6 +103,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   const spend = spendWindow(events, now, SPEND_DAYS)
   const spendByDay = dailySpend(events, now, SPEND_DAYS)
   const upcoming = variant === 'home' ? upcomingRuns(nextRunRows, UPCOMING_LIMIT) : []
+  const missed = variant === 'home' ? missedRuns(routines, contacts, UPCOMING_LIMIT) : []
   const banner = variant === 'home' ? authBannerFor(authStatus) : null
   const repoCount = new Set(contacts.map((contact) => contact.repoPath)).size
   // Only the ones with something in them, and not yet landed. A merged branch
@@ -126,7 +129,11 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
     )
   }
 
-  const nothingToShow = runs.length === 0 && recent.length === 0 && spend.turns === 0
+  // Missed fires keep the summary on screen even when the week was otherwise
+  // quiet — a month of silent 9:00 misses on an unused install is exactly the
+  // case where the empty state would swallow the one thing worth saying.
+  const nothingToShow =
+    runs.length === 0 && recent.length === 0 && spend.turns === 0 && missed.length === 0
   if (nothingToShow) {
     return variant === 'chats' ? (
       <EmptyPane
@@ -292,6 +299,46 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
                       in BranchDetail's subtitle. Only added when it is missing. */}
                   <span className="text-muted-foreground block truncate text-xs">
                     {branch.contactName ?? `No contact · ${repoName(branch.repoPath)}`}
+                  </span>
+                </ListRow>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/*
+          Fires that silently never happened (review §C2). Above Scheduled
+          because outstanding beats upcoming, and in the warning register
+          rather than the destructive one — nothing failed, something didn't
+          run. Clicking lands in the editor, where Run now is the catch-up.
+        */}
+        {variant === 'home' && missed.length > 0 && (
+          <Section
+            title={missed.length === 1 ? '1 routine missed its schedule' : 'Missed schedules'}
+            description="Fires skipped while the app was closed or the machine slept. Run now catches up."
+          >
+            <div className="grid gap-1.5 @4xl/pane:grid-cols-3">
+              {missed.map((run) => (
+                <ListRow
+                  key={run.routineId}
+                  active={false}
+                  align="center"
+                  bordered
+                  leading={<CalendarClock className="text-scope-elevated size-4 shrink-0" />}
+                  onSelect={() => {
+                    setSelectedRoutineId(run.routineId)
+                    setSection('routines')
+                  }}
+                  trailing={
+                    <span className="text-scope-elevated shrink-0 font-mono text-micro tabular-nums">
+                      ×{run.count}
+                    </span>
+                  }
+                >
+                  <span className="block truncate text-row">{run.prompt}</span>
+                  <span className="text-muted-foreground block truncate text-xs">
+                    {run.contactName ? `${run.contactName} · ` : ''}
+                    last missed {formatListTimestamp(run.lastMissedAt, now)}
                   </span>
                 </ListRow>
               ))}
