@@ -173,9 +173,24 @@ export function ListPanel(): React.JSX.Element {
 
   return (
     <div className="bg-card flex h-full min-h-0 flex-col">
+      {/* The window's title strip, deliberately empty.
+
+          The macOS traffic lights are inset over the window's first 71px, and
+          the nav rail is only 64px wide — so this pane's left padding lands 8px
+          from the green button. A section title there was legible but crowded,
+          and the only ways to buy it room were to widen the rail or to indent
+          the title away from the rows it heads. Both are worse than giving the
+          strip up: with the rail's divider stopped above (NavRail.tsx) the
+          lights now sit in an unbroken surface, and the title moved down to
+          where it can be a heading rather than a label wedged beside chrome. */}
+      <div className="border-border drag-region h-12 shrink-0 border-b" />
+
       <div className="border-border drag-region shrink-0 border-b">
-        <div className="flex h-12 items-center justify-between gap-2 pr-2 pl-4">
-          <h2 className="truncate text-sm font-semibold tracking-tight">{config.title}</h2>
+        {/* The actions stay with the title rather than in the strip above: a "+"
+            beside "Personas" says what it adds; a "+" floating in the title bar
+            does not. */}
+        <div className="flex items-center justify-between gap-2 pt-2.5 pr-2 pb-1.5 pl-4">
+          <h2 className="truncate text-base font-semibold tracking-tight">{config.title}</h2>
           <span className="flex items-center">
             {/* The catalog's durable re-entry point: onboarding's chooser is
               one-shot, and both of these sections are made of what it seeds. */}

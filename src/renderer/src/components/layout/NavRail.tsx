@@ -22,11 +22,35 @@ export function NavRail(): React.JSX.Element {
   const { data: runs = [] } = useActiveRuns()
 
   return (
-    <Sidebar collapsible="icon" className="border-sidebar-border border-r">
-      {/* The macOS traffic lights are inset over this strip (see
-          titleBarStyle: 'hiddenInset' in src/main/index.ts), so it holds no
-          content of its own and drags the window instead. */}
-      <SidebarHeader className="drag-region h-12 justify-center p-0" />
+    <Sidebar
+      collapsible="icon"
+      /*
+       * The rail's divider starts *below* the title strip, and the strip's own
+       * hairline runs the full width of the window instead.
+       *
+       * The macOS traffic lights are inset over the window's first 71px — three
+       * 13px buttons on a 22px pitch from x:13 — and this rail is 64px wide when
+       * collapsed, so a full-height right border draws a line straight through
+       * the green button. Widening the rail to clear them would cost 16px of
+       * every screen to buy nothing; moving the lights left far enough (x:3)
+       * would jam them against the window edge.
+       *
+       * Nothing has to take the divider's place up there, because --sidebar and
+       * --card are the same colour in both themes: with no line, the strip
+       * simply reads as one continuous surface, which is what a title bar is.
+       *
+       * The border is kept but made transparent rather than removed, so the 1px
+       * it reserves in the layout stays put and the hairline can sit exactly
+       * where it used to.
+       */
+      className="border-transparent after:absolute after:-right-px after:top-12 after:bottom-0 after:w-px after:bg-sidebar-border after:content-['']"
+    >
+      {/* Holds no content: the traffic lights are inset over it. Its bottom
+          border is the left end of the one hairline that crosses the whole
+          window under the title strip — `border-border`, not
+          `border-sidebar-border`, so it matches the list panel's half of that
+          same line exactly rather than nearly. */}
+      <SidebarHeader className="drag-region border-border h-12 justify-center border-b p-0" />
 
       <SidebarContent className="px-2">
         <SidebarMenu className="gap-1">
