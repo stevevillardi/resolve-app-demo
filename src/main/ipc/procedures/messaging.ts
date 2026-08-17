@@ -8,6 +8,7 @@ import {
   listToolCalls,
   mentionInGroup,
   messagePreviews,
+  retryTurn,
   sendMessage
 } from '../../services/messaging'
 import {
@@ -23,6 +24,7 @@ registerProcedure('messages.workDiff', ({ contactId, messageId }) => workDiff(co
 registerProcedure('messages.previews', () => messagePreviews())
 registerProcedure('messages.send', ({ contactId, content }) => sendMessage(contactId, content))
 registerProcedure('messages.cancel', ({ runId }) => ({ cancelled: cancelRun(runId) }))
+registerProcedure('messages.retry', ({ contactId, groupId }) => retryTurn(contactId, groupId))
 
 registerProcedure('groupMessages.list', ({ groupId }) => listGroupMessages(groupId))
 registerProcedure('groupMessages.previews', () => groupMessagePreviews())

@@ -901,6 +901,17 @@ export const ipcContract = {
     input: z.object({ runId: z.string() }),
     output: z.object({ cancelled: z.boolean() })
   },
+  /**
+   * Re-runs the thread's last user message without writing a second row — the
+   * failed turn already persisted it. Throws 'Nothing to retry.' when the tail
+   * is an assistant reply, and rejects on a lock refusal exactly like
+   * messages.send. `groupId` routes the reply to that group (a retry clicked
+   * in the group thread); absent, the reply stays in the 1:1 thread.
+   */
+  'messages.retry': {
+    input: z.object({ contactId: z.string(), groupId: z.string().optional() }),
+    output: z.object({ runId: z.string() })
+  },
 
   /**
    * Everything running right now, across every repo. The renderer needs the

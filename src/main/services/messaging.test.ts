@@ -115,6 +115,7 @@ const {
   listMessages,
   mentionInGroup,
   messagePreviews,
+  retryTurn,
   runRoutineTurn,
   sendMessage
 } = await import('./messaging')
@@ -648,6 +649,72 @@ describe('cancelRun', () => {
 
     const thread = listMessages('contact-a')
     expect(thread[1].content).toBe('Half a rev')
+  })
+})
+
+describe('retryTurn', () => {
+  it('re-runs the tail user message without writing a second row', async () => {
+    harness.throwOnRun = new Error('boom')
+    sendMessage('contact-a', 'review auth.ts')
+    await settle()
+    expect(listMessages('contact-a').map((message) => message.role)).toEqual(['user'])
+
+    harness.throwOnRun = null
+    retryTurn('contact-a')
+    await settle()
+
+    const thread = listMessages('contact-a')
+    expect(thread.map((message) => message.role)).toEqual(['user', 'assistant'])
+    expect(thread[0].content).toBe('review auth.ts')
+    expect(thread[1].content).toBe('Looks good.')
+  })
+
+  it('writes an agent_reply but no second user_mention on a group retry', async () => {
+    db.insert(groups).values({ id: 'group-r', repoPath: REPO }).run()
+
+    harness.throwOnRun = new Error('boom')
+    mentionInGroup('group-r', 'contact-a', 'take a look')
+    await settle()
+
+    harness.throwOnRun = null
+    retryTurn('contact-a', 'group-r')
+    await settle()
+
+    // One mention from the original send, one reply from the retry. A second
+    // user_mention would show the question twice in the group thread.
+    const rows = listGroupMessages('group-r')
+    expect(rows.map((row) => row.type)).toEqual(['user_mention', 'agent_reply'])
+    expect(rows[1].content).toBe('Looks good.')
+  })
+
+  // Same contract as a refused send: the lock is taken before anything else
+  // happens, so a refused retry leaves the thread exactly as it found it.
+  it('refuses while another writer holds the path, writing nothing', async () => {
+    seedPersona(db, 'persona-write', 'workspace_write')
+    seedContact(db, 'contact-w1', 'persona-write')
+    seedContact(db, 'contact-w2', 'persona-write')
+
+    harness.throwOnRun = new Error('boom')
+    sendMessage('contact-w2', 'stuck')
+    await settle()
+
+    harness.throwOnRun = null
+    harness.gate = holdOpen()
+    sendMessage('contact-w1', 'go')
+
+    expect(() => retryTurn('contact-w2')).toThrow(/already working/)
+    expect(listMessages('contact-w2').map((message) => message.role)).toEqual(['user'])
+  })
+
+  it('throws when the tail is an answered turn', async () => {
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    expect(() => retryTurn('contact-a')).toThrow('Nothing to retry.')
+  })
+
+  it('throws on an empty thread', () => {
+    expect(() => retryTurn('contact-a')).toThrow('Nothing to retry.')
   })
 })
 

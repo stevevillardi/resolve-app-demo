@@ -241,6 +241,44 @@ export function runRoutineTurn(routineId: string, contactId: string, prompt: str
   return { runId, completed }
 }
 
+/**
+ * Re-runs the thread's last user message as a fresh turn (review §B1/§B6).
+ *
+ * The message is *reused*, not re-sent: it was persisted before the failed
+ * turn ran (the lock-then-persist ordering above), so going through
+ * sendMessage again would write a duplicate row into history, previews,
+ * unread counts, and compaction input. Same for a mention's `user_mention`
+ * group row — it exists too, so a group retry skips that insert as well.
+ *
+ * `groupId` decides where the reply lands, because nothing durable records
+ * what started the original turn — Run.origin dies with the process. The
+ * surface the user retries from is the best available truth: retried from
+ * the group thread, the reply posts there; retried from the 1:1 thread (or
+ * after a crash), it stays a plain message. Recorded as a known limitation
+ * in docs/plan/20+-era decisions rather than solved with a runs table.
+ */
+export function retryTurn(contactId: string, groupId?: string): { runId: string } {
+  const last = initDb()
+    .select()
+    .from(messages)
+    .where(eq(messages.contactId, contactId))
+    // Same rowid tiebreak as messagePreviews: a question and its reply can
+    // share a millisecond, and retrying the question because it sorted after
+    // its own answer would double the reply.
+    .orderBy(desc(messages.timestamp), desc(sql`rowid`))
+    .limit(1)
+    .all()
+    .map(toMessage)[0]
+
+  // Only an unanswered tail is retryable. An assistant tail means the turn
+  // finished; retrying it would re-run a question that already has its answer.
+  if (!last || last.role !== 'user') throw new Error('Nothing to retry.')
+
+  const origin: TurnOrigin = groupId ? { kind: 'mention', groupId } : { kind: 'message' }
+  const { runId } = startTurn(contactId, last.content, origin, { userMessage: last })
+  return { runId }
+}
+
 interface StartedTurn {
   runId: string
   userMessage: PersistedMessage
@@ -269,7 +307,15 @@ interface StartedTurn {
  * load-bearing in two directions — the lock before any write, and the release
  * on every failure path — and a second copy would drift.
  */
-function startTurn(contactId: string, content: string, origin: TurnOrigin): StartedTurn {
+function startTurn(
+  contactId: string,
+  content: string,
+  origin: TurnOrigin,
+  // A retry reuses the already-persisted user message instead of writing a
+  // second one — see retryTurn for why the row (and a mention's group row)
+  // must not be duplicated.
+  reuse?: { userMessage: PersistedMessage }
+): StartedTurn {
   const contact = getContact(contactId)
   if (!contact) throw new Error(`No such contact: ${contactId}`)
 
@@ -309,7 +355,7 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
     // Written for a routine too: blueprint §7 wants opening the Contact to show
     // what it did while asleep, and an assistant bubble with no question above
     // it reads as a glitch rather than as unattended work.
-    const userMessage = insertMessage(contactId, 'user', content)
+    const userMessage = reuse?.userMessage ?? insertMessage(contactId, 'user', content)
 
     // A mention's group is chosen, a routine's is derived from its repo. A
     // routine whose repo has no Group yet degrades to no Group row rather than
@@ -324,8 +370,9 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
     // Only a mention has an inbound row. A routine's prompt was never typed
     // into the group thread, and posting one would invent a user utterance.
     // No contactId: a mention comes from the user, not from a persona.
+    // A retried mention skips it too — the original send already wrote one.
     const groupMessage =
-      origin.kind === 'mention'
+      origin.kind === 'mention' && !reuse
         ? insertGroupMessage({ groupId: origin.groupId, type: 'user_mention', content })
         : null
 
