@@ -1,6 +1,6 @@
 import { Notification } from 'electron'
-import { navigateTo } from './main-window'
-import { previewLine, routineNotification } from './notification-text'
+import { isWindowAttended, navigateTo } from './main-window'
+import { previewLine, routineNotification, turnNotification } from './notification-text'
 import { getAppState } from './services/app-state'
 import { getContact } from './services/contacts'
 import { groupForRepo } from './services/group-messages'
@@ -77,4 +77,34 @@ export function notifyRoutineOutcome(
     routineNotification(previewLine(routine.prompt, ROUTINE_NAME_MAX), result),
     target
   )
+}
+
+/**
+ * A 1:1 or mention turn that finished — but only while nobody is looking.
+ *
+ * The attention check lives here rather than in messaging.ts so the turn loop
+ * keeps importing no electron module directly, and so its tests keep mocking
+ * exactly one module for everything notification-shaped. A turn watched to
+ * completion stays silent: the reply arriving on screen *is* the notification.
+ *
+ * Routine turns never pass through here — the scheduler notifies those with
+ * the run's summary and PR context this function cannot see.
+ */
+export function notifyTurnFinished(input: {
+  contactId: string
+  origin: { kind: 'message' } | { kind: 'mention'; groupId: string }
+  finalText: string
+  error: string | null
+}): void {
+  if (isWindowAttended()) return
+
+  const contact = getContact(input.contactId)
+  if (!contact) return
+
+  const target: NavigateTarget =
+    input.origin.kind === 'mention'
+      ? { kind: 'group', groupId: input.origin.groupId }
+      : { kind: 'contact', contactId: input.contactId }
+
+  sendNotification(turnNotification(contact.displayName, input.finalText, input.error), target)
 }

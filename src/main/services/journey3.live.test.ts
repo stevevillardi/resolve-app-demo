@@ -52,6 +52,7 @@ vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
 vi.mock('./github-auth', () => ({ getGitHubToken: () => TOKEN }))
 vi.mock('./agent-events', () => ({ emitAgentEvent: () => {}, emitRunsChanged: () => {}, emitUsageChanged: () => {}, emitMessagesChanged: () => {} }))
+vi.mock('../notifications', () => ({ notifyTurnFinished: () => {}, notifyRoutineOutcome: () => {} }))
 vi.mock('./adapter-host', () => ({
   adapterForBackend: (backend: PersonaBackend) => adapterFor(backend, {})
 }))

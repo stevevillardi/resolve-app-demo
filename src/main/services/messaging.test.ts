@@ -47,6 +47,7 @@ const emitted: { runId: string; event: AgentEvent }[] = []
 let runsChangedCount = 0
 let usageChangedCount = 0
 let messagesChangedCount = 0
+const turnNotified: { contactId: string; originKind: string; error: string | null }[] = []
 
 vi.mock('../db', () => ({ initDb: () => db }))
 
@@ -61,6 +62,18 @@ vi.mock('./agent-events', () => ({
   emitMessagesChanged: () => {
     messagesChangedCount += 1
   }
+}))
+vi.mock('../notifications', () => ({
+  notifyTurnFinished: (input: {
+    contactId: string
+    origin: { kind: string }
+    error: string | null
+  }) =>
+    turnNotified.push({
+      contactId: input.contactId,
+      originKind: input.origin.kind,
+      error: input.error
+    })
 }))
 
 vi.mock('./adapter-host', () => ({
@@ -116,6 +129,7 @@ beforeEach(() => {
   runsChangedCount = 0
   usageChangedCount = 0
   messagesChangedCount = 0
+  turnNotified.length = 0
   summarized.length = 0
 
   seedSkill(db)
@@ -906,6 +920,51 @@ describe('runRoutineTurn', () => {
     await settle()
 
     expect(db.select().from(usageEvents).all()[0].source).toBe('routine')
+  })
+})
+
+describe('turn-finish notifications (Phase 20)', () => {
+  // Whether anyone was looking is notifications.ts's decision (mocked here);
+  // what this file owns is that the turn loop hands over every non-routine
+  // finish, with its origin and failure intact.
+  it('hands a finished 1:1 turn to the notifier', async () => {
+    sendMessage('contact-a', 'review auth.ts')
+    await settle()
+
+    expect(turnNotified).toEqual([{ contactId: 'contact-a', originKind: 'message', error: null }])
+  })
+
+  it('announces each message row through the chokepoint', async () => {
+    // One for the user row, one for the reply — the signal previews and
+    // unread counts ride. Emitted by insertMessage itself, so no future
+    // writer can forget.
+    messagesChangedCount = 0
+    sendMessage('contact-a', 'review auth.ts')
+    await settle()
+
+    expect(messagesChangedCount).toBe(2)
+  })
+
+  it('hands the failure over, so the toast can say what went wrong', async () => {
+    harness.script = [
+      { type: 'error', kind: 'network', message: 'Connection reset.' },
+      { type: 'done', finalText: '', usage: null }
+    ]
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    expect(turnNotified[0].error).toBe('Connection reset.')
+  })
+
+  // The scheduler notifies routines itself, with the run summary and PR
+  // context this path cannot see — a second toast here would double-notify
+  // every fire.
+  it('never notifies a routine turn from the turn loop', async () => {
+    db.insert(groups).values({ id: 'group-n', repoPath: REPO }).run()
+    runRoutineTurn('routine-1', 'contact-a', 'sweep')
+    await settle()
+
+    expect(turnNotified).toHaveLength(0)
   })
 })
 

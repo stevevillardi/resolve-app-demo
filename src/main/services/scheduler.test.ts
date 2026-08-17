@@ -42,6 +42,7 @@ vi.mock('./adapter-host', () => ({ adapterForBackend: () => harness.adapter }))
  */
 const notified: { prompt: string; status: string; summary: string }[] = []
 vi.mock('../notifications', () => ({
+  notifyTurnFinished: () => {},
   notifyRoutineOutcome: (
     routine: { prompt: string },
     result: { status: string; summary: string }

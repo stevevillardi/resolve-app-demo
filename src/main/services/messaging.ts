@@ -5,6 +5,7 @@ import { toMessage } from '../db/mappers'
 import { messages, toolCalls } from '../db/schema'
 import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
+import { notifyTurnFinished } from '../notifications'
 import { emitAgentEvent, emitMessagesChanged, emitRunsChanged } from './agent-events'
 import { summarizeTurn } from './compaction'
 import { clearBackendSessionId, getContact, setBackendSessionId } from './contacts'
@@ -579,6 +580,15 @@ function finish(
     runs.delete(runId)
     emitAgentEvent(runId, done ?? { type: 'done', finalText, usage: null })
     emitRunsChanged()
+
+    // A ten-minute turn finishing while the user is in their editor used to
+    // finish silently (review §C1). Routine origins are excluded — the
+    // scheduler notifies those with the run summary this function cannot see —
+    // and the "is anyone looking" check lives inside notifications.ts, so a
+    // watched turn stays silent without this module touching electron.
+    if (origin.kind !== 'routine') {
+      notifyTurnFinished({ contactId, origin, finalText, error: failure })
+    }
 
     // Blueprint §6, and deliberately the last thing to happen: it runs after
     // the lock is released and after the renderer has been told the turn is

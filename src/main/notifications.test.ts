@@ -27,7 +27,11 @@ class FakeNotification {
 vi.mock('electron', () => ({ Notification: FakeNotification }))
 
 const navigateTo = vi.fn()
-vi.mock('./main-window', () => ({ navigateTo: (target: NavigateTarget) => navigateTo(target) }))
+let attended = false
+vi.mock('./main-window', () => ({
+  navigateTo: (target: NavigateTarget) => navigateTo(target),
+  isWindowAttended: () => attended
+}))
 
 let enabledValue: string | null = null
 vi.mock('./services/app-state', () => ({ getAppState: () => enabledValue }))
@@ -35,12 +39,12 @@ vi.mock('./services/app-state', () => ({ getAppState: () => enabledValue }))
 // Real contact/group lookups would pull the db chain into a test about the
 // electron binding; what this file asserts is which *target* a lookup result
 // produces, so the lookups are data.
-let contact: { repoPath: string } | null = null
+let contact: { repoPath: string; displayName: string } | null = null
 let group: { id: string } | null = null
 vi.mock('./services/contacts', () => ({ getContact: () => contact }))
 vi.mock('./services/group-messages', () => ({ groupForRepo: () => group }))
 
-const { notificationsEnabled, notifyRoutineOutcome, sendNotification } =
+const { notificationsEnabled, notifyRoutineOutcome, notifyTurnFinished, sendNotification } =
   await import('./notifications')
 
 const TEXT = { title: 'Refactor Buddy', body: 'Done.' }
@@ -48,6 +52,7 @@ const TEXT = { title: 'Refactor Buddy', body: 'Done.' }
 beforeEach(() => {
   supported = true
   enabledValue = null
+  attended = false
   contact = null
   group = null
   shown.length = 0
@@ -113,7 +118,7 @@ describe('notifyRoutineOutcome', () => {
   // The routine_run row and any PR line live in the group thread — that is
   // where the click must land, not the 1:1 thread that shows neither.
   it('targets the repo group when one exists', () => {
-    contact = { repoPath: '/repo' }
+    contact = { repoPath: '/repo', displayName: 'Nightly Sweeper' }
     group = { id: 'group-1' }
 
     notifyRoutineOutcome(ROUTINE, OK)
@@ -123,7 +128,7 @@ describe('notifyRoutineOutcome', () => {
   })
 
   it('falls back to the contact thread when the repo has no group', () => {
-    contact = { repoPath: '/repo' }
+    contact = { repoPath: '/repo', displayName: 'Nightly Sweeper' }
 
     notifyRoutineOutcome(ROUTINE, OK)
 
@@ -134,5 +139,56 @@ describe('notifyRoutineOutcome', () => {
   it('identifies the routine by its prompt in the body', () => {
     notifyRoutineOutcome(ROUTINE, OK)
     expect(shown[0].options.body).toContain('Check for new issues nightly.')
+  })
+
+  // A routine fire is unattended by nature — even with the app frontmost, the
+  // screen the user is on does not necessarily show it.
+  it('is not gated on window attention', () => {
+    attended = true
+    notifyRoutineOutcome(ROUTINE, OK)
+    expect(shown).toHaveLength(1)
+  })
+})
+
+describe('notifyTurnFinished', () => {
+  const FINISHED = {
+    contactId: 'contact-1',
+    origin: { kind: 'message' } as const,
+    finalText: 'Moved the cache.',
+    error: null
+  }
+
+  beforeEach(() => {
+    contact = { repoPath: '/repo', displayName: 'Refactor Buddy' }
+  })
+
+  it('notifies as a message from the persona when nobody is looking', () => {
+    notifyTurnFinished(FINISHED)
+
+    expect(shown).toHaveLength(1)
+    expect(shown[0].options.title).toBe('Refactor Buddy')
+    shown[0].clickHandlers[0]()
+    expect(navigateTo).toHaveBeenCalledWith({ kind: 'contact', contactId: 'contact-1' })
+  })
+
+  // The reply arriving on screen IS the notification — a toast on top of a
+  // watched turn is noise.
+  it('stays silent while the window is attended', () => {
+    attended = true
+    notifyTurnFinished(FINISHED)
+    expect(shown).toHaveLength(0)
+  })
+
+  it('lands a mention turn in its group thread', () => {
+    notifyTurnFinished({ ...FINISHED, origin: { kind: 'mention', groupId: 'group-9' } })
+
+    shown[0].clickHandlers[0]()
+    expect(navigateTo).toHaveBeenCalledWith({ kind: 'group', groupId: 'group-9' })
+  })
+
+  it('does nothing for a contact deleted mid-turn', () => {
+    contact = null
+    expect(() => notifyTurnFinished(FINISHED)).not.toThrow()
+    expect(shown).toHaveLength(0)
   })
 })
