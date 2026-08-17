@@ -914,6 +914,36 @@ export const ipcContract = {
   },
 
   /**
+   * Full-text search over message content, both 1:1 and group (FTS5,
+   * migration 0017). Snippets decorate matched tokens with the \u0001/\u0002
+   * control characters for the renderer to highlight — printable markers
+   * would collide with code in the text. Under two characters returns []
+   * rather than matching the world; raw FTS5 syntax in the query is quoted
+   * away by the service, never an error.
+   */
+  'search.messages': {
+    input: z.object({ query: z.string(), limit: z.number().int().positive().optional() }),
+    output: z.array(
+      z.discriminatedUnion('kind', [
+        z.object({
+          kind: z.literal('message'),
+          contactId: z.string(),
+          messageId: z.string(),
+          snippet: z.string(),
+          timestamp: z.number()
+        }),
+        z.object({
+          kind: z.literal('group_message'),
+          groupId: z.string(),
+          groupMessageId: z.string(),
+          snippet: z.string(),
+          timestamp: z.number()
+        })
+      ])
+    )
+  },
+
+  /**
    * Everything running right now, across every repo. The renderer needs the
    * whole set rather than its own contact's: a turn on a *sibling* contact is
    * what disables this thread's composer (blueprint §15D).
