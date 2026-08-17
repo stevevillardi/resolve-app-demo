@@ -919,7 +919,11 @@ describe('runRoutineTurn', () => {
     runRoutineTurn('routine-1', 'contact-a', 'sweep the lint errors')
     await settle()
 
-    expect(db.select().from(usageEvents).all()[0].source).toBe('routine')
+    const [event] = db.select().from(usageEvents).all()
+    expect(event.source).toBe('routine')
+    // And to *which* routine (Phase 20) — the per-routine budget check reads
+    // exactly this column.
+    expect(event.routineId).toBe('routine-1')
   })
 })
 

@@ -271,6 +271,11 @@ export const usageEventSchema = z.object({
    */
   personaTemplateId: z.string().optional(),
   repoPath: z.string().optional(),
+  /**
+   * The routine whose fire spent this, for routine-origin turns (Phase 20).
+   * Plain attribution, not a FK — may name a routine that no longer exists.
+   */
+  routineId: z.string().optional(),
   timestamp: z.number(),
   source: usageSourceSchema,
   inputTokens: z.number(),

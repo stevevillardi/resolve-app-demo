@@ -145,6 +145,7 @@ export function toUsageEvent(row: UsageEventRow): UsageEvent {
     contactId: row.contactId,
     ...optional('personaTemplateId', row.personaTemplateId),
     ...optional('repoPath', row.repoPath),
+    ...optional('routineId', row.routineId),
     timestamp: row.timestamp.getTime(),
     source: row.source,
     inputTokens: row.inputTokens,

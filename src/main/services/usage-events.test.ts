@@ -89,6 +89,19 @@ describe('recordUsage', () => {
     expect(listUsageEvents('contact-1')[0].sessionId).toBeUndefined()
   })
 
+  it('attributes routine spend to its routine, and round-trips it', () => {
+    // The id was always in hand at the call site and discarded until Phase 20
+    // needed per-routine budgets. Plain attribution, not a FK — the figure
+    // must survive the routine being deleted.
+    recordUsage('contact-1', 'routine', USAGE, SESSION, 'routine-9')
+    expect(listUsageEvents('contact-1')[0].routineId).toBe('routine-9')
+  })
+
+  it('leaves attribution absent rather than inventing one', () => {
+    recordUsage('contact-1', 'message', USAGE, SESSION)
+    expect(listUsageEvents('contact-1')[0].routineId).toBeUndefined()
+  })
+
   it('announces the write', () => {
     // Written from the claim: this is what refreshes a spend view nobody's
     // thread is mounted for.

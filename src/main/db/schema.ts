@@ -288,6 +288,14 @@ export const usageEvents = sqliteTable(
      */
     contactId: text('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
     /**
+     * Which routine's fire spent this, when the turn's origin was a routine
+     * (Phase 20). Same non-FK rule as personaTemplateId below and for the same
+     * reason: spend outlives its attribution target, and a routine deleted
+     * next week must not take last month's figures with it. Null on rows from
+     * before the column existed — honestly unattributed, never guessed.
+     */
+    routineId: text('routine_id'),
+    /**
      * Copied from the Contact when the row is written, and deliberately **not**
      * foreign keys.
      *

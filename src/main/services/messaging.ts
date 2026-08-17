@@ -564,7 +564,13 @@ function finish(
     // Stamped with the session so the next turn can subtract what this one
     // already accounted for — the row is a delta, and baselineFor() sums them.
     if (done?.usage) {
-      recordUsage(contactId, origin.kind, done.usage, session.sessionId)
+      recordUsage(
+        contactId,
+        origin.kind,
+        done.usage,
+        session.sessionId,
+        origin.kind === 'routine' ? origin.routineId : null
+      )
     }
 
     // Read after the run, never before: the adapters fill this in mid-stream at

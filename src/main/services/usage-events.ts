@@ -42,7 +42,8 @@ export function recordUsage(
   contactId: string,
   source: UsageSource,
   usage: AgentUsage,
-  sessionId?: string | null
+  sessionId?: string | null,
+  routineId?: string | null
 ): UsageEvent {
   // Read once and copied onto the row, so the two questions the dashboard asks
   // of historical spend — whose, and on which repo — outlive the Contact.
@@ -59,6 +60,9 @@ export function recordUsage(
     timestamp: Date.now(),
     source,
     ...(sessionId ? { sessionId } : {}),
+    // The routine id was always in hand at the call site (TurnOrigin carries
+    // it) and simply discarded until Phase 20 needed per-routine budgets.
+    ...(routineId ? { routineId } : {}),
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     costUsd: usage.costUsd,
