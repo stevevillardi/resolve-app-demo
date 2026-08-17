@@ -262,7 +262,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
             <div className="grid gap-1.5 @4xl/pane:grid-cols-2">
               {waiting.map((branch) => (
                 <ListRow
-                  key={`${branch.repoPath} ${branch.branch}`}
+                  key={`${branch.repoPath}\0${branch.branch}`}
                   active={false}
                   align="center"
                   bordered
