@@ -6,6 +6,7 @@ import { ListPanel } from './ListPanel'
 import { WorkspaceView } from './WorkspaceView'
 import { NewContactFlow } from '@/components/persona/NewContactFlow'
 import { GitHubConnectDialog } from '@/components/github/GitHubConnectDialog'
+import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { CommandPalette } from '@/components/common/CommandPalette'
 import { useThemeSync } from '@/hooks/useThemeSync'
 import { useAuthRecoveryOnFocus, useVerifyGitHub } from '@/hooks/useAuth'
@@ -82,8 +83,8 @@ export function AppShell(): React.JSX.Element {
         )}
       </SidebarInset>
 
-      {/* The only two surfaces that stay modal: both are short, decision-shaped
-          flows you finish and dismiss, not places you work. */}
+      {/* The modal surfaces: short, decision-shaped flows you finish and
+          dismiss, not places you work. */}
       <NewContactFlow
         open={dialog === 'newContact'}
         onOpenChange={(open) => setDialog(open ? 'newContact' : null)}
@@ -91,6 +92,10 @@ export function AppShell(): React.JSX.Element {
       <GitHubConnectDialog
         open={dialog === 'github'}
         onOpenChange={(open) => setDialog(open ? 'github' : null)}
+      />
+      <SettingsDialog
+        open={dialog === 'settings'}
+        onOpenChange={(open) => setDialog(open ? 'settings' : null)}
       />
       <CommandPalette />
     </SidebarProvider>

@@ -32,6 +32,7 @@ let encryptionAvailable = true
 vi.mock('./secrets', () => ({
   getSecret: (k: string) => secretStore.get(k) ?? null,
   setSecret: (k: string, v: string) => void secretStore.set(k, v),
+  deleteSecret: (k: string) => void secretStore.delete(k),
   isSecretStorageAvailable: () => encryptionAvailable
 }))
 
@@ -189,5 +190,28 @@ describe('setAnthropicApiKey', () => {
     expect(status).toMatchObject({ authenticated: false })
     expect(status.error).toMatch(/secret storage/i)
     expect(secretStore.has('anthropic_api_key')).toBe(false)
+  })
+})
+
+describe('clearAnthropicApiKey', () => {
+  it('removes the stored key and re-probes past the cache', async () => {
+    secretStore.set('anthropic_api_key', 'sk-ant-stored')
+    accountInfoImpl = async () => ({ email: 'x@y.z' })
+    await claude.getClaudeAuthStatus()
+
+    accountInfoImpl = async () => ({})
+    const status = await claude.clearAnthropicApiKey()
+
+    expect(secretStore.has('anthropic_api_key')).toBe(false)
+    // Cached "authenticated" must not survive the clear — the whole point of
+    // the button is that the status tells the truth afterwards.
+    expect(status.authenticated).toBe(false)
+  })
+
+  it('leaves a CLI login reported as authenticated', async () => {
+    // The key is ours to remove; the Claude Code browser login is not.
+    accountInfoImpl = async () => ({ email: 'cli@user.dev', apiKeySource: 'oauth' })
+    const status = await claude.clearAnthropicApiKey()
+    expect(status).toMatchObject({ authenticated: true, source: 'cli' })
   })
 })

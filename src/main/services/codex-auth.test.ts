@@ -40,6 +40,7 @@ vi.mock('./secrets', () => ({
   getSecret: (k: string) => secretStore.get(k) ?? null,
   setSecret: (k: string, v: string) => void secretStore.set(k, v),
   hasSecret: (k: string) => secretStore.has(k),
+  deleteSecret: (k: string) => void secretStore.delete(k),
   isSecretStorageAvailable: () => encryptionAvailable
 }))
 
@@ -279,5 +280,28 @@ describe('missing platform binary', () => {
       error: expect.stringMatching(/no codex binary/i)
     })
     expect(isolated.startCodexLogin()).toMatchObject({ status: 'error' })
+  })
+})
+
+describe('clearOpenAiApiKey', () => {
+  it('removes the key and signs the CLI out when the key was the login', () => {
+    secretStore.set('openai_api_key', 'sk-stored')
+    spawnSyncResult = { status: 0, stdout: 'Logged in using an API key' }
+
+    codex.clearOpenAiApiKey()
+
+    expect(secretStore.has('openai_api_key')).toBe(false)
+    expect(spawnSyncCalls.some((call) => call.args[0] === 'logout')).toBe(true)
+  })
+
+  it('leaves a ChatGPT login alone', () => {
+    // The browser login is a separate credential the user did not ask to lose.
+    secretStore.set('openai_api_key', 'sk-stored')
+    spawnSyncResult = { status: 0, stdout: 'Logged in using ChatGPT' }
+
+    codex.clearOpenAiApiKey()
+
+    expect(secretStore.has('openai_api_key')).toBe(false)
+    expect(spawnSyncCalls.some((call) => call.args[0] === 'logout')).toBe(false)
   })
 })

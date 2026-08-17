@@ -302,6 +302,41 @@ export const ipcContract = {
     input: z.void(),
     output: authStatusSchema
   },
+  /**
+   * Key removal (Phase 17 — the settings surface). Each returns the fresh
+   * per-backend status so the renderer can patch its cache slice without
+   * re-paying for the other probes. Neither is a sign-out of a CLI login:
+   * Claude Code's browser auth is not ours to revoke, and clearing the OpenAI
+   * key signs the codex CLI out only when the key was how it signed in.
+   */
+  'auth.clearAnthropicKey': {
+    input: z.void(),
+    output: claudeStatusSchema
+  },
+  'auth.clearOpenAiKey': {
+    input: z.void(),
+    output: codexStatusSchema
+  },
+
+  /** Where clones land — set implicitly on first clone, surfaced in settings. */
+  'workspace.getRoot': {
+    input: z.void(),
+    output: z.object({
+      path: z.string().nullable(),
+      /** False when the remembered directory is gone or unmounted. */
+      exists: z.boolean()
+    })
+  },
+  /** Native directory picker; persists the choice. Null when cancelled. */
+  'workspace.chooseRoot': {
+    input: z.void(),
+    output: z.object({ path: z.string().nullable() })
+  },
+
+  'appInfo.get': {
+    input: z.void(),
+    output: z.object({ version: z.string(), platform: z.string() })
+  },
 
   /**
    * The starter catalog (Phase 17): everything the app *can* seed, flagged

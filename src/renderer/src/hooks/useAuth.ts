@@ -170,6 +170,35 @@ function useApiKeyMutation(procedure: 'auth.setAnthropicApiKey' | 'auth.setOpenA
   }
 }
 
+export function useClearAnthropicKey(): { clear: () => void; isPending: boolean } {
+  return useClearKeyMutation('auth.clearAnthropicKey', 'claude')
+}
+
+export function useClearOpenAiKey(): { clear: () => void; isPending: boolean } {
+  return useClearKeyMutation('auth.clearOpenAiKey', 'codex')
+}
+
+/**
+ * Key removal (settings). The procedure returns only its backend's fresh
+ * status, patched into the shared cache entry — same reasoning as
+ * useVerifyGitHubNow: the other backends' probes were not consulted and there
+ * is no reason to pay for them because one key was removed.
+ */
+function useClearKeyMutation(
+  procedure: 'auth.clearAnthropicKey' | 'auth.clearOpenAiKey',
+  slice: 'claude' | 'codex'
+): { clear: () => void; isPending: boolean } {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: () => callProcedure(procedure, undefined),
+    onSuccess: (status) =>
+      queryClient.setQueryData(authStatusKey, (previous: AuthStatus | undefined) =>
+        previous ? { ...previous, [slice]: status } : previous
+      )
+  })
+  return { clear: () => mutation.mutate(), isPending: mutation.isPending }
+}
+
 /**
  * Asks GitHub whether the stored token still works — at launch, and whenever
  * the window regains focus.

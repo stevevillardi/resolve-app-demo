@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import type { CodexAuthStatus, DeviceFlowState } from '../../shared/ipc-contract'
-import { getSecret, isSecretStorageAvailable, setSecret } from './secrets'
+import { deleteSecret, getSecret, isSecretStorageAvailable, setSecret } from './secrets'
 
 /**
  * Codex backend auth.
@@ -253,6 +253,26 @@ export function cancelCodexLogin(): DeviceFlowState {
   child = null // makes the exit handler a no-op for this process
   proc?.kill()
   return reset({ status: 'idle' })
+}
+
+/**
+ * Removes the stored key, and signs the CLI out only when the key was how it
+ * was signed in — a ChatGPT browser login is a separate credential the user
+ * did not ask to lose. Re-probes so the returned status is the new truth.
+ */
+export function clearOpenAiApiKey(): CodexAuthStatus {
+  const wasApiKey = getCodexAuthStatus().source === 'api_key'
+  deleteSecret('openai_api_key')
+
+  const bin = resolveCodexBinary()
+  if (bin && wasApiKey) {
+    // Best-effort: the CLI registered the key at set time (`login
+    // --with-api-key`), so without this, `login status` would keep saying
+    // api_key from ~/.codex/auth.json after the keychain copy is gone.
+    spawnSync(bin, ['logout'], { env: childEnv(), timeout: 15_000 })
+  }
+
+  return getCodexAuthStatus(true)
 }
 
 export function setOpenAiApiKey(apiKey: string): CodexAuthStatus {
