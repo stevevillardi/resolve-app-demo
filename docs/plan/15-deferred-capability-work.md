@@ -8,96 +8,80 @@
 
 Phase 14 opened the seal deliberately: MCP servers, the repository's own
 instructions, and its skills now reach a persona when — and only when — a human
-has said they may. Building it turned up a handful of things that are real, are
-not done, and would otherwise survive only in a chat transcript.
+has said they may. Building it turned up things that are real, are not done, and
+would otherwise survive only in a chat transcript.
 
-This document is where they live so that the next person to touch the capability
+This document is where they live so the next person to touch the capability
 surface does not have to rediscover them. Nothing here is a bug in what shipped;
-each item is either an unmade decision, an unverified assumption, or a boundary
-drawn on purpose.
+each item is an unmade decision, a stated limit, or a boundary drawn on purpose.
+
+**The two items that were here and are now closed** — `scripts/probe-mcp.ts` and
+the unreachable `capabilities.unavailable` — were both done in Phase 14. The
+probe settled all three of the SDK questions this file used to list, including
+one whose answer changed a design: `permission_policy` does _not_ survive
+`bypassPermissions`, so it is not a viable third gate.
 
 ---
 
-## 0. `scripts/probe-mcp.ts` — the instrument the rest of this depends on
+## 1. Tool calls are not persisted
 
-Deferred out of Phase 14 after step 4. It was planned as step 5 and is the
-prerequisite for items 2 and 3 below, so it is the first thing to build here
-rather than one entry among several.
+The timeline in the thread is live only. It is dropped when the turn's rows are
+refetched, so reloading the window loses it.
 
-Three jobs, in the order they matter:
+The case against leaving it there is real and specific: this app's most
+autonomous mode is a routine firing at 3am, and that is exactly the run nobody
+watches. The morning after, there is a record of what the persona _concluded_
+and none of what it _called_ — which for an MCP-enabled persona means no record
+of what it read or wrote on GitHub.
 
-1. **Confirm the Codex `mcp_servers` block against a real run.** Today its key
-   names come from `codex mcp add --help` and from the binary's own serde field
-   list, read with `strings`. `CodexOptions.config` is an open index signature,
-   so a wrong key is *silently ignored* — the failure is a server that looks
-   configured, is not there, or worse is there without its deny list. Unit tests
-   assert the object we build; nothing yet asserts Codex accepts it.
-2. **Refresh `src/main/adapters/github-mcp-tools.ts`** from both endpoints and
-   report drift. The file is a snapshot taken 2026-08-16 (27 read, 17 write, 44
-   total) and its arithmetic is asserted, but that tripwire only fires when this
-   is run. Item 3 below is the cost of not running it.
-3. **Probe `McpServerToolPolicy.permission_policy` under `bypassPermissions`.**
-   If `always_deny` survives, it is a genuine third gate — per-server and
-   per-tool, enforced by the CLI rather than by a name blacklist — worth adopting
-   *alongside* `disallowedTools`, never instead of it.
+The case for is that persisting means a migration, a retention policy, and
+putting tool arguments — issue titles, file paths, repo detail — into SQLite
+permanently. Phase 14's own acceptance check asks that a call be "visible in the
+thread as work", which the live timeline satisfies for a watched turn, and the
+durable record of a routine already exists as its Group summary.
 
-It belongs beside `probe:adapters` and `probe:structured` and runs outside
-Electron for the same reason they do: nothing under `src/main/adapters/` may
-import `electron` or the database, so the probe drives the real SDKs directly.
+**Decide before routines are demoed as unattended.** A middle option nobody has
+costed: persist only `name` and `status` per call, not arguments.
 
-Until it exists, the honest statement about the Codex MCP path is **written and
-unit-tested, unproven end to end**.
+## 2. What `sandbox: full_access` cannot be made to mean
 
-## 1. `capabilities.unavailable` has no consumer
+`githubScope` is now enforced against MCP tool names _and_ against the shell
+(`evaluateGithubShellUse`). Neither applies at `sandbox: full_access`, because
+that level sets `permissionMode: 'bypassPermissions'` on Claude and
+`danger-full-access` on Codex, and neither backend asks this app anything after
+that.
 
-`capabilitiesFor()` returns an `unavailable` list — servers a persona was
-granted but that could not be offered, each with a reason
-(`src/main/services/capabilities.ts:62`). It is populated, tested, and read by
-nothing.
+So `sandbox: full_access` + `githubScope: read_only` is **not** read-only on
+GitHub, and cannot be made so from inside this process. `ScopeChip` says as much
+now, which is honest but not a fix.
 
-The failure mode it exists to prevent is specific and unpleasant. A persona
-granted the GitHub server with no account connected gets **no** server and no
-explanation. Asked to check for new issues, it looks for a tool, finds none, and
-answers that it found nothing — which is indistinguishable from there being no
-new issues. Blueprint §16 Journey 3 opens with exactly that step, so the silent
-version of this failure is the one most likely to be seen in a demo.
+The real options, none taken:
 
-Two options were written up and neither was chosen:
+- **Refuse the combination.** Make `full_access` force `githubScope:
+full_access`, so the UI stops offering a guarantee it cannot keep. Cheap, and
+  arguably what the axes already imply.
+- **Drop the ambient credentials.** The shell reaches GitHub through the
+  _developer's_ `gh` and `git` credentials, not the app's. A session could run
+  with `GH_TOKEN`/`GIT_*` scrubbed and `HOME` redirected, which is what the E2E
+  fixtures already do for exactly this reason.
+- **Accept and document.** Where it stands today.
 
-- **Tell the model.** Add `unavailableServers` to `SessionSpec` and render one
-  sentence in the dynamic suffix. The persona can then say "GitHub is not
-  connected" instead of "no new issues". Costs a new spec field and a prompt
-  section on a path that is otherwise sealed.
-- **Tell the human only.** Surface it in the Phase 14 header capability popover
-  and leave the prompt alone. Keeps the prompt surface minimal; the model still
-  cannot distinguish the two cases, so a routine running unattended at 3am still
-  reports nothing found.
+The second is the only one that actually closes it, and it is a behaviour change
+for every persona, not just this combination.
 
-**Decide before the popover ships**, because the popover is what makes the
-second option defensible and its absence is what makes the first urgent.
+## 3. The shell guard is a heuristic
 
-## 2. Unverified SDK behaviour
+`evaluateGithubShellUse` is a deny list matched against command text.
+`SHELL_CONTROL` already rejects chaining, redirection and substitution, which
+removes the easy escapes — but a model that writes a script to a file and
+executes it walks straight through, and so does anything that reaches the API
+through a language runtime rather than a CLI.
 
-Three things are believed rather than known. Each has a cheap instrument.
+It raises walking around the axis from "type the obvious command" to
+"deliberately work around a stated restriction". That is worth having and it is
+not a boundary; the boundary is the credential scrubbing above.
 
-| Claim | Evidence today | What would settle it |
-|---|---|---|
-| Codex's `mcp_servers.<id>` takes `url`, `bearer_token_env_var`, `disabled_tools` | `codex mcp add --help`, plus the `RawMcpServerConfig` serde field list read out of the binary with `strings` | `LIVE_MCP=1` — one real turn that calls a GitHub tool |
-| `McpServerToolPolicy.permission_policy: 'always_deny'` survives `permissionMode: 'bypassPermissions'` | Nothing. The type exists in `@anthropic-ai/claude-agent-sdk@0.3.233` (`sdk.d.ts:1125`) and was never exercised | `scripts/probe-mcp.ts` — attempt a denied tool at `full_access` |
-| `mcp__*` as a wildcard in top-level `disallowedTools` | Documented for *agent definitions* (`sdk.d.ts:48`), not for the top-level option | A probe turn; until then it is not used and the guard is per-name |
-
-The Codex one matters most. `CodexOptions.config` is an open index signature, so
-a misspelled key is **silently ignored** rather than a type error — the failure
-mode is a server that appears configured and simply is not there, or worse, one
-configured without its deny list. This is the single largest gap between what
-Phase 14's unit tests assert and what is actually true on a running machine.
-
-If `permission_policy` does survive `bypassPermissions`, it becomes a genuine
-third gate — per-server and per-tool, enforced by the CLI rather than by a name
-blacklist — and is worth adopting alongside `disallowedTools` rather than
-instead of it.
-
-## 3. Denylist over allowlist, and when to revisit
+## 4. Denylist over allowlist, and when to revisit
 
 Phase 14 chose `disabled_tools` on Codex to mirror Claude's `disallowedTools`,
 so a single table in `sandbox.ts` drives both backends and they cannot disagree
@@ -115,7 +99,7 @@ Revisit if either becomes true:
 - The two backends stop needing to behave identically — at which point
   `enabled_tools` on Codex costs nothing.
 
-## 4. Drawn on purpose, not deferred
+## 5. Drawn on purpose, not deferred
 
 These are decisions, not omissions. Reopening any of them is a governance change
 and belongs in `00-progress.md`.
@@ -140,7 +124,7 @@ and belongs in `00-progress.md`.
   with the honest consequence that a routine firing overnight leaves no trace of
   what it called.
 
-## 5. Smaller loose ends
+## 6. Smaller loose ends
 
 - `composeInstructionBlocks()` returns a two-way split; only Claude honours it.
   Codex has no cache-breakpoint mechanism in `@openai/codex-sdk@0.147.0`, so its
