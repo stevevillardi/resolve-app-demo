@@ -29,6 +29,7 @@ import { useMarkRead } from '@/hooks/useUnread'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests'
 import { useRunStore } from '@/store/useRunStore'
+import { draftKey, useDraftStore } from '@/store/useDraftStore'
 import { streamText } from '@/lib/stream'
 import { slashCommands } from '@/lib/slash'
 import { firstUnreadIndex } from '@/lib/unread'
@@ -59,7 +60,10 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   // Only fetched once somebody types a slash. contacts.context stats the
   // filesystem for sibling branches, and a thread being open is no reason to
   // pay for that — the same gating the context panel uses.
-  const [draft, setDraft] = useState('')
+  const draftId = draftKey('contact', contactId)
+  const draft = useDraftStore((state) => state.byConversation[draftId] ?? '')
+  const setDraft = useDraftStore((state) => state.setDraft)
+  const clearDraft = useDraftStore((state) => state.clearDraft)
   const [workMessageId, setWorkMessageId] = useState<string | null>(null)
   const { data: capability } = useContactContext(contactId, draft.startsWith('/'))
   const commands = useMemo(() => slashCommands(capability), [capability])
@@ -255,13 +259,13 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
       <Composer
         placeholder={`Message ${persona.name}…`}
         value={draft}
-        onValueChange={setDraft}
+        onValueChange={(value) => setDraft(draftId, value)}
         commands={commands}
         onSend={(value) => {
           reset()
           // Cleared only on acceptance: a lock refusal rejects the mutation,
           // and the refused draft must still be sitting in the field.
-          send(value, { onSuccess: () => setDraft('') })
+          send(value, { onSuccess: () => clearDraft(draftId) })
         }}
         busy={isRunning}
         onStop={() => turn && cancel(turn.runId)}

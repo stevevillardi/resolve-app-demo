@@ -23,6 +23,7 @@ import { useCancelRun } from '@/hooks/useMessages'
 import { useMarkRead } from '@/hooks/useUnread'
 import { firstUnreadIndex } from '@/lib/unread'
 import { useRunStore } from '@/store/useRunStore'
+import { draftKey, useDraftStore } from '@/store/useDraftStore'
 import { useUiStore } from '@/store/useUiStore'
 import type { Contact, GroupMessage, PersonaTemplate } from '@/types'
 
@@ -105,7 +106,11 @@ function GroupEntry({
 }
 
 export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.Element {
-  const [draft, setDraft] = useState('')
+  const draftId = draftKey('group', groupId)
+  const draft = useDraftStore((state) => state.byConversation[draftId] ?? '')
+  const setDraftValue = useDraftStore((state) => state.setDraft)
+  const clearDraft = useDraftStore((state) => state.clearDraft)
+  const setDraft = (value: string): void => setDraftValue(draftId, value)
 
   const { data: groups = [], isLoading: groupsLoading } = useGroups()
   const { data: contacts = [] } = useContacts()
@@ -215,7 +220,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
     if (!parsed) return
     reset()
     // Cleared only on acceptance — same contract as ThreadView's send.
-    mention(parsed.contactId, parsed.content, { onSuccess: () => setDraft('') })
+    mention(parsed.contactId, parsed.content, { onSuccess: () => clearDraft(draftId) })
   }
 
   return (
@@ -332,7 +337,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
             personaTemplates={personaTemplates}
             onSelect={(contact) => {
               const persona = personaOf(contact)
-              setDraft((prev) => `${prev}${mentionToken(persona?.name ?? contact.displayName)}`)
+              setDraft(`${draft}${mentionToken(persona?.name ?? contact.displayName)}`)
             }}
             trigger={
               <Button variant="ghost" size="icon-sm" aria-label="Mention a persona">
