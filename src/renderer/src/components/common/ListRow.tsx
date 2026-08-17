@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 
 interface ListRowProps {
   active: boolean
@@ -21,6 +22,14 @@ interface ListRowProps {
   bordered?: boolean
   /** An option that exists but cannot be picked here, and says why in its body. */
   disabled?: boolean
+  /**
+   * A `<ContextMenuContent>` of actions for this row, opened by right-click.
+   * The row's button becomes the menu's trigger via `render`, so opting in
+   * adds no wrapper node and opting out renders exactly what it always did.
+   * Selection stays on left-click only — a right-click that also selected
+   * would change the detail pane under the menu the user just opened.
+   */
+  contextMenu?: React.ReactNode
   children: React.ReactNode
   className?: string
 }
@@ -47,10 +56,11 @@ export function ListRow({
   align = 'start',
   bordered = false,
   disabled = false,
+  contextMenu,
   children,
   className
 }: ListRowProps): React.JSX.Element {
-  return (
+  const row = (
     <button
       type="button"
       onClick={onSelect}
@@ -79,5 +89,14 @@ export function ListRow({
       <span className="min-w-0 flex-1">{children}</span>
       {trailing}
     </button>
+  )
+
+  if (!contextMenu) return row
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={row} />
+      {contextMenu}
+    </ContextMenu>
   )
 }
