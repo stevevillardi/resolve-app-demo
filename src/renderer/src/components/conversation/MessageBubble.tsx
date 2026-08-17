@@ -41,6 +41,9 @@ const ERROR_TITLE: Record<MessageBubbleError['kind'], string> = {
   sandbox_denied: 'Blocked by sandbox',
   network: 'Network error',
   auth: 'Not signed in',
+  // Rare on screen: messaging.ts retries a dead resume key with a fresh
+  // session before letting this surface, so seeing it means even that failed.
+  session: "Couldn't resume this conversation",
   // The default classifyErrorMessage() result, so this is the common case
   // rather than a fallback nobody hits.
   unknown: "Couldn't complete this turn"

@@ -202,3 +202,16 @@ export function setBackendSessionId(id: string, backendSessionId: string): void 
 
   if (result.changes === 0) throw new Error(`No such contact: ${id}`)
 }
+
+/**
+ * Forgets the resume key, so the next turn starts a fresh backend session.
+ *
+ * The transcript lives in this database, not in the vendor's session storage —
+ * so clearing this loses nothing the user can see, only the backend's working
+ * memory of the thread. Called when the key is known to be dead (the backend
+ * refused to resume it) or about to be (the persona is moving to a backend
+ * that has never heard of it).
+ */
+export function clearBackendSessionId(id: string): void {
+  initDb().update(contacts).set({ backendSessionId: null }).where(eq(contacts.id, id)).run()
+}

@@ -130,6 +130,48 @@ describe('update', () => {
     expect(createPersonaTemplate(DRAFT).mcpServerIds).toEqual([])
   })
 
+  it('clears bound contacts resume keys when the backend changes', () => {
+    // A backendSessionId is an index into one SDK's session storage. Leaving
+    // it in place across a backend switch hands Codex a Claude UUID (or the
+    // reverse) on the next turn, which surfaces as a raw vendor resume error.
+    const persona = createPersonaTemplate(DRAFT)
+    bindContact(persona.id, 'alpha')
+    db.update(contacts).set({ backendSessionId: 'claude-session-1' }).run()
+
+    updatePersonaTemplate({ ...persona, backend: 'codex', model: null })
+
+    const contact = db.select().from(contacts).all()[0]
+    expect(contact.backendSessionId).toBeNull()
+  })
+
+  it('keeps resume keys across a model-only change', () => {
+    // Both SDKs accept a model override on resume, so a model edit must not
+    // cost the contact its session — that would throw away vendor-side context
+    // for a change the backend handles in place.
+    const persona = createPersonaTemplate(DRAFT)
+    bindContact(persona.id, 'alpha')
+    db.update(contacts).set({ backendSessionId: 'claude-session-1' }).run()
+
+    updatePersonaTemplate({ ...persona, model: 'claude-opus-5' })
+
+    const contact = db.select().from(contacts).all()[0]
+    expect(contact.backendSessionId).toBe('claude-session-1')
+  })
+
+  it('leaves contacts bound to other personas alone on a backend change', () => {
+    const moving = createPersonaTemplate(DRAFT)
+    const staying = createPersonaTemplate({ ...DRAFT, name: 'Docs Writer' })
+    bindContact(moving.id, 'alpha')
+    bindContact(staying.id, 'beta')
+    db.update(contacts).set({ backendSessionId: 'session-x' }).run()
+
+    updatePersonaTemplate({ ...moving, backend: 'codex', model: null })
+
+    const rows = db.select().from(contacts).all()
+    expect(rows.find((row) => row.id === 'c-alpha')?.backendSessionId).toBeNull()
+    expect(rows.find((row) => row.id === 'c-beta')?.backendSessionId).toBe('session-x')
+  })
+
   it('throws for a persona that no longer exists', () => {
     expect(() => updatePersonaTemplate({ id: 'missing', ...DRAFT })).toThrow(/No such persona/)
   })

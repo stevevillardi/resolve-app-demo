@@ -7,7 +7,7 @@ import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
 import { emitAgentEvent, emitRunsChanged } from './agent-events'
 import { summarizeTurn } from './compaction'
-import { getContact, setBackendSessionId } from './contacts'
+import { clearBackendSessionId, getContact, setBackendSessionId } from './contacts'
 import { groupForRepo, insertGroupMessage } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
 import {
@@ -348,12 +348,18 @@ async function runTurn(
   // reply. This is only ever a fallback: a turn that reaches `done` uses
   // `done.finalText`, which is the backend's own authoritative answer. It
   // matters when a turn is stopped mid-stream and never produces one.
+  let activeSession = session
   let streamed = ''
   let done: Extract<AgentEvent, { type: 'done' }> | null = null
   // Kept so a caller with nobody watching can say *why* it failed. A routine
   // whose lastRunSummary reads "produced nothing" is not actionable; one that
   // reads "Failed — not authenticated" is.
   let failure: string | null = null
+  // A resumed session whose resume key the backend refuses gets one fresh
+  // start. Only a resume can heal this way (a fresh session has no dead key to
+  // shed), and only before anything has streamed — past that point a restart
+  // would silently discard output the user already saw.
+  let canHealDeadResume = Boolean(contact.backendSessionId)
 
   try {
     // The first thing the turn does, because it decides where the turn runs.
@@ -362,17 +368,36 @@ async function runTurn(
     // than this, because startTurn() is synchronous and git is not.
     spec.writablePaths = await ensureWorktree(contact)
 
-    for await (const event of adapter.run(session, prompt, run.controller.signal)) {
-      if (event.type === 'error') failure = event.message
-      if (event.type === 'done') {
-        // Held back rather than forwarded here: the renderer treats `done` as
-        // its cue to refetch, so it must not arrive before the rows it will
-        // refetch have been written.
-        done = event
-        break
+    attempts: while (true) {
+      for await (const event of adapter.run(activeSession, prompt, run.controller.signal)) {
+        if (event.type === 'error') {
+          // Self-heal: the model/backend changed under this contact (or the
+          // vendor expired the thread), so the stored key points at a session
+          // that no longer exists. The transcript is ours, not the vendor's —
+          // dropping the key and starting fresh loses nothing visible, and
+          // beats surfacing a raw "failed to resume" string the user cannot
+          // act on. The dead attempt's error is deliberately not forwarded.
+          if (event.kind === 'session' && canHealDeadResume && streamed === '') {
+            canHealDeadResume = false
+            clearBackendSessionId(contact.id)
+            activeSession = adapter.createSession(spec)
+            failure = null
+            continue attempts
+          }
+          failure = event.message
+        }
+        if (event.type === 'done') {
+          // Held back rather than forwarded here: the renderer treats `done` as
+          // its cue to refetch, so it must not arrive before the rows it will
+          // refetch have been written.
+          done = event
+          break attempts
+        }
+        if (event.type === 'text_message') streamed += event.text
+        emitAgentEvent(runId, event)
       }
-      if (event.type === 'text_message') streamed += event.text
-      emitAgentEvent(runId, event)
+      // The stream ended without a `done` (a cancelled turn); nothing to retry.
+      break
     }
   } catch (error) {
     // Both adapters wrap their streams and guarantee a `done`, so reaching here
@@ -381,7 +406,7 @@ async function runTurn(
     failure = error instanceof Error ? error.message : String(error)
     emitAgentEvent(runId, { type: 'error', kind: 'unknown', message: failure })
   } finally {
-    finish(runId, run, session, prompt, done?.finalText ?? streamed, done, failure)
+    finish(runId, run, activeSession, prompt, done?.finalText ?? streamed, done, failure)
   }
 }
 

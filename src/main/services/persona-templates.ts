@@ -32,26 +32,48 @@ export function createPersonaTemplate(draft: PersonaTemplateDraft): PersonaTempl
 }
 
 export function updatePersonaTemplate(persona: PersonaTemplate): PersonaTemplate {
-  const result = initDb()
-    .update(personaTemplates)
-    .set({
-      name: persona.name,
-      avatarColor: persona.avatarColor,
-      backend: persona.backend,
-      // Explicitly listed, like every other column: an omission here is a
-      // silent no-op rather than a type error, which is exactly how `model`
-      // went unsaved when the column was added.
-      model: persona.model,
-      systemPrompt: persona.systemPrompt,
-      skillIds: persona.skillIds,
-      mcpServerIds: persona.mcpServerIds,
-      sandbox: persona.sandbox,
-      githubScope: persona.githubScope
-    })
+  const db = initDb()
+  const existing = db
+    .select()
+    .from(personaTemplates)
     .where(eq(personaTemplates.id, persona.id))
-    .run()
+    .get()
+  if (!existing) throw new Error(`No such persona: ${persona.id}`)
 
-  if (result.changes === 0) throw new Error(`No such persona: ${persona.id}`)
+  db.transaction((tx) => {
+    tx.update(personaTemplates)
+      .set({
+        name: persona.name,
+        avatarColor: persona.avatarColor,
+        backend: persona.backend,
+        // Explicitly listed, like every other column: an omission here is a
+        // silent no-op rather than a type error, which is exactly how `model`
+        // went unsaved when the column was added.
+        model: persona.model,
+        systemPrompt: persona.systemPrompt,
+        skillIds: persona.skillIds,
+        mcpServerIds: persona.mcpServerIds,
+        sandbox: persona.sandbox,
+        githubScope: persona.githubScope
+      })
+      .where(eq(personaTemplates.id, persona.id))
+      .run()
+
+    // A resume key is an index into one SDK's session storage. Moving the
+    // persona to the other backend would hand Codex a Claude UUID (or the
+    // reverse) on every bound contact's next turn — the exact stranding hazard
+    // contacts.ts documents for personaTemplateId, guarded here for `backend`.
+    // In the same transaction so a failed update can't strand sessions, and a
+    // cleared session can't outlive a failed backend switch. A model-only
+    // change deliberately does NOT clear: both SDKs accept a model on resume.
+    if (existing.backend !== persona.backend) {
+      tx.update(contacts)
+        .set({ backendSessionId: null })
+        .where(eq(contacts.personaTemplateId, persona.id))
+        .run()
+    }
+  })
+
   return persona
 }
 

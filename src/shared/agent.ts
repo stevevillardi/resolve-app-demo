@@ -60,6 +60,12 @@ export const agentErrorKindSchema = z.enum([
   'sandbox_denied',
   'network',
   'auth',
+  /**
+   * The backend no longer recognises the stored resume key — a model/backend
+   * change or vendor-side expiry. Distinct from `auth` because the remedy is a
+   * fresh session, not new credentials; messaging.ts self-heals it once.
+   */
+  'session',
   'unknown'
 ])
 

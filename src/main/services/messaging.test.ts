@@ -8,6 +8,7 @@ import { contacts, groupMessages, groups, personaTemplates, usageEvents } from '
 import {
   createTurnHarness,
   DEFAULT_USAGE as USAGE,
+  defaultScript,
   REPO,
   seedContact,
   seedPersona,
@@ -293,6 +294,100 @@ describe('session resumption', () => {
     await settle()
 
     expect(db.select().from(contacts).all()[0].backendSessionId).toBeNull()
+  })
+
+  // The self-heal path: a stored resume key the backend refuses (the persona's
+  // model/backend changed, or the vendor expired the thread) must not surface
+  // as a raw vendor error — the transcript is ours, so a fresh session loses
+  // nothing the user can see.
+  describe('a dead resume key', () => {
+    const deadResume: AgentEvent[] = [
+      {
+        type: 'error',
+        kind: 'session',
+        message: 'Failed to resume session from /rollouts/abc.jsonl'
+      },
+      { type: 'done', finalText: '', usage: null }
+    ]
+
+    function seedStaleSession(): void {
+      db.update(contacts).set({ backendSessionId: 'stale-session' }).run()
+    }
+
+    it('retries once with a fresh session and completes the turn', async () => {
+      seedStaleSession()
+      harness.scriptQueue = [deadResume, defaultScript()]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      // Attempt 1 resumed the dead key; attempt 2 started clean.
+      expect(harness.created.map((c) => c.resumedFrom)).toEqual(['stale-session', null])
+      expect(listMessages('contact-a').at(-1)?.content).toBe('Looks good.')
+      // The healed turn's fresh key replaces the dead one.
+      expect(db.select().from(contacts).all()[0].backendSessionId).toBe('session-abc')
+    })
+
+    it('does not forward the healed attempt error to the renderer', async () => {
+      seedStaleSession()
+      harness.scriptQueue = [deadResume, defaultScript()]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(emitted.filter(({ event }) => event.type === 'error')).toHaveLength(0)
+    })
+
+    it('gives up after one retry rather than looping', async () => {
+      seedStaleSession()
+      // Even the fresh session reports a session error — nothing left to shed.
+      harness.script = deadResume
+      harness.scriptQueue = [deadResume, deadResume]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(harness.created).toHaveLength(2)
+      // The second failure is real and must reach the renderer.
+      expect(
+        emitted.filter(({ event }) => event.type === 'error' && event.kind === 'session')
+      ).toHaveLength(1)
+    })
+
+    it('does not restart on a session error from a fresh session', async () => {
+      // No key to shed: there is nothing a retry would change.
+      harness.script = deadResume
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(harness.created).toHaveLength(1)
+      expect(emitted.filter(({ event }) => event.type === 'error')).toHaveLength(1)
+    })
+
+    it('does not restart on non-session errors', async () => {
+      seedStaleSession()
+      harness.script = [
+        { type: 'error', kind: 'rate_limit', message: 'Rate limit exceeded' },
+        { type: 'done', finalText: '', usage: null }
+      ]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(harness.created).toHaveLength(1)
+      expect(db.select().from(contacts).all()[0].backendSessionId).toBe('stale-session')
+    })
+
+    it('records usage exactly once for a healed turn', async () => {
+      seedStaleSession()
+      harness.scriptQueue = [deadResume, defaultScript()]
+
+      sendMessage('contact-a', 'go')
+      await settle(30)
+
+      expect(db.select().from(usageEvents).all()).toHaveLength(1)
+    })
   })
 
   it('announces the spend so a view nobody subscribed to can refresh', async () => {
