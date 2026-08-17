@@ -581,3 +581,157 @@ export async function deleteBranch(repoPath: string, branch: string, force = fal
   const result = await git(['branch', force ? '-D' : '-d', branch], repoPath)
   if (result.code !== 0) throw localGitError(`Could not delete ${branch}`, result)
 }
+
+// --- Diffs & landing (Phase 19) ----------------------------------------------
+
+export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed'
+
+export interface ChangedEntry {
+  path: string
+  /** Only for renames: where the content used to live. */
+  oldPath?: string
+  status: ChangeStatus
+}
+
+/** Where `branch` diverged from `ref` — the base a three-dot diff is against. */
+export async function mergeBase(cwd: string, a: string, b: string): Promise<string | null> {
+  const result = await git(['merge-base', a, b], cwd)
+  return result.code === 0 ? result.stdout.trim() || null : null
+}
+
+/**
+ * What changed between two revisions, with renames detected.
+ *
+ * `-M` matters for review: without it a rename reads as a delete plus an add,
+ * which is the most alarming possible rendering of the least alarming change.
+ * Copies (`C`) are folded into `added` and type changes (`T`) into `modified` —
+ * both are rare, and a reviewer cares what the file *is*, not git's taxonomy.
+ */
+export async function diffNameStatus(
+  cwd: string,
+  from: string,
+  to: string
+): Promise<ChangedEntry[]> {
+  const result = await git(['diff', '--name-status', '-M', from, to], cwd)
+  if (result.code !== 0) throw localGitError('Could not diff the revisions', result)
+
+  const entries: ChangedEntry[] = []
+  for (const line of result.stdout.split('\n')) {
+    if (!line.trim()) continue
+    const [code, ...paths] = line.split('\t')
+    const kind = code[0]
+    if (kind === 'R' && paths.length === 2) {
+      entries.push({ path: paths[1], oldPath: paths[0], status: 'renamed' })
+    } else if (kind === 'C' && paths.length === 2) {
+      entries.push({ path: paths[1], status: 'added' })
+    } else if (kind === 'A') {
+      entries.push({ path: paths[0], status: 'added' })
+    } else if (kind === 'D') {
+      entries.push({ path: paths[0], status: 'deleted' })
+    } else {
+      // M, T, and anything git invents later: it exists on both sides.
+      entries.push({ path: paths[0], status: 'modified' })
+    }
+  }
+  return entries
+}
+
+/**
+ * The paths whose change between two revisions is binary — `--numstat` prints
+ * `-` for both counts. Rename lines arrive as `src/{old => new}` (or a bare
+ * `old => new`) and are resolved to the new path, matching diffNameStatus.
+ */
+export async function binaryPaths(cwd: string, from: string, to: string): Promise<Set<string>> {
+  const result = await git(['diff', '--numstat', '-M', from, to], cwd)
+  if (result.code !== 0) return new Set()
+
+  const paths = new Set<string>()
+  for (const line of result.stdout.split('\n')) {
+    const [added, deleted, ...rest] = line.split('\t')
+    if (added !== '-' || deleted !== '-' || rest.length === 0) continue
+    const raw = rest.join('\t')
+    const braced = /^(.*)\{(.*) => (.*)\}(.*)$/.exec(raw)
+    if (braced) paths.add(`${braced[1]}${braced[3]}${braced[4]}`)
+    else if (raw.includes(' => ')) paths.add(raw.split(' => ')[1])
+    else paths.add(raw)
+  }
+  return paths
+}
+
+export interface FileAtRev {
+  /** Null when the path does not exist at that revision, or was too large. */
+  text: string | null
+  /** True when the file exists but was over the cap — text is withheld, not empty. */
+  truncated: boolean
+}
+
+/**
+ * A file's content at a revision, refused (not clipped) over `maxBytes`.
+ *
+ * Size is asked first via `cat-file -s` so a huge blob is never buffered at
+ * all. Withholding rather than clipping because a clipped diff pane silently
+ * reviews half a file — "too large to render here" is honest, half is not.
+ */
+export async function fileAtRev(
+  cwd: string,
+  rev: string,
+  path: string,
+  maxBytes: number
+): Promise<FileAtRev> {
+  const size = await git(['cat-file', '-s', `${rev}:${path}`], cwd)
+  if (size.code !== 0) return { text: null, truncated: false }
+  if (Number(size.stdout.trim()) > maxBytes) return { text: null, truncated: true }
+
+  const result = await git(['show', `${rev}:${path}`], cwd)
+  if (result.code !== 0) return { text: null, truncated: false }
+  return { text: result.stdout, truncated: false }
+}
+
+/** Whether `ref` is already contained in `of` — "merged", as git defines it. */
+export async function isAncestor(cwd: string, ref: string, of: string): Promise<boolean> {
+  const result = await git(['merge-base', '--is-ancestor', ref, of], cwd)
+  return result.code === 0
+}
+
+/**
+ * Files that changed between two specific commits — a two-dot question, unlike
+ * changedFiles' three-dot one. This is per-turn arithmetic: head-before to
+ * head-after of one turn, where a moving base has no meaning.
+ */
+export async function diffNameOnlyBetween(
+  cwd: string,
+  from: string,
+  to: string
+): Promise<string[]> {
+  const result = await git(['diff', '--name-only', from, to], cwd)
+  if (result.code !== 0) return []
+  return result.stdout.split('\n').filter(Boolean)
+}
+
+/**
+ * Stages everything and commits it, returning the new head.
+ *
+ * The one place the app authors a commit, and it is reached only from a click
+ * (see docs/plan/19-review-landing.md) — Phase 9's refusal to commit
+ * *unattended* work still stands on every turn and routine path. `--author`
+ * attributes the work to the persona while the user, whose click this was,
+ * stays the committer git's own config names.
+ */
+export async function commitAll(
+  cwd: string,
+  message: string,
+  author: { name: string; email: string }
+): Promise<string> {
+  const add = await git(['add', '-A'], cwd)
+  if (add.code !== 0) throw localGitError('Could not stage the changes', add)
+
+  const commit = await git(
+    ['commit', '-m', message, `--author=${author.name} <${author.email}>`],
+    cwd
+  )
+  if (commit.code !== 0) throw localGitError('Could not commit the changes', commit)
+
+  const head = await headSha(cwd)
+  if (!head) throw new Error(`Committed, but could not read the new head of ${cwd}.`)
+  return head
+}
