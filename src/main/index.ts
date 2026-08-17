@@ -16,7 +16,12 @@ import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { beginQuit, isQuitting } from './lifecycle'
 import { getMainWindow, setWindowFactory, showMainWindow } from './main-window'
-import { emitRoutinesChanged, onRunsChangedInMain } from './services/agent-events'
+import {
+  emitRoutinesChanged,
+  onMessagesChangedInMain,
+  onRunsChangedInMain
+} from './services/agent-events'
+import { refreshDockBadge } from './dock-badge'
 import { nodeCronEngine } from './services/cron-engine'
 import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
@@ -144,6 +149,10 @@ app.whenReady().then(() => {
   // The tray's "N turns running" line goes stale exactly when the run set
   // changes, which is also the only time it is worth redrawing.
   onRunsChangedInMain(refreshTrayMenu)
+  // The dock badge, same pattern: recomputed on every message write or
+  // mark-read, and once at startup so a badge earned while quit reappears.
+  onMessagesChangedInMain(refreshDockBadge)
+  refreshDockBadge()
 
   installApplicationMenu()
 
