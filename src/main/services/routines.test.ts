@@ -12,6 +12,7 @@ const {
   getRoutine,
   listEnabledRoutines,
   listRoutines,
+  recordMissedRun,
   recordRunOutcome,
   updateRoutine
 } = await import('./routines')
@@ -182,5 +183,60 @@ describe('recordRunOutcome', () => {
     const after = getRoutine(created.id)
     expect(after?.lastRunAt).toBe(1_755_000_000_000)
     expect(after?.lastRunSummary).toBe('Skipped — someone else is in this repo.')
+  })
+
+  // "Missed" means nothing happened at the scheduled time. An attempt —
+  // even a lock-refused one, which is what this summary is — happened, so it
+  // ends the silence the counter exists to break. Run now clears it too, by
+  // the same route.
+  it('clears the miss counter, because any attempt is the catch-up', () => {
+    const created = createRoutine(draft())
+    recordMissedRun(created.id, 1_755_000_000_000)
+    recordMissedRun(created.id, 1_755_000_060_000)
+
+    recordRunOutcome(created.id, 'Skipped — someone else is in this repo.')
+
+    const after = getRoutine(created.id)
+    expect(after?.missedRunCount).toBe(0)
+    // The stamp stays: "last missed Tuesday" is still true after a catch-up,
+    // and the count alone says whether anything is currently outstanding.
+    expect(after?.lastMissedAt).toBe(1_755_000_060_000)
+  })
+})
+
+describe('recordMissedRun', () => {
+  it('accumulates the count and keeps the most recent miss', () => {
+    const created = createRoutine(draft())
+
+    recordMissedRun(created.id, 1_755_000_000_000)
+    recordMissedRun(created.id, 1_755_000_060_000)
+
+    const after = getRoutine(created.id)
+    expect(after?.missedRunCount).toBe(2)
+    expect(after?.lastMissedAt).toBe(1_755_000_060_000)
+  })
+
+  it('no-ops for a routine deleted between arming and missing', () => {
+    expect(() => recordMissedRun('routine-gone')).not.toThrow()
+  })
+
+  // The stale-editor rule, extended to the new columns: an editor open across
+  // a miss must not be able to save its snapshot back over the counter.
+  it('is not writable through the draft or update shapes', () => {
+    const created = createRoutine(draft())
+    recordMissedRun(created.id)
+
+    updateRoutine({
+      id: created.id,
+      contactId: CONTACT,
+      schedule: '0 9 * * *',
+      prompt: 'Edited prompt.',
+      enabled: true,
+      // Stale run history a snapshot might carry; the update shape strips it.
+      missedRunCount: 0,
+      lastMissedAt: null
+    } as never)
+
+    expect(getRoutine(created.id)?.missedRunCount).toBe(1)
   })
 })

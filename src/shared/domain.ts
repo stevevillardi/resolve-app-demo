@@ -244,7 +244,10 @@ export const routineSchema = z.object({
   prompt: z.string(),
   enabled: z.boolean(),
   lastRunAt: z.number().nullable(),
-  lastRunSummary: z.string().nullable()
+  lastRunSummary: z.string().nullable(),
+  /** Scheduled fires that never ran (machine asleep). Cleared by any attempt. */
+  missedRunCount: z.number(),
+  lastMissedAt: z.number().nullable()
 })
 
 /**
@@ -345,11 +348,15 @@ export const groupMessageDraftSchema = groupMessageSchema.omit({
 export const routineDraftSchema = routineSchema.omit({
   id: true,
   lastRunAt: true,
-  lastRunSummary: true
+  lastRunSummary: true,
+  missedRunCount: true,
+  lastMissedAt: true
 })
 export const routineUpdateSchema = routineSchema.omit({
   lastRunAt: true,
-  lastRunSummary: true
+  lastRunSummary: true,
+  missedRunCount: true,
+  lastMissedAt: true
 })
 
 // --- Inferred types ---------------------------------------------------------

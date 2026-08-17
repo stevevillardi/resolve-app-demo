@@ -131,7 +131,9 @@ export function toRoutine(row: RoutineRow): Routine {
     prompt: row.prompt,
     enabled: row.enabled,
     lastRunAt: row.lastRunAt === null ? null : row.lastRunAt.getTime(),
-    lastRunSummary: row.lastRunSummary
+    lastRunSummary: row.lastRunSummary,
+    missedRunCount: row.missedRunCount,
+    lastMissedAt: row.lastMissedAt === null ? null : row.lastMissedAt.getTime()
   }
 }
 

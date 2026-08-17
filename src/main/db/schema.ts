@@ -259,7 +259,17 @@ export const routines = sqliteTable(
     prompt: text('prompt').notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).notNull(),
     lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
-    lastRunSummary: text('last_run_summary')
+    lastRunSummary: text('last_run_summary'),
+    /**
+     * Run history, like the two above — never writable through the editor.
+     * Misses accumulate here (Phase 20) because node-cron does not catch up a
+     * missed fire (a Phase 8 decision that stands) and the armed handles are
+     * destroyed and re-created on every routine edit, so an in-memory counter
+     * would zero itself whenever anything was saved. Any recorded attempt
+     * resets the count — Run now is the catch-up.
+     */
+    missedRunCount: integer('missed_run_count').notNull().default(0),
+    lastMissedAt: integer('last_missed_at', { mode: 'timestamp_ms' })
   },
   (table) => [index('routines_contact_idx').on(table.contactId)]
 )

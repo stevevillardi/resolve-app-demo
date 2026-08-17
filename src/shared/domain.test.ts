@@ -276,7 +276,9 @@ describe('routine', () => {
         prompt: 'Sweep.',
         enabled: true,
         lastRunAt: null,
-        lastRunSummary: null
+        lastRunSummary: null,
+        missedRunCount: 0,
+        lastMissedAt: null
       })
     ).not.toThrow()
   })

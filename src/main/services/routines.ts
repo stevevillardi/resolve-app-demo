@@ -15,9 +15,10 @@ import type { Routine, RoutineDraft, RoutineUpdate } from '../../shared/domain'
  * calls a mutation here is responsible for re-syncing the schedules, which is
  * composed at the procedure layer.
  *
- * `lastRunAt`/`lastRunSummary` are run history: written by `recordRunOutcome`
- * and by nothing else. Neither write shape carries them, so an editor left open
- * across a fire cannot save its stale copy back over what the fire recorded.
+ * `lastRunAt`/`lastRunSummary`/`missedRunCount`/`lastMissedAt` are run
+ * history: written by `recordRunOutcome` and `recordMissedRun` and by nothing
+ * else. Neither write shape carries them, so an editor left open across a fire
+ * cannot save its stale copy back over what the fire recorded.
  */
 
 export function listRoutines(): Routine[] {
@@ -36,10 +37,17 @@ export function listEnabledRoutines(): Routine[] {
 export function createRoutine(draft: RoutineDraft): Routine {
   assertValidSchedule(draft.schedule)
 
-  const routine: Routine = { id: randomUUID(), ...draft, lastRunAt: null, lastRunSummary: null }
+  const routine: Routine = {
+    id: randomUUID(),
+    ...draft,
+    lastRunAt: null,
+    lastRunSummary: null,
+    missedRunCount: 0,
+    lastMissedAt: null
+  }
   initDb()
     .insert(routines)
-    .values({ ...routine, lastRunAt: null })
+    .values({ ...routine, lastRunAt: null, lastMissedAt: null })
     .run()
   return routine
 }
@@ -88,7 +96,31 @@ export function deleteRoutine(id: string): void {
 export function recordRunOutcome(id: string, summary: string, at = Date.now()): void {
   initDb()
     .update(routines)
-    .set({ lastRunAt: new Date(at), lastRunSummary: summary })
+    // Any recorded attempt clears the miss counter — including a lock-refused
+    // skip, because "missed" means *nothing happened at the scheduled time*,
+    // and an attempt that was refused still happened and left its own trace in
+    // the summary. Run now is the catch-up, so it must clear too.
+    .set({ lastRunAt: new Date(at), lastRunSummary: summary, missedRunCount: 0 })
+    .where(eq(routines.id, id))
+    .run()
+}
+
+/**
+ * Records a fire node-cron skipped outright (Phase 20, review §C2).
+ *
+ * The policy stands from Phase 8: a missed fire is never run late and never
+ * caught up on wake. What changed is the silence around it — a daily 9:00
+ * routine on a laptop that sleeps could miss for a month while its row read
+ * exactly like a healthy one. `lastMissedAt` keeps the most recent miss;
+ * the count accumulates until any attempt resets it.
+ */
+export function recordMissedRun(id: string, at = Date.now()): void {
+  const routine = getRoutine(id)
+  if (!routine) return
+
+  initDb()
+    .update(routines)
+    .set({ missedRunCount: routine.missedRunCount + 1, lastMissedAt: new Date(at) })
     .where(eq(routines.id, id))
     .run()
 }
