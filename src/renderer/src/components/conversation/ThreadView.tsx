@@ -16,6 +16,7 @@ import { WorkChips } from './WorkChips'
 import { WorkDiffDialog } from './WorkDiffDialog'
 import { Composer } from './Composer'
 import { useContacts, useContactContext } from '@/hooks/useConversations'
+import { useContactFiles } from '@/hooks/useContactFiles'
 import { usePersonas } from '@/hooks/usePersonas'
 import {
   useActiveRuns,
@@ -70,6 +71,8 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   const [workMessageId, setWorkMessageId] = useState<string | null>(null)
   const { data: capability } = useContactContext(contactId, draft.startsWith('/'))
   const commands = useMemo(() => slashCommands(capability), [capability])
+  // Same lazy gate for @file: no git until an @ exists to complete.
+  const files = useContactFiles(contactId, draft.includes('@'))
 
   const { data: prState } = usePullRequestState(contactId)
   const { open: openPr, isPending: opening, error: prError, reset: resetPr } = useOpenPullRequest()
@@ -293,6 +296,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
         value={draft}
         onValueChange={(value) => setDraft(draftId, value)}
         commands={commands}
+        files={files}
         onSend={(value) => {
           reset()
           // Cleared only on acceptance: a lock refusal rejects the mutation,
