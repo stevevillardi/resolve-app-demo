@@ -11,6 +11,21 @@ import type { MessageBubbleError } from '@/types/message'
  * so it lives where it can be.
  */
 
+/**
+ * One tool call, as it happens.
+ *
+ * An ordered array rather than a map keyed by `toolCallId`: a timeline is a
+ * sequence, and object key-insertion order is an implementation detail this
+ * codebase states nowhere. Lookups are a `find` over a handful of entries.
+ */
+export interface ToolCall {
+  id: string
+  name: string
+  /** The command line, the path, the query — whatever the backend named. */
+  detail: string
+  status: 'running' | 'completed' | 'failed'
+}
+
 export interface ThreadStream {
   /**
    * Blocks the backend has declared final. Kept apart from `pending` because
@@ -19,6 +34,15 @@ export interface ThreadStream {
   committed: string
   /** The current block, still arriving delta by delta. */
   pending: string
+  /**
+   * Every tool call this turn has made, in the order they started.
+   *
+   * Live only, and dropped when the turn's persisted rows are refetched. The
+   * honest consequence is recorded rather than hidden: a routine firing at 3am
+   * leaves a record of what it concluded and none of what it called. See
+   * docs/plan/15-deferred-capability-work.md.
+   */
+  toolCalls: ToolCall[]
   /** What the agent is doing right now, for StreamingIndicator. */
   activity: string | null
   /** Set by an `error` event; the thread renders this instead of a bubble. */
@@ -30,6 +54,7 @@ export interface ThreadStream {
 export const emptyStream: ThreadStream = {
   committed: '',
   pending: '',
+  toolCalls: [],
   activity: null,
   error: null,
   finished: false
@@ -38,6 +63,21 @@ export const emptyStream: ThreadStream = {
 /** What the in-progress bubble should display. */
 export function streamText(stream: ThreadStream): string {
   return stream.committed + stream.pending
+}
+
+/**
+ * Replaces one call by id, copying rather than mutating.
+ *
+ * The purity guard in stream.test.ts is not decoration: `applyAgentEvent` is
+ * folded into Zustand state, and mutating an entry in place would leave the
+ * store holding an object React has already decided is unchanged.
+ */
+function patchCall(
+  calls: ToolCall[],
+  id: string,
+  update: (call: ToolCall) => ToolCall
+): ToolCall[] {
+  return calls.map((call) => (call.id === id ? update(call) : call))
 }
 
 /**
@@ -60,15 +100,55 @@ export function applyAgentEvent(stream: ThreadStream, event: AgentEvent): Thread
       return { ...stream, committed: stream.committed + event.text, pending: '' }
 
     case 'tool_start':
-      return { ...stream, activity: event.detail ?? event.name }
+      return {
+        ...stream,
+        toolCalls: [
+          ...stream.toolCalls,
+          {
+            id: event.toolCallId,
+            name: event.name,
+            detail: event.detail ?? '',
+            status: 'running'
+          }
+        ],
+        activity: event.detail ?? event.name
+      }
 
     case 'tool_progress':
-      return { ...stream, activity: event.output ?? event.name }
+      return {
+        ...stream,
+        toolCalls: patchCall(stream.toolCalls, event.toolCallId, (call) => ({
+          ...call,
+          // Progress carries the latest output, which is more use in the
+          // timeline than the command that produced it.
+          detail: event.output ?? call.detail
+        })),
+        activity: event.output ?? event.name
+      }
 
-    // Only clears the indicator if this is the tool it was showing. A parallel
-    // tool finishing first would otherwise blank the line while another runs.
-    case 'tool_end':
-      return { ...stream, activity: null }
+    /**
+     * Clears the indicator only if this is the tool it was showing.
+     *
+     * The comment above this arm claimed exactly that for three phases while
+     * the code ignored `toolCallId` and cleared unconditionally, so the first
+     * of two parallel calls to finish blanked the line while the other still
+     * ran. Deriving `activity` from what is still running makes the claim and
+     * the code the same thing rather than two statements that can disagree.
+     */
+    case 'tool_end': {
+      const toolCalls = patchCall(stream.toolCalls, event.toolCallId, (call) => ({
+        ...call,
+        status: event.status,
+        detail: event.detail ?? call.detail
+      }))
+      const running = toolCalls.filter((call) => call.status === 'running')
+
+      return {
+        ...stream,
+        toolCalls,
+        activity: running.length === 0 ? null : (running.at(-1)?.detail ?? running.at(-1)!.name)
+      }
+    }
 
     case 'error':
       return { ...stream, error: { kind: event.kind, message: event.message } }

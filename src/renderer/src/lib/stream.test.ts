@@ -116,6 +116,32 @@ describe('tool activity', () => {
     expect(stream.activity).toBeNull()
   })
 
+  it('keeps showing the other tool when one of two finishes first', () => {
+    // The comment on the tool_end arm has always claimed this, and the arm
+    // ignored toolCallId and cleared unconditionally — so the first of two
+    // parallel calls to finish blanked the line while the second still ran.
+    // Both backends emit interleaved calls, so this is the normal case for any
+    // turn that greps two things at once, not an edge one.
+    const stream = fold([
+      { type: 'tool_start', toolCallId: 't1', name: 'Bash', detail: 'rg auth' },
+      { type: 'tool_start', toolCallId: 't2', name: 'Bash', detail: 'npm test' },
+      { type: 'tool_end', toolCallId: 't1', name: 'Bash', status: 'completed' }
+    ])
+
+    expect(stream.activity).toBe('npm test')
+  })
+
+  it('clears only once the last one finishes', () => {
+    const stream = fold([
+      { type: 'tool_start', toolCallId: 't1', name: 'Bash', detail: 'rg auth' },
+      { type: 'tool_start', toolCallId: 't2', name: 'Bash', detail: 'npm test' },
+      { type: 'tool_end', toolCallId: 't1', name: 'Bash', status: 'completed' },
+      { type: 'tool_end', toolCallId: 't2', name: 'Bash', status: 'completed' }
+    ])
+
+    expect(stream.activity).toBeNull()
+  })
+
   it('leaves accumulated text alone', () => {
     const stream = fold([
       { type: 'text_message', text: 'Checking.' },
