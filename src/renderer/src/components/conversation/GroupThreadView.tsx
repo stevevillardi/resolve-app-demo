@@ -20,6 +20,7 @@ import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useAgentStreams, useGroupMessages, useMentionInGroup } from '@/hooks/useGroupMessages'
 import { useActiveRuns, useCancelRun, useMessagePreviews, useRetryTurn } from '@/hooks/useMessages'
+import { useContactFiles } from '@/hooks/useContactFiles'
 import { useMarkRead } from '@/hooks/useUnread'
 import { groupRetryTarget } from '@/lib/turn-tail'
 import { firstUnreadIndex } from '@/lib/unread'
@@ -190,6 +191,25 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
   )
   const retryTarget = groupRetryTarget(thread, previews, memberIds, liveIds)
 
+  // Computed before the early returns because the file hook below needs the
+  // resolved target. With no group yet, repoContacts is empty and parseMention
+  // simply resolves nobody.
+  const mentionTargets = repoContacts.map((contact) => ({
+    contactId: contact.id,
+    name: personaOf(contact)?.name ?? contact.displayName
+  }))
+  const parsed = parseMention(draft, mentionTargets)
+
+  // @file completes against the *mentioned* contact's tree — the session the
+  // message is going to — and only once a mention resolves; before that an @
+  // is still the address, not a path. minStart puts the mention token itself
+  // out of the file parser's reach even when the draft starts with spaces.
+  const fileMinStart = draft.length - draft.trimStart().length + 1
+  const files = useContactFiles(
+    parsed?.contactId ?? '',
+    Boolean(parsed) && draft.includes('@', fileMinStart)
+  )
+
   // Same boundary-at-open capture and read-on-open/arrival contract as
   // ThreadView — see the comments there.
   const [boundary, setBoundary] = useState<{ id: string; at: number | null } | null>(null)
@@ -223,13 +243,6 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
   }
 
   const name = repoName(group.repoPath)
-
-  const mentionTargets = repoContacts.map((contact) => ({
-    contactId: contact.id,
-    name: personaOf(contact)?.name ?? contact.displayName
-  }))
-
-  const parsed = parseMention(draft, mentionTargets)
   const isRunning = Boolean(live)
 
   const handleSend = (): void => {
@@ -356,6 +369,8 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
         value={draft}
         onValueChange={setDraft}
         onSend={handleSend}
+        files={files}
+        fileMinStart={fileMinStart}
         busy={isRunning}
         onStop={() => live?.turn && cancel(live.turn.runId)}
         // A draft addressed to nobody has nowhere to go: the Group has no
