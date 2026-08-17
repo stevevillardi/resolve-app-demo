@@ -578,10 +578,26 @@ export const ipcContract = {
    * Zod boundary instead of relying on a service-level check.
    *
    * A Contact bound to the wrong repo is deleted and made again — which is what
-   * `contacts.delete`'s worktree cleanup below is for.
+   * `contacts.delete`'s worktree cleanup below is for. (Since Phase 17 the
+   * persona binding alone has a dedicated, safe path: `rebindPersona` below.)
    */
   'contacts.update': {
     input: z.object({ id: z.string(), displayName: z.string().min(1) }),
+    output: contactSchema
+  },
+  /**
+   * Moves a Contact to another persona (Phase 17) — the one binding change
+   * that CAN be made safe, so it is: the resume key is cleared in the same
+   * transaction (a session id is an index into one SDK's storage, and the new
+   * persona may be on the other backend), while the repo, worktree, branch and
+   * message history all stay. Refused while a turn is running — rebinding
+   * under a live stream would change who is speaking mid-sentence.
+   *
+   * repoPath and isolation remain immutable; their remedy is still
+   * delete-and-recreate, now guided by the prefilled NewContactFlow.
+   */
+  'contacts.rebindPersona': {
+    input: z.object({ id: z.string(), personaTemplateId: z.string() }),
     output: contactSchema
   },
   /**

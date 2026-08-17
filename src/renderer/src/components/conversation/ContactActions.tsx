@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Layers, Pencil, Trash2 } from 'lucide-react'
+import { Layers, Loader2, Pencil, Trash2, UserRoundPen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -15,7 +15,11 @@ import { ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-m
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { ContextPanel } from './ContextPanel'
 import { Field } from '@/components/common/Field'
-import { useDeleteContact, useRenameContact } from '@/hooks/useConversations'
+import { toast } from 'sonner'
+import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ListRow } from '@/components/common/ListRow'
+import { useDeleteContact, useRebindPersona, useRenameContact } from '@/hooks/useConversations'
+import { usePersonas } from '@/hooks/usePersonas'
 import { useUiStore } from '@/store/useUiStore'
 import type { Contact, PersonaBackend } from '@/types'
 
@@ -30,7 +34,7 @@ import type { Contact, PersonaBackend } from '@/types'
  * (draft name, refusal state) lives here.
  */
 
-export type ContactDialogKind = 'context' | 'rename' | 'delete'
+export type ContactDialogKind = 'context' | 'rename' | 'rebind' | 'delete'
 
 interface ContactActionItemsProps {
   /** Which menu family these items render into — they must match their popup. */
@@ -51,6 +55,10 @@ export function ContactActionItems({ kind, onOpen }: ContactActionItemsProps): R
       <Item onClick={() => onOpen('rename')}>
         <Pencil />
         Rename…
+      </Item>
+      <Item onClick={() => onOpen('rebind')}>
+        <UserRoundPen />
+        Change persona…
       </Item>
       <Separator />
       <Item variant="destructive" onClick={() => onOpen('delete')}>
@@ -80,6 +88,7 @@ export function ContactActionDialogs({
           refusal or half-typed name is unmounted state, not something to
           remember to reset. */}
       {open === 'rename' && <RenameContactDialog contact={contact} onClose={onClose} />}
+      {open === 'rebind' && <RebindPersonaDialog contact={contact} onClose={onClose} />}
       {open === 'delete' && <DeleteContactDialog contact={contact} onClose={onClose} />}
       <ContextPanel
         contactId={contact.id}
@@ -196,5 +205,90 @@ function DeleteContactDialog({
         })
       }
     />
+  )
+}
+
+/**
+ * The persona rebind (Phase 17) — the one binding change contacts.update's
+ * narrow shape deliberately left out, now that it has a safe dedicated path.
+ * Main clears the resume key in the same transaction and refuses mid-turn;
+ * this dialog's job is to say the consequence out loud before asking.
+ */
+function RebindPersonaDialog({
+  contact,
+  onClose
+}: {
+  contact: Contact
+  onClose: () => void
+}): React.JSX.Element {
+  const { data: personas = [] } = usePersonas()
+  const { rebind, isPending, error } = useRebindPersona()
+  const [chosenId, setChosenId] = useState<string | null>(null)
+
+  const options = personas.filter((persona) => persona.id !== contact.personaTemplateId)
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Change persona</DialogTitle>
+          <DialogDescription>
+            Starts a fresh backend session under the new persona. The repository, its worktree, and
+            the conversation history all stay.
+          </DialogDescription>
+        </DialogHeader>
+
+        {options.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            There is no other persona to switch to — create one in the Personas section first.
+          </p>
+        ) : (
+          <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+            {options.map((persona) => (
+              <ListRow
+                key={persona.id}
+                active={chosenId === persona.id}
+                align="center"
+                bordered
+                onSelect={() => setChosenId(persona.id)}
+                leading={
+                  <AvatarColorSwatch
+                    name={persona.name}
+                    color={persona.avatarColor}
+                    seed={persona.id}
+                  />
+                }
+              >
+                <span className="block truncate text-row font-medium">{persona.name}</span>
+                <span className="text-muted-foreground block text-xs">
+                  {persona.backend === 'claude' ? 'Claude' : 'Codex'}
+                </span>
+              </ListRow>
+            ))}
+          </div>
+        )}
+
+        {error && <p className="text-destructive text-sm text-pretty">{error}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={chosenId === null || isPending}
+            onClick={() => {
+              if (chosenId === null) return
+              rebind(contact.id, chosenId, () => {
+                toast('Persona changed — the next message starts a fresh session')
+                onClose()
+              })
+            }}
+          >
+            {isPending && <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />}
+            Change persona
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
