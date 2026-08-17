@@ -140,13 +140,31 @@ function probeLoginStatus(): CodexAuthStatus {
     ? result.error.message.includes('ETIMEDOUT')
       ? 'the check timed out'
       : result.error.message
-    : (result.stderr?.toString().trim().split('\n')[0] ??
-      `the CLI exited with code ${result.status}`)
+    : describeCliFailure(result.stderr?.toString() ?? '', result.status)
   return {
     authenticated: Boolean(apiKey),
     source: apiKey ? 'api_key' : null,
     error: `Couldn't check Codex login: ${reason}.`
   }
+}
+
+/**
+ * A sentence a person can read, from stderr a CLI dumped. The raw text used to
+ * reach the Home banner verbatim — four lines of WARNING and an absolute
+ * CODEX_HOME path is diagnostics, not a status. Warning noise is skipped, the
+ * first substantive line wins, and anything still oversized is truncated; the
+ * full stderr goes to the console, where diagnostics belong.
+ */
+function describeCliFailure(stderr: string, status: number | null): string {
+  const lines = stderr
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !/^warning[:\s]/i.test(line))
+
+  const line = lines[0]
+  if (!line) return `the CLI exited with code ${status}`
+  if (stderr.trim() !== line) console.warn('[codex-auth] login status stderr:\n' + stderr.trim())
+  return line.length > 140 ? `${line.slice(0, 139)}…` : line
 }
 
 // --- Device-code login ------------------------------------------------------
