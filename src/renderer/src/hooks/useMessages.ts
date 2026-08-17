@@ -4,6 +4,7 @@ import { callProcedure, ipcErrorMessage, onAgentEvent, onRunsChanged } from '@/l
 import { useRunStore } from '@/store/useRunStore'
 import { contactsKey } from './useConversations'
 import type { PersistedMessage } from '@/types'
+import type { ActiveRun } from '../../../shared/ipc-contract'
 
 /**
  * Thread reads and the send/stop pair (Phase 6).
@@ -127,9 +128,7 @@ export function useCancelRun(): { cancel: (runId: string) => void } {
  * The whole set rather than this contact's, because what disables a composer is
  * a turn on a *sibling* contact bound to the same repo (blueprint §15D).
  */
-export function useActiveRuns(): UseQueryResult<
-  { runId: string; contactId: string; contactName: string; workingPath: string }[]
-> {
+export function useActiveRuns(): UseQueryResult<ActiveRun[]> {
   const queryClient = useQueryClient()
 
   useEffect(

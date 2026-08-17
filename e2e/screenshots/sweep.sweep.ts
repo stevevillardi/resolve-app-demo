@@ -89,7 +89,10 @@ async function sweep(page: Page, app: ElectronApplication, profileName: string):
       // exist to capture.
       await page.reload()
       await waitForShell(page)
-      await new Promise((resolve) => setTimeout(resolve, 400))
+      // Long enough for the launch splash to finish fading. App.tsx holds it
+      // for a 650ms minimum and then transitions out; shooting earlier catches
+      // the wordmark ghosted over the workspace pane.
+      await new Promise((resolve) => setTimeout(resolve, 1400))
 
       const stem = `${profileName}-${theme.toLowerCase()}-${sizeName}`
 
