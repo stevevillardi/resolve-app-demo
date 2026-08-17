@@ -13,6 +13,7 @@ import {
   CommandShortcut
 } from '@/components/ui/command'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { KeyHint } from '@/components/common/KeyHint'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { NAV_ITEMS } from '@/lib/nav-items'
 import { useContacts, useGroups } from '@/hooks/useConversations'
@@ -324,25 +325,26 @@ export function CommandPalette(): React.JSX.Element {
         </CommandList>
         <div className="border-border text-muted-foreground flex items-center gap-3 border-t px-3 py-2 text-meta">
           <span className="flex items-center gap-1">
-            <CommandShortcut className="ml-0 font-mono">↑↓</CommandShortcut> navigate
+            <KeyHint>↑↓</KeyHint> navigate
           </span>
           <span className="flex items-center gap-1">
-            <CommandShortcut className="ml-0 font-mono">↵</CommandShortcut> open
+            <KeyHint>↵</KeyHint> open
           </span>
           <span className="flex items-center gap-1">
-            <CommandShortcut className="ml-0 font-mono">esc</CommandShortcut> dismiss
+            <KeyHint>esc</KeyHint> dismiss
           </span>
           {/*
             The app's other two shortcuts, documented in the one place a user
             already comes looking for shortcuts. An undiscoverable binding is
-            not a feature, and there is nowhere else in the app that lists them.
+            not a feature. Home's guide now lists the full set; these two stay
+            because they are the ones that apply while the palette is open.
           */}
           <span className="border-border ml-auto flex items-center gap-3 border-l pl-3">
             <span className="flex items-center gap-1">
-              <CommandShortcut className="ml-0 font-mono">/</CommandShortcut> search list
+              <KeyHint>/</KeyHint> search list
             </span>
             <span className="flex items-center gap-1">
-              <CommandShortcut className="ml-0 font-mono">⌘B</CommandShortcut> rail
+              <KeyHint>⌘B</KeyHint> rail
             </span>
           </span>
         </div>
