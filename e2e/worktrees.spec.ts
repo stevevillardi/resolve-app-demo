@@ -229,5 +229,8 @@ test('the branches panel renders and shows the repo’s branches', async () => {
   // And the detail pane mounts with a real branch selected.
   await launched.window.getByText(contact.branch!, { exact: false }).first().click()
   await expect(launched.window.getByRole('button', { name: /^Merge/ })).toBeVisible()
-  await expect(launched.window.getByText('Your checkout')).toBeVisible()
+  // By role, not by text: the empty-diff sentence also contains the words
+  // "your checkout", and substring matching is case-insensitive — the target
+  // row is a button, and the button is what proves the pane mounted.
+  await expect(launched.window.getByRole('button', { name: 'Your checkout' })).toBeVisible()
 })
