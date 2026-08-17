@@ -93,7 +93,16 @@ export function SegmentedControl<T extends string>({
       ref={trackRef}
       role="radiogroup"
       aria-label={ariaLabel}
-      className={cn('bg-muted relative rounded-lg p-0.5', fill ? 'flex' : 'inline-flex', className)}
+      // `self-start` as well as `inline-flex`: every caller puts this inside a
+      // `flex flex-col` Field, where the default `align-items: stretch` makes
+      // an inline-flex box fill the column anyway. Sizing the segments to their
+      // labels was pointless while the track around them still spanned the pane
+      // — which is exactly what it did once the panes got wider.
+      className={cn(
+        'bg-muted relative rounded-lg p-0.5',
+        fill ? 'flex' : 'inline-flex self-start',
+        className
+      )}
     >
       <span
         aria-hidden

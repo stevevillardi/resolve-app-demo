@@ -42,7 +42,9 @@ function SkillForm({
     name !== skill.name || description !== skill.description || content !== skill.content
 
   return (
-    <div className="bg-background flex h-full min-h-0 flex-col">
+    // Declares `@container/pane` itself, because this is the one view that
+    // opts out of PaneBody — which is where every other pane gets it.
+    <div className="@container/pane bg-background flex h-full min-h-0 flex-col">
       <PaneHeader
         leading={<BookOpen className="text-muted-foreground size-4 shrink-0" />}
         title={name || 'Untitled skill'}
@@ -79,7 +81,7 @@ function SkillForm({
       {/* Metadata band. Name and description describe the skill; the
           instructions below are the skill. Keeping them on one row stops two
           short strings from consuming the top third of a writing surface. */}
-      <div className="border-border grid shrink-0 grid-cols-1 gap-4 border-b px-5 py-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+      <div className="border-border grid shrink-0 grid-cols-1 gap-4 border-b px-5 py-4 @2xl/pane:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="skill-name">Name</Label>
           <Input id="skill-name" value={name} onChange={(event) => setName(event.target.value)} />

@@ -188,9 +188,11 @@ function BranchDetailBody({
               Nothing this branch has that your checkout doesn&apos;t.
             </p>
           ) : (
-            <ul className="flex flex-col gap-0.5">
+            // A changed-file list is many short strings, so it columnises
+            // rather than running down the middle of the pane truncating.
+            <ul className="grid gap-x-6 gap-y-0.5 @2xl/pane:grid-cols-2 @5xl/pane:grid-cols-3">
               {branch.files.map((file) => (
-                <li key={file} className="text-foreground/85 font-mono text-xs">
+                <li key={file} className="text-foreground/85 truncate font-mono text-xs">
                   {file}
                 </li>
               ))}
@@ -199,7 +201,7 @@ function BranchDetailBody({
         </Section>
 
         <Section title="Merge into" description="Where this branch's commits should land.">
-          <div className="flex flex-col gap-1.5">
+          <div className="grid gap-1.5 @3xl/pane:grid-cols-2">
             {targets.map((candidate) => (
               <ListRow
                 key={candidate.path}

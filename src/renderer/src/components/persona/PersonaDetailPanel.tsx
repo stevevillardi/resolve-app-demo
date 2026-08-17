@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/select'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { CheckRow } from '@/components/common/CheckRow'
+import { FieldGrid, FieldGridSpan } from '@/components/common/FieldGrid'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyPane } from '@/components/common/EmptyPane'
@@ -21,7 +23,6 @@ import { PaneHeader } from '@/components/common/PaneHeader'
 import { PaneBody } from '@/components/common/PaneBody'
 import { Field } from '@/components/common/Field'
 import { Section } from '@/components/common/Section'
-import { cn } from '@/lib/utils'
 import { useContacts } from '@/hooks/useConversations'
 import { useDeletePersona, usePersonas, useUpdatePersona } from '@/hooks/usePersonas'
 import { useModels } from '@/hooks/useModels'
@@ -149,7 +150,10 @@ function PersonaForm({
         )}
 
         <section className="flex flex-col gap-4">
-          <div className="flex items-end gap-3">
+          {/* Capped rather than stretched. A persona name is a dozen
+              characters; giving it the full pane put its colour swatch a
+              thousand pixels from the field it belongs to. */}
+          <div className="flex max-w-md items-end gap-3">
             <div className="flex flex-1 flex-col gap-1.5">
               <Label htmlFor="persona-name">Name</Label>
               <Input
@@ -171,7 +175,7 @@ function PersonaForm({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <FieldGrid>
             <Field label="Backend" hint="Codex streams live tool progress; Claude cannot.">
               <SegmentedControl
                 options={BACKEND_OPTIONS}
@@ -206,24 +210,29 @@ function PersonaForm({
                 </SelectContent>
               </Select>
             </Field>
-          </div>
+          </FieldGrid>
 
-          <Field label="System prompt" htmlFor="persona-prompt">
-            <Textarea
-              id="persona-prompt"
-              rows={5}
-              value={systemPrompt}
-              onChange={(event) => setSystemPrompt(event.target.value)}
-              placeholder="You are a meticulous code reviewer…"
-            />
-          </Field>
+          {/* Spans, and caps itself: this is the one control in the pane that
+              is long-form prose, and a full-width textarea on a wide window is
+              a worse place to write than the narrow column it replaced. */}
+          <FieldGridSpan>
+            <Field label="System prompt" htmlFor="persona-prompt">
+              <Textarea
+                id="persona-prompt"
+                rows={5}
+                value={systemPrompt}
+                onChange={(event) => setSystemPrompt(event.target.value)}
+                placeholder="You are a meticulous code reviewer…"
+              />
+            </Field>
+          </FieldGridSpan>
         </section>
 
         <Section
           title="Permissions"
           description="Two independent axes: what this persona can touch on disk, and what it can do on GitHub."
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <FieldGrid>
             <Field label="Sandbox">
               <SegmentedControl
                 options={SANDBOX_OPTIONS}
@@ -242,45 +251,27 @@ function PersonaForm({
               />
               <ScopeChip axis="github" value={githubScope} className="self-start" />
             </Field>
-          </div>
+          </FieldGrid>
         </Section>
 
         <Section
           title="Skills"
           description="Reusable instructions injected into every session this persona starts."
         >
-          <div className="flex flex-col gap-1">
-            {allSkills.map((skill) => {
-              const checked = skillIds.includes(skill.id)
-              return (
-                <button
-                  key={skill.id}
-                  type="button"
-                  role="checkbox"
-                  aria-checked={checked}
-                  onClick={() => toggleSkill(skill.id)}
-                  className={cn(
-                    'border-border flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors',
-                    'focus-visible:ring-ring/50 outline-none focus-visible:ring-2',
-                    checked ? 'bg-accent border-accent' : 'hover:bg-accent/40'
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border',
-                      checked ? 'bg-primary text-primary-foreground border-primary' : 'border-input'
-                    )}
-                  >
-                    {checked && <Check className="size-3" />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-row font-medium">{skill.name}</span>
-                    <span className="text-muted-foreground block text-xs">{skill.description}</span>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+          {/* Three across on a wide pane. Each entry is a name and one line of
+              description, so a single column left this list running down the
+              middle of the window no matter how much room there was. */}
+          <FieldGrid columns={3} className="gap-1.5">
+            {allSkills.map((skill) => (
+              <CheckRow
+                key={skill.id}
+                checked={skillIds.includes(skill.id)}
+                onToggle={() => toggleSkill(skill.id)}
+                title={skill.name}
+                description={skill.description}
+              />
+            ))}
+          </FieldGrid>
         </Section>
 
         <Section title="Bound contacts">

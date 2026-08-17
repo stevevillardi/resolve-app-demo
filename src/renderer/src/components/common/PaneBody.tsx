@@ -3,9 +3,13 @@ import { cn } from '@/lib/utils'
 
 interface PaneBodyProps {
   /**
-   * `form` is a single column of fields — capped at a comfortable measure so
-   * labels stay near their controls on a wide window. `wide` is for content
-   * that genuinely uses the width, like a chart grid or a table.
+   * `form` is fields and rows — it packs into columns as the pane widens (see
+   * `FieldGrid`). `wide` is content that is already its own grid, like the
+   * usage dashboard's charts, and only needs the room.
+   *
+   * Both are capped, and the cap is generous rather than tight: the measure
+   * that keeps a form readable is the width of a *field*, which `FieldGrid`
+   * owns, not the width of the pane.
    */
   measure?: 'form' | 'wide'
   children: React.ReactNode
@@ -15,10 +19,20 @@ interface PaneBodyProps {
 /**
  * The scrolling body of a detail pane.
  *
- * The four workspace views each wrote this wrapper by hand and had drifted to
- * different numbers — two used `gap-5`, one `gap-6`, one a different max width
- * — so the vertical rhythm changed as you moved between sections. The measure
- * is a named choice here rather than a per-file guess.
+ * Two decisions here, both of which used to be the other way round.
+ *
+ * **It does not centre.** `mx-auto` put the content in the middle of the pane
+ * while `PaneHeader` stayed full-bleed, so the title sat hard left and the form
+ * floated in the middle of the window with no edge shared between them. Left
+ * aligned, the two line up and the pane reads as one column of content.
+ *
+ * **It is a container.** Everything responsive in here queries `@container/pane`
+ * rather than the viewport. That distinction is the whole point: this pane is a
+ * resizable panel the user can drag between 420px and the full window, while
+ * the *window* is never narrower than 940px. Viewport breakpoints therefore
+ * could not see the thing that actually varies — the four `sm:` variants this
+ * replaced were permanently on, and their `grid-cols-1` fallback had never once
+ * rendered.
  */
 export function PaneBody({
   measure = 'form',
@@ -29,8 +43,8 @@ export function PaneBody({
     <ScrollArea className="min-h-0 flex-1">
       <div
         className={cn(
-          'mx-auto flex flex-col gap-6 p-5',
-          measure === 'form' ? 'max-w-2xl' : 'max-w-4xl',
+          '@container/pane flex flex-col gap-6 p-5',
+          measure === 'form' ? 'max-w-6xl' : 'max-w-7xl',
           className
         )}
       >
