@@ -10,7 +10,7 @@ import {
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { buildAppMenuTemplate, DOCS_URL, type AppMenuItem } from './app-menu'
+import { buildAppMenuTemplate, type AppMenuItem } from './app-menu'
 import { installEditableFieldMenu } from './context-menu'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
@@ -27,7 +27,7 @@ import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
 import { seedIfNeeded } from './services/seed'
 import { createTray, destroyTray, hasTray, refreshTrayMenu } from './tray'
-import { MENU_ACTION_CHANNEL, type MenuActionId } from '../shared/menu'
+import { DOCS_URL, MENU_ACTION_CHANNEL, type MenuActionId } from '../shared/menu'
 
 // The display name, fixed before anything reads app.name — but userData is
 // pinned to its pre-rename value FIRST, because setName() moves what

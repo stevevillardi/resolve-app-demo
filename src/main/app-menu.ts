@@ -32,8 +32,6 @@ export interface AppMenuItem {
   submenu?: AppMenuItem[]
 }
 
-export const DOCS_URL = 'https://github.com/stevevillardi/resolve-app-demo#readme'
-
 export function buildAppMenuTemplate({ platform, isDev }: AppMenuTemplateOptions): AppMenuItem[] {
   const darwin = platform === 'darwin'
 

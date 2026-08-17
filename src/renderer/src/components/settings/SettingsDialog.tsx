@@ -49,14 +49,13 @@ import {
   useWorkspaceRoot
 } from '@/hooks/useSettings'
 import { useUiStore, type ThemePreference } from '@/store/useUiStore'
+import { DOCS_URL } from '../../../../shared/menu'
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System', icon: Monitor },
   { value: 'light', label: 'Light', icon: Sun },
   { value: 'dark', label: 'Dark', icon: Moon }
 ] as const
-
-const DOCS_URL = 'https://github.com/stevevillardi/resolve-app-demo#readme'
 
 /**
  * The settings surface (Phase 17). Before this, everything here was either
