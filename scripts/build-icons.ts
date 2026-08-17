@@ -69,9 +69,20 @@ const TARGETS: Target[] = [
     size: 1024,
     contentScale: MACOS_CONTENT_SCALE
   },
-  // The BrowserWindow `icon` on Linux, where the WM wants a real image rather
-  // than a bundle resource (src/main/index.ts).
-  { from: 'resources/icon.svg', to: 'resources/icon.png', size: 512 },
+  // Two consumers, both of which put it on an icon grid, so it gets the same
+  // inset as the packaged icon: the BrowserWindow `icon` on Linux, where the WM
+  // wants a real image rather than a bundle resource, and — the one that shows
+  // up in daily use — `app.dock.setIcon` in dev, because the running bundle is
+  // node_modules/electron and would otherwise show Electron's own icon
+  // (src/main/index.ts). Full bleed here is why the dev Dock icon stood ~24%
+  // taller than its neighbours while the packaged one looked right: only
+  // build/icon.png had been drawn to the grid.
+  {
+    from: 'resources/icon.svg',
+    to: 'resources/icon.png',
+    size: 512,
+    contentScale: MACOS_CONTENT_SCALE
+  },
   // Menu bar, both scale factors. tray.ts adds these as explicit
   // representations, so the @2x name is documentation rather than a lookup key.
   { from: 'resources/tray-idle.svg', to: 'resources/trayTemplate.png', size: 16 },
