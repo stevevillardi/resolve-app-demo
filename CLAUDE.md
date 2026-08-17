@@ -103,6 +103,21 @@ Prefer a free instrument where one exists. `codex debug prompt-input` renders th
 exact model-visible prompt locally; asking a model what it can see costs money
 and is less precise.
 
+## Icons
+
+Every icon PNG in `build/` and `resources/` is **generated**. Edit the SVG
+beside it and run `npm run icons`; hand-editing a PNG means the next person to
+run that script silently reverts you.
+
+`build/icon.icns` and `build/icon.ico` are absent on purpose — electron-builder
+derives both from `build/icon.png`, so adding either back means maintaining a
+copy that drifts.
+
+The tray marks are **not** the app icon scaled down. They are drawn separately
+because the icon's proportions collapse into one black blob at 16px, and they are
+black-on-transparent because a macOS template image keeps only alpha — which is
+also why "a turn is running" is signalled by shape rather than by a green dot.
+
 ## Two words that mean two things
 
 A **Skill** in this app (blueprint §4) is injected prose, composed into the
