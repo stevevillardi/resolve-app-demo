@@ -10,6 +10,7 @@ import {
   setRepoTrust
 } from '../../services/contacts'
 import { emitMessagesChanged } from '../../services/agent-events'
+import { contactFiles } from '../../services/contact-files'
 import { unreadCounts } from '../../services/unread'
 import { contactContext, repoOffers } from '../../services/session-spec'
 import { listGroups, markGroupRead } from '../../services/groups'
@@ -60,6 +61,7 @@ registerProcedure('contacts.context', ({ contactId }) => contactContext(contactI
 // instructions or skills ever reach a persona.
 registerProcedure('contacts.setRepoTrust', ({ id, trust }) => setRepoTrust(id, trust))
 registerProcedure('contacts.repoOffers', ({ contactId }) => repoOffers(contactId))
+registerProcedure('contacts.files', ({ contactId }) => contactFiles(contactId))
 registerProcedure('contacts.delete', async ({ id, discardUncommitted }) => ({
   deleted: await deleteContact(id, discardUncommitted ?? false)
 }))

@@ -113,7 +113,7 @@ export function useAgentStream(contactId: string): void {
 }
 
 export function useSendMessage(contactId: string): {
-  send: (content: string) => void
+  send: (content: string, opts?: { onSuccess?: () => void }) => void
   isPending: boolean
   error: string | null
   reset: () => void
@@ -130,10 +130,47 @@ export function useSendMessage(contactId: string): {
   })
 
   return {
-    send: (content) => mutation.mutate(content),
+    // The per-call onSuccess is how the composer's draft gets cleared only
+    // once main accepted the turn — a lock refusal rejects, and the draft
+    // has to survive it (review §B2).
+    send: (content, opts) =>
+      mutation.mutate(content, opts?.onSuccess ? { onSuccess: opts.onSuccess } : {}),
     isPending: mutation.isPending,
     // Carries the lock refusal naming whichever persona holds the repo, so the
     // composer can say who to wait for.
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null,
+    reset: () => mutation.reset()
+  }
+}
+
+/**
+ * Re-runs an unanswered tail message via messages.retry.
+ *
+ * Takes the contact per call rather than per hook because the group thread
+ * computes its retry target at render time — whichever member's thread holds
+ * the unanswered row (lib/turn-tail.ts) — and a hook keyed to one contact
+ * could not follow that.
+ */
+export function useRetryTurn(): {
+  retry: (contactId: string, groupId?: string) => void
+  error: string | null
+  reset: () => void
+} {
+  const queryClient = useQueryClient()
+  const begin = useRunStore((state) => state.begin)
+
+  const mutation = useMutation({
+    mutationFn: ({ contactId, groupId }: { contactId: string; groupId?: string }) =>
+      callProcedure('messages.retry', { contactId, ...(groupId ? { groupId } : {}) }),
+    onSuccess: ({ runId }, { contactId }) => {
+      begin(contactId, runId)
+      void queryClient.invalidateQueries({ queryKey: messagesKey(contactId) })
+    }
+  })
+
+  return {
+    retry: (contactId, groupId) => mutation.mutate({ contactId, ...(groupId ? { groupId } : {}) }),
+    // A refused retry carries the same lock wording as a refused send.
     error: mutation.error ? ipcErrorMessage(mutation.error) : null,
     reset: () => mutation.reset()
   }

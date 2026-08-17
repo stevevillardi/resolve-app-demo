@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { SlashPicker } from './SlashPicker'
+import { ComposerPicker, type PickerRow } from './ComposerPicker'
+import { applyFileToken, parseFileToken, rankFiles } from '@/lib/file-token'
 import {
   applySlashCommand,
   parseSlashQuery,
@@ -12,9 +13,16 @@ import { cn } from '@/lib/utils'
 
 interface ComposerProps {
   placeholder?: string
+  /**
+   * Fired with the trimmed draft. Deliberately does NOT clear the field —
+   * whether a send was accepted is the owner's knowledge (the IPC can refuse,
+   * e.g. a repo-lock refusal), and clearing here used to destroy the draft
+   * before the refusal came back. Owners clear on success.
+   */
   onSend?: (value: string) => void
-  onValueChange?: (value: string) => void
-  value?: string
+  onValueChange: (value: string) => void
+  /** Always controlled: both thread views own their draft state. */
+  value: string
   leadingAction?: ReactNode
   /** Shown under the field — e.g. which persona and sandbox will handle this. */
   hint?: ReactNode
@@ -38,6 +46,16 @@ interface ComposerProps {
    * lib/slash.ts.
    */
   commands?: SlashCommand[]
+  /**
+   * What `@` completes against: the working tree's paths, relative. Absent
+   * or empty disables the file picker entirely.
+   */
+  files?: string[]
+  /**
+   * Earliest index an @file token may start at. The group composer passes 1:
+   * its index-0 `@` is the mention, never a file.
+   */
+  fileMinStart?: number
 }
 
 const MAX_HEIGHT = 168
@@ -46,18 +64,17 @@ export function Composer({
   placeholder = 'Message…',
   onSend,
   onValueChange,
-  value: controlledValue,
+  value,
   leadingAction,
   hint,
   busy = false,
   onStop,
   disabled = false,
   notice,
-  commands = []
+  commands = [],
+  files = [],
+  fileMinStart = 0
 }: ComposerProps): React.JSX.Element {
-  const [internalValue, setInternalValue] = useState('')
-  const isControlled = controlledValue !== undefined
-  const value = isControlled ? controlledValue : internalValue
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Escape closes the picker without clearing what was typed. Keyed on the
@@ -65,11 +82,37 @@ export function Composer({
   // then typing `e` is a new intention, not a continuation of the old one.
   const [dismissedFor, setDismissedFor] = useState<string | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  // Where the cursor is, tracked because the @file token is caret-anchored —
+  // the slash picker never needed to know.
+  const [caret, setCaret] = useState(0)
 
-  const query = parseSlashQuery(value)
-  const matches = query === null ? [] : rankSlashCommands(commands, query)
-  const pickerOpen = matches.length > 0 && dismissedFor !== value
-  const active = matches[Math.min(activeIndex, matches.length - 1)]
+  const slashQuery = parseSlashQuery(value)
+  const slashMatches = slashQuery === null ? [] : rankSlashCommands(commands, slashQuery)
+
+  const fileToken = files.length > 0 ? parseFileToken(value, caret, fileMinStart) : null
+  const fileMatches = fileToken ? rankFiles(files, fileToken.query) : []
+
+  // Slash wins when both could match: a value starting `/` is a command by
+  // the slash parser's own strict-prefix rule, and a file token cannot start
+  // at index 0 of the same word anyway — the tie is theoretical, the rule
+  // still explicit.
+  const activePicker: 'slash' | 'file' | null =
+    slashMatches.length > 0 ? 'slash' : fileMatches.length > 0 ? 'file' : null
+
+  const rows: PickerRow[] =
+    activePicker === 'slash'
+      ? slashMatches.map((command) => ({
+          id: `${command.kind}:${command.name}`,
+          primary: `/${command.name}`,
+          secondary: command.description,
+          badge: command.kind === 'repo-skill' ? 'repo skill' : 'tool'
+        }))
+      : activePicker === 'file'
+        ? fileMatches.map((path) => ({ id: path, primary: path }))
+        : []
+
+  const pickerOpen = rows.length > 0 && dismissedFor !== value
+  const boundedIndex = Math.min(activeIndex, rows.length - 1)
 
   // The previous revision set rows={1} with a max-height and never grew: a
   // textarea's height is fixed by `rows` unless something measures scrollHeight
@@ -83,24 +126,36 @@ export function Composer({
   }, [value])
 
   const handleChange = (next: string): void => {
-    if (!isControlled) setInternalValue(next)
-    onValueChange?.(next)
+    onValueChange(next)
     // Back to the top whenever the query changes: the old index pointed into a
     // list that no longer exists, and keeping it would highlight an unrelated
     // row.
     setActiveIndex(0)
   }
 
-  const pick = (command: SlashCommand): void => {
-    handleChange(applySlashCommand(value, command))
-    textareaRef.current?.focus()
+  const pickRow = (id: string): void => {
+    if (activePicker === 'slash') {
+      const command = slashMatches.find((candidate) => `${candidate.kind}:${candidate.name}` === id)
+      if (!command) return
+      handleChange(applySlashCommand(value, command))
+      textareaRef.current?.focus()
+      return
+    }
+    if (activePicker === 'file' && fileToken) {
+      const next = applyFileToken(value, fileToken, id)
+      handleChange(next.value)
+      setCaret(next.caret)
+      const element = textareaRef.current
+      element?.focus()
+      // After React has written the new value into the DOM — setting the
+      // selection against the old text would land the cursor mid-path.
+      requestAnimationFrame(() => element?.setSelectionRange(next.caret, next.caret))
+    }
   }
 
   const handleSend = (): void => {
     if (!value.trim() || disabled || busy) return
     onSend?.(value.trim())
-    if (!isControlled) setInternalValue('')
-    onValueChange?.('')
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -113,17 +168,18 @@ export function Composer({
     if (pickerOpen) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        setActiveIndex((index) => (index + 1) % matches.length)
+        setActiveIndex((index) => (index + 1) % rows.length)
         return
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
-        setActiveIndex((index) => (index - 1 + matches.length) % matches.length)
+        setActiveIndex((index) => (index - 1 + rows.length) % rows.length)
         return
       }
       if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
         event.preventDefault()
-        if (active) pick(active)
+        const row = rows[boundedIndex]
+        if (row) pickRow(row.id)
         return
       }
       if (event.key === 'Escape') {
@@ -151,10 +207,11 @@ export function Composer({
           being positioned against the pane. */}
       <div className="relative">
         {pickerOpen && (
-          <SlashPicker
-            commands={matches}
-            activeIndex={Math.min(activeIndex, matches.length - 1)}
-            onPick={pick}
+          <ComposerPicker
+            label={activePicker === 'file' ? 'Files' : 'Commands'}
+            rows={rows}
+            activeIndex={boundedIndex}
+            onPick={pickRow}
           />
         )}
       </div>
@@ -168,7 +225,13 @@ export function Composer({
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(event) => handleChange(event.target.value)}
+          onChange={(event) => {
+            setCaret(event.target.selectionStart ?? event.target.value.length)
+            handleChange(event.target.value)
+          }}
+          // onSelect fires for every cursor move — clicks, arrows, selection —
+          // which is exactly the set of events that can relocate an @token.
+          onSelect={(event) => setCaret((event.target as HTMLTextAreaElement).selectionStart ?? 0)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={1}

@@ -126,7 +126,13 @@ describe('tool activity', () => {
     const stream = fold([
       { type: 'tool_start', toolCallId: 't1', name: 'Bash', detail: 'npm test' },
       { type: 'tool_start', toolCallId: 't2', name: 'Read', detail: 'src/a.ts' },
-      { type: 'tool_end', toolCallId: 't1', name: 'Bash', status: 'completed', output: '12 passing' },
+      {
+        type: 'tool_end',
+        toolCallId: 't1',
+        name: 'Bash',
+        status: 'completed',
+        output: '12 passing'
+      },
       { type: 'tool_end', toolCallId: 't2', name: 'Read', status: 'completed' }
     ])
 
@@ -203,12 +209,40 @@ describe('errors', () => {
 
 describe('ignored events', () => {
   it('leaves the stream untouched', () => {
-    const stream = fold([
-      { type: 'session_started', sessionId: 'abc' },
-      { type: 'reasoning', text: 'Let me look at the imports first.' }
-    ])
+    const stream = fold([{ type: 'session_started', sessionId: 'abc' }])
 
     expect(stream).toEqual(emptyStream)
+  })
+})
+
+describe('reasoning', () => {
+  it('accumulates with a blank line between thoughts', () => {
+    const stream = fold([
+      { type: 'reasoning', text: 'Let me look at the imports first.' },
+      { type: 'reasoning', text: 'The cycle is in auth.ts.' }
+    ])
+
+    expect(stream.reasoning).toBe('Let me look at the imports first.\n\nThe cycle is in auth.ts.')
+  })
+
+  it('never leaks into the visible text', () => {
+    const stream = fold([
+      { type: 'reasoning', text: 'thinking…' },
+      { type: 'text_message', text: 'The answer.' }
+    ])
+
+    expect(streamText(stream)).toBe('The answer.')
+    expect(stream.reasoning).toBe('thinking…')
+  })
+
+  it('is untouched by the other events', () => {
+    const stream = fold([
+      { type: 'reasoning', text: 'first thought' },
+      { type: 'text_delta', text: 'partial' },
+      { type: 'tool_start', toolCallId: 'c1', name: 'Read', detail: 'auth.ts' }
+    ])
+
+    expect(stream.reasoning).toBe('first thought')
   })
 })
 

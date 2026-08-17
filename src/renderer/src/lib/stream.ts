@@ -51,6 +51,13 @@ export interface ThreadStream {
   error: MessageBubbleError | null
   /** True once `done` arrives — the turn is over, successfully or not. */
   finished: boolean
+  /**
+   * The model thinking aloud, accumulated for the streaming bubble's
+   * collapsed disclosure (review §B7). Live only, like toolCalls — never
+   * persisted, dropped when end() clears the turn. Codex is the only backend
+   * that emits the event; on Claude this simply stays empty.
+   */
+  reasoning: string
 }
 
 export const emptyStream: ThreadStream = {
@@ -59,7 +66,8 @@ export const emptyStream: ThreadStream = {
   toolCalls: [],
   activity: null,
   error: null,
-  finished: false
+  finished: false,
+  reasoning: ''
 }
 
 /** What the in-progress bubble should display. */
@@ -189,10 +197,18 @@ export function applyAgentEvent(stream: ThreadStream, event: AgentEvent): Thread
       }
 
     // session_started carries the resume key, which main persists and the UI
-    // never needs; reasoning is the model thinking aloud, not its answer.
+    // never needs.
     case 'session_started':
-    case 'reasoning':
       return stream
+
+    // Not the answer, but for a long tool turn it is the only sign of life —
+    // kept for the streaming bubble's disclosure and discarded with the rest
+    // of the live state when the turn's rows land.
+    case 'reasoning':
+      return {
+        ...stream,
+        reasoning: stream.reasoning ? `${stream.reasoning}\n\n${event.text}` : event.text
+      }
 
     default:
       return stream

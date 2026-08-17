@@ -33,8 +33,12 @@ function view(section: Section, selected: ConversationSelection): React.JSX.Elem
   if (section === 'usage') return <UsageDashboard />
   if (section === 'branches') return <BranchDetail />
 
-  if (selected?.kind === 'contact') return <ThreadView contactId={selected.id} />
-  if (selected?.kind === 'group') return <GroupThreadView groupId={selected.id} />
+  // Keyed on the conversation, so per-conversation component state (picker
+  // dismissals, unread boundaries, the work-diff dialog) dies with a switch
+  // instead of bleeding into the next thread. Drafts survive the remount on
+  // purpose — they live in useDraftStore, not in the instance.
+  if (selected?.kind === 'contact') return <ThreadView key={selected.id} contactId={selected.id} />
+  if (selected?.kind === 'group') return <GroupThreadView key={selected.id} groupId={selected.id} />
 
   // Chats with nothing picked. Still shows what is running and what was said
   // last — that is the useful thing to see while deciding which conversation to

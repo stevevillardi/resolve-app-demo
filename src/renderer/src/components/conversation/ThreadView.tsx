@@ -16,12 +16,14 @@ import { WorkChips } from './WorkChips'
 import { WorkDiffDialog } from './WorkDiffDialog'
 import { Composer } from './Composer'
 import { useContacts, useContactContext } from '@/hooks/useConversations'
+import { useContactFiles } from '@/hooks/useContactFiles'
 import { usePersonas } from '@/hooks/usePersonas'
 import {
   useActiveRuns,
   useAgentStream,
   useCancelRun,
   useMessages,
+  useRetryTurn,
   useSendMessage,
   useToolCalls
 } from '@/hooks/useMessages'
@@ -29,8 +31,10 @@ import { useMarkRead } from '@/hooks/useUnread'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests'
 import { useRunStore } from '@/store/useRunStore'
+import { draftKey, useDraftStore } from '@/store/useDraftStore'
 import { streamText } from '@/lib/stream'
 import { slashCommands } from '@/lib/slash'
+import { hasUnansweredTail } from '@/lib/turn-tail'
 import { firstUnreadIndex } from '@/lib/unread'
 import { usageForContact } from '@/lib/usage'
 import { isSameDay, repoName } from '@/lib/format'
@@ -54,15 +58,21 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   useAgentStream(contactId)
 
   const { send, error: sendError, reset } = useSendMessage(contactId)
+  const { retry, error: retryError, reset: resetRetry } = useRetryTurn()
   const { cancel } = useCancelRun()
 
   // Only fetched once somebody types a slash. contacts.context stats the
   // filesystem for sibling branches, and a thread being open is no reason to
   // pay for that — the same gating the context panel uses.
-  const [draft, setDraft] = useState('')
+  const draftId = draftKey('contact', contactId)
+  const draft = useDraftStore((state) => state.byConversation[draftId] ?? '')
+  const setDraft = useDraftStore((state) => state.setDraft)
+  const clearDraft = useDraftStore((state) => state.clearDraft)
   const [workMessageId, setWorkMessageId] = useState<string | null>(null)
   const { data: capability } = useContactContext(contactId, draft.startsWith('/'))
   const commands = useMemo(() => slashCommands(capability), [capability])
+  // Same lazy gate for @file: no git until an @ exists to complete.
+  const files = useContactFiles(contactId, draft.includes('@'))
 
   const { data: prState } = usePullRequestState(contactId)
   const { open: openPr, isPending: opening, error: prError, reset: resetPr } = useOpenPullRequest()
@@ -118,6 +128,20 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   }
 
   const isRunning = Boolean(turn && !turn.stream.finished)
+
+  const doRetry = (): void => {
+    resetRetry()
+    retry(contactId)
+  }
+
+  // The durable half of the retry surface: after a reload or a crash the
+  // stream error is gone, and the only evidence left is a user message with
+  // no reply. `turn` covers the synchronous window after a send; the runs
+  // query covers a renderer reload while main is still mid-turn.
+  const interrupted = hasUnansweredTail(
+    thread,
+    Boolean(turn) || runs.some((run) => run.contactId === contactId)
+  )
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
@@ -230,6 +254,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               status="streaming"
               backend={persona.backend}
               activity={turn.stream.activity}
+              reasoning={turn.stream.reasoning}
               toolCalls={turn.stream.toolCalls}
             />
           )}
@@ -241,6 +266,21 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               status="error"
               error={turn.stream.error}
               backend={persona.backend}
+              onRetry={doRetry}
+            />
+          )}
+
+          {/* The same notice, degraded to what survives a reload: no error
+              kind, no partial text — just the shape of the thread saying a
+              question never got its answer. */}
+          {interrupted && (
+            <MessageBubble
+              role="assistant"
+              content=""
+              status="error"
+              error={{ kind: 'unknown', message: 'This turn was interrupted before it finished.' }}
+              backend={persona.backend}
+              onRetry={doRetry}
             />
           )}
         </div>
@@ -254,11 +294,15 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
       <Composer
         placeholder={`Message ${persona.name}…`}
-        onValueChange={setDraft}
+        value={draft}
+        onValueChange={(value) => setDraft(draftId, value)}
         commands={commands}
+        files={files}
         onSend={(value) => {
           reset()
-          send(value)
+          // Cleared only on acceptance: a lock refusal rejects the mutation,
+          // and the refused draft must still be sitting in the field.
+          send(value, { onSuccess: () => clearDraft(draftId) })
         }}
         busy={isRunning}
         onStop={() => turn && cancel(turn.runId)}
@@ -268,6 +312,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
           // the messages name what to do next ("commit or discard them first"),
           // and the header has no room to say it.
           sendError ??
+          retryError ??
           prError ??
           (blocker
             ? `${blocker.contactName} is working in this repo. Wait for it to finish, or stop it from that conversation.`
