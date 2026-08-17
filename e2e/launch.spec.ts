@@ -182,6 +182,9 @@ test.describe('persistence', () => {
       model: null,
       systemPrompt: '',
       skillIds: [],
+      // Required since migration 0009, for the same reason `model` is called
+      // out above: an empty allowlist is a decision, not an omission.
+      mcpServerIds: [],
       sandbox: 'read_only',
       githubScope: 'read_only'
     })
