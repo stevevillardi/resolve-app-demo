@@ -316,6 +316,16 @@ export function evaluateToolUse(
  *      measured to survive it; it is the only gate here that does.
  *
  * Both layers read the same table below, so they cannot drift apart.
+ *
+ * A third gate was considered and **measured not to work**. The Claude SDK types
+ * a per-server, per-tool `permission_policy: 'always_deny'`
+ * (`McpHttpServerConfig.tools[]`, sdk.d.ts:1125), which would be stronger than a
+ * name blacklist because the CLI enforces it per server rather than by matching
+ * a string. `npm run probe:mcp -- --policy` set it on `search_issues`, left the
+ * name out of `disallowedTools`, and ran under `bypassPermissions`: **the tool
+ * was called and returned results.** So the policy does not survive bypass, and
+ * `disallowedTools` staying primary is load-bearing rather than merely cautious.
+ * Measured 2026-08-17 against @anthropic-ai/claude-agent-sdk 0.3.233.
  */
 
 /** Written on a branch, reviewable as a diff, revertible. `open_pr` keeps these. */

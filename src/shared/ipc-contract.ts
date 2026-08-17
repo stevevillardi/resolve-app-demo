@@ -155,6 +155,16 @@ const contactContextSchema = z.object({
   repoInstructions: z.object({ fileName: z.string(), chars: z.number() }).nullable(),
   /** Reachable servers, already narrowed by the persona's githubScope. */
   mcpServers: z.array(z.object({ id: z.string(), url: z.string(), deniedTools: z.number() })),
+  /**
+   * Granted to the persona and not reachable this turn, with the reason.
+   *
+   * Distinct from an empty `mcpServers` on purpose: "nothing configured" and
+   * "configured, but GitHub is not connected" are different states, and a panel
+   * that renders both as silence is the reason a persona can report finding no
+   * issues when it never looked. The session is told the same thing — see
+   * SessionSpec.unavailableServers.
+   */
+  unavailableServers: z.array(z.object({ id: z.string(), reason: z.string() })),
   /** The filtered, capped repo log — not everything groupMessages.list returns. */
   groupContext: z.array(
     z.object({

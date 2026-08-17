@@ -244,3 +244,58 @@ describe('buildSessionSpec resolves what the repository contributes', () => {
     expect(shown.repoSkills).toEqual(spec.repoSkills)
   })
 })
+
+/**
+ * The difference between an empty answer and no answer.
+ *
+ * GitHub is mocked disconnected at the top of this file, so granting the server
+ * to the persona is enough to produce the case this is about: something a human
+ * deliberately turned on that the session genuinely cannot reach.
+ */
+describe('a capability granted and not reachable', () => {
+  function grantGithub(): void {
+    db.update(personaTemplates)
+      .set({ mcpServerIds: ['github'] })
+      .run()
+  }
+
+  it('offers no server, and says why, rather than staying silent', () => {
+    grantGithub()
+    const spec = buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+
+    expect(spec.mcpServers).toEqual([])
+    expect(spec.unavailableServers).toEqual([
+      { id: 'github', reason: expect.stringContaining('not connected') }
+    ])
+  })
+
+  it('puts the reason in the prompt the session actually receives', () => {
+    // The assertion that matters. A field on the spec that no adapter renders
+    // leaves the persona exactly as unable to tell the two cases apart as it
+    // was before — which is how this gap survived step 3 and step 4.
+    grantGithub()
+    const composed = composeInstructions(
+      buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+    )
+
+    expect(composed).toContain('Not available this turn')
+    expect(composed).toContain('Do not report an empty result')
+  })
+
+  it('says nothing when the persona was never granted the server', () => {
+    // Silence is correct here: nothing was promised, so nothing is missing.
+    const spec = buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+    expect(spec.unavailableServers).toEqual([])
+    expect(composeInstructions(spec)).not.toContain('Not available this turn')
+  })
+
+  it('tells the panel the same thing it tells the session', () => {
+    grantGithub()
+    const shown = contactContext(CONTACT_ID)!
+
+    expect(shown.mcpServers).toEqual([])
+    expect(shown.unavailableServers).toEqual(
+      buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!).unavailableServers
+    )
+  })
+})

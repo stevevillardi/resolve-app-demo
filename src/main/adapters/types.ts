@@ -176,6 +176,22 @@ export interface SessionSpec {
    */
   mcpServers?: ResolvedServer[]
   /**
+   * Servers this persona was granted but that could not be offered this turn,
+   * and why.
+   *
+   * Injected because the alternative is a specific and unpleasant failure: a
+   * persona asked to check for new issues, with no GitHub account connected,
+   * finds no tool and answers that there are none. "I looked and found nothing"
+   * and "I was never able to look" are different sentences and only one of them
+   * is true — and blueprint §16 Journey 3 opens with exactly that step, so the
+   * silent version is the one most likely to be seen.
+   *
+   * Lands in the dynamic half of the prompt rather than the cacheable prefix: it
+   * is re-resolved every turn like the group context, so connecting an account
+   * between two turns takes effect on the next one.
+   */
+  unavailableServers?: { id: string; reason: string }[]
+  /**
    * The repo's recent Group summaries, oldest first — blueprint §5's second
    * injection source and the mechanism behind §16 Journey 2.
    *

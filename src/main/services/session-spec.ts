@@ -47,6 +47,10 @@ export function buildSessionSpec(
     repoSkills: capabilities.nativeSkillNames,
     injectedSkills: capabilities.injectedSkills,
     mcpServers: capabilities.mcpServers,
+    // Granted but not reachable, with the reason. Sent rather than dropped so a
+    // persona can say "GitHub is not connected" instead of reporting that it
+    // looked and found nothing — see the field's comment in adapters/types.ts.
+    unavailableServers: capabilities.unavailable,
     ...(capabilities.repoInstructions
       ? {
           repoInstructions: {
@@ -155,6 +159,10 @@ export function contactContext(contactId: string): ContactContext | null {
       // fact is that the narrowing happened at all. The token is never sent.
       deniedTools: server.deniedTools.length
     })),
+    // Granted and not reachable. The panel has to show this or "no servers"
+    // means two different things on one screen — nothing configured, and
+    // something configured that is currently broken.
+    unavailableServers: spec.unavailableServers ?? [],
     groupContext: (spec.groupContext ?? []).map((entry) => ({
       timestamp: entry.timestamp,
       category: entry.category,

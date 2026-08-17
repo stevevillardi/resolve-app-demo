@@ -13,6 +13,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "probe:adapters": "tsx scripts/probe-adapters.ts",
     "probe:structured": "tsx scripts/probe-structured.ts",
+    "probe:mcp": "tsx scripts/probe-mcp.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

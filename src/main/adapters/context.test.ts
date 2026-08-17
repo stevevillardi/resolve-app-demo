@@ -413,6 +413,60 @@ describe('injected repository skills', () => {
   })
 })
 
+describe('capabilities granted but not reachable', () => {
+  const unreachable = [
+    { id: 'github', reason: 'GitHub is not connected, so its tools are unavailable this turn.' }
+  ]
+
+  it('says nothing when everything granted is reachable', () => {
+    expect(composeInstructions(spec(persona([]), []))).not.toContain('Not available this turn')
+  })
+
+  it('names the capability and the reason', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      unavailableServers: unreachable
+    })
+    expect(composed).toContain('github')
+    expect(composed).toContain('GitHub is not connected')
+  })
+
+  it('tells the model not to report an empty result as a checked one', () => {
+    // The whole reason this block exists. A persona asked to check for new
+    // issues, handed no tool, otherwise answers that there are none — and
+    // Journey 3 opens with exactly that step, so the silent version is the one
+    // most likely to be seen.
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      unavailableServers: unreachable
+    })
+    expect(composed).toContain('Do not report an empty result')
+  })
+
+  it('is volatile, not part of the cached prefix', () => {
+    // Connecting an account between two turns has to take effect on the next
+    // one. Anything in the prefix is a thing we are claiming stays put.
+    const { prefix, suffix } = composeInstructionBlocks({
+      ...spec(persona([]), []),
+      unavailableServers: unreachable
+    })
+    expect(prefix.join('\n\n')).not.toContain('Not available this turn')
+    expect(suffix.join('\n\n')).toContain('Not available this turn')
+  })
+
+  it('comes before the repo log, which its absence changes the meaning of', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      unavailableServers: unreachable,
+      groupContext: [SUMMARY]
+    })
+
+    expect(composed.indexOf('Not available this turn')).toBeLessThan(
+      composed.indexOf('a colleague decided something')
+    )
+  })
+})
+
 describe('the cacheable prefix', () => {
   const full: SessionSpec = {
     ...spec(persona(['a']), [skill('a', 'Style', 'the house style')]),

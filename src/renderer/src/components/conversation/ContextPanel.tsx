@@ -159,8 +159,14 @@ export function ContextPanel({
                 )}
               </Row>
 
+              {/*
+                Two lists, not one, because "no servers" would otherwise mean
+                two different things on the same screen — nothing granted, and
+                something granted that is currently unreachable. The session is
+                told the same distinction; see SessionSpec.unavailableServers.
+              */}
               <Row label={`Tools (${context.mcpServers.length})`}>
-                {context.mcpServers.length === 0 ? (
+                {context.mcpServers.length === 0 && context.unavailableServers.length === 0 ? (
                   <Muted>No servers reachable. This session can only touch its own files.</Muted>
                 ) : (
                   <ul className="flex flex-col gap-1">
@@ -170,6 +176,15 @@ export function ContextPanel({
                         <span className="text-muted-foreground shrink-0 text-meta">
                           {server.deniedTools} blocked
                         </span>
+                      </li>
+                    ))}
+                    {context.unavailableServers.map((server) => (
+                      <li key={server.id} className="flex items-baseline justify-between gap-3">
+                        <span className="text-muted-foreground min-w-0">
+                          <span className="block truncate font-mono text-meta">{server.id}</span>
+                          <span className="block text-meta">{server.reason}</span>
+                        </span>
+                        <span className="text-scope-elevated shrink-0 text-meta">unavailable</span>
                       </li>
                     ))}
                   </ul>
