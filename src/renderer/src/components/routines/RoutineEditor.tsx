@@ -85,7 +85,16 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
               size="sm"
               className="gap-1.5"
               disabled={saving || Boolean(cronError)}
-              onClick={() => save({ id: routine.id, contactId, schedule, prompt, enabled })}
+              onClick={() =>
+                save({
+                  id: routine.id,
+                  contactId,
+                  schedule,
+                  prompt,
+                  enabled,
+                  monthlyBudgetUsd: routine.monthlyBudgetUsd
+                })
+              }
             >
               <Check className="size-3.5" />
               {saving ? 'Saving…' : 'Save'}

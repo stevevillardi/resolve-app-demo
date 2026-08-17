@@ -1,0 +1,1 @@
+ALTER TABLE `routines` ADD `monthly_budget_usd` real;

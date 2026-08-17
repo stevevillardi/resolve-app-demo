@@ -31,6 +31,19 @@ export type AppStateKey =
    * reason they exist, so the toggle is an opt-out. See notifications.ts.
    */
   | 'notifications_enabled'
+  /**
+   * App-level soft monthly spend threshold in USD, as a decimal string.
+   * Absent = no budget. Alerts only, never enforcement. See budget-alerts.ts.
+   */
+  | 'monthly_budget_usd'
+  /**
+   * Which month each budget scope last alerted for, as a JSON map
+   * ({"app": "2026-08", "routine:<id>": "2026-07"}). The edge-trigger:
+   * recordUsage runs every turn, and without this a crossed budget would
+   * toast once per turn for the rest of the month. Sticky across restarts,
+   * same trick as github_token_state; re-armed by the month rolling over.
+   */
+  | 'budget_alerts_fired'
 
 export function getAppState(key: AppStateKey): string | null {
   const row = initDb().select().from(appState).where(eq(appState.key, key)).get()
@@ -47,6 +60,18 @@ export function setAppState(key: AppStateKey, value: string): void {
 
 export function deleteAppState(key: AppStateKey): void {
   initDb().delete(appState).where(eq(appState.key, key)).run()
+}
+
+/** A stored decimal, or null when absent or unparseable — never NaN. */
+export function getAppStateNumber(key: AppStateKey): number | null {
+  const raw = getAppState(key)
+  if (raw === null) return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
+}
+
+export function setAppStateNumber(key: AppStateKey, value: number): void {
+  setAppState(key, String(value))
 }
 
 export function getAppStateFlag(key: AppStateKey): boolean {

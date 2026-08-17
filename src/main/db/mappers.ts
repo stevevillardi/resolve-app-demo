@@ -133,7 +133,8 @@ export function toRoutine(row: RoutineRow): Routine {
     lastRunAt: row.lastRunAt === null ? null : row.lastRunAt.getTime(),
     lastRunSummary: row.lastRunSummary,
     missedRunCount: row.missedRunCount,
-    lastMissedAt: row.lastMissedAt === null ? null : row.lastMissedAt.getTime()
+    lastMissedAt: row.lastMissedAt === null ? null : row.lastMissedAt.getTime(),
+    monthlyBudgetUsd: row.monthlyBudgetUsd
   }
 }
 

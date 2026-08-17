@@ -692,7 +692,8 @@ describe('createRoutine', () => {
         contactId: 'contact-writer',
         schedule: 'every so often',
         prompt: 'do the thing',
-        enabled: true
+        enabled: true,
+        monthlyBudgetUsd: null
       })
     ).toThrow(/won't run/)
   })

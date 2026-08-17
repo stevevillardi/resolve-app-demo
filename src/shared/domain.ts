@@ -247,7 +247,12 @@ export const routineSchema = z.object({
   lastRunSummary: z.string().nullable(),
   /** Scheduled fires that never ran (machine asleep). Cleared by any attempt. */
   missedRunCount: z.number(),
-  lastMissedAt: z.number().nullable()
+  lastMissedAt: z.number().nullable(),
+  /**
+   * Soft monthly spend threshold in USD; null = no budget. Editable, so unlike
+   * the run history above it is deliberately NOT omitted from the write shapes.
+   */
+  monthlyBudgetUsd: z.number().nullable()
 })
 
 /**

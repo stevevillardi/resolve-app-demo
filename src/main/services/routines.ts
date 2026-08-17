@@ -69,7 +69,10 @@ export function updateRoutine(update: RoutineUpdate): Routine {
       contactId: update.contactId,
       schedule: update.schedule,
       prompt: update.prompt,
-      enabled: update.enabled
+      enabled: update.enabled,
+      // The trap this explicit list's comment warns about: forgetting a new
+      // editable column here is a silent no-op. Pinned by test.
+      monthlyBudgetUsd: update.monthlyBudgetUsd
     })
     .where(eq(routines.id, update.id))
     .run()

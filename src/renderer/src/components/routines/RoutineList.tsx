@@ -43,7 +43,8 @@ function RoutineRowMenu({ routine }: { routine: Routine }): React.JSX.Element {
       contactId: routine.contactId,
       schedule: routine.schedule,
       prompt: routine.prompt,
-      enabled: !routine.enabled
+      enabled: !routine.enabled,
+      monthlyBudgetUsd: routine.monthlyBudgetUsd
     })
 
   return (

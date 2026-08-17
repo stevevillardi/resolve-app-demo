@@ -24,12 +24,14 @@ function draft(overrides: Partial<{ schedule: string; prompt: string; enabled: b
   schedule: string
   prompt: string
   enabled: boolean
+  monthlyBudgetUsd: number | null
 } {
   return {
     contactId: CONTACT,
     schedule: overrides.schedule ?? '0 9 * * *',
     prompt: overrides.prompt ?? 'Check for new issues.',
-    enabled: overrides.enabled ?? true
+    enabled: overrides.enabled ?? true,
+    monthlyBudgetUsd: null
   }
 }
 
@@ -84,7 +86,8 @@ describe('updateRoutine', () => {
       contactId: CONTACT,
       schedule: '0 */6 * * *',
       prompt: 'Review open PRs.',
-      enabled: false
+      enabled: false,
+      monthlyBudgetUsd: null
     })
 
     expect(saved.schedule).toBe('0 */6 * * *')
@@ -107,7 +110,8 @@ describe('updateRoutine', () => {
       contactId: CONTACT,
       schedule: '0 9 * * *',
       prompt: 'a newly typed prompt',
-      enabled: true
+      enabled: true,
+      monthlyBudgetUsd: null
     })
 
     const after = getRoutine(created.id)
@@ -124,7 +128,8 @@ describe('updateRoutine', () => {
         contactId: CONTACT,
         schedule: 'whenever',
         prompt: 'x',
-        enabled: true
+        enabled: true,
+        monthlyBudgetUsd: null
       })
     ).toThrow(/won't run/)
     expect(getRoutine(created.id)?.schedule).toBe('0 9 * * *')
@@ -137,7 +142,8 @@ describe('updateRoutine', () => {
         contactId: CONTACT,
         schedule: '0 9 * * *',
         prompt: 'x',
-        enabled: true
+        enabled: true,
+        monthlyBudgetUsd: null
       })
     ).toThrow(/No such routine/)
   })
@@ -171,6 +177,43 @@ describe('deleteRoutine', () => {
     db.delete(contacts).run()
 
     expect(listRoutines()).toHaveLength(0)
+  })
+})
+
+describe('monthlyBudgetUsd', () => {
+  // The exact trap updateRoutine's explicit column list warns about: a new
+  // editable column left off that list saves as a silent no-op — how `model`
+  // once went unsaved.
+  it('saves through update, because it is editable rather than run history', () => {
+    const created = createRoutine(draft())
+
+    const saved = updateRoutine({
+      id: created.id,
+      contactId: CONTACT,
+      schedule: '0 9 * * *',
+      prompt: 'Check for new issues.',
+      enabled: true,
+      monthlyBudgetUsd: 12.5
+    })
+
+    expect(saved.monthlyBudgetUsd).toBe(12.5)
+    expect(getRoutine(created.id)?.monthlyBudgetUsd).toBe(12.5)
+  })
+
+  it('clears back to no-budget with null', () => {
+    const created = createRoutine({ ...draft(), monthlyBudgetUsd: 30 })
+    expect(getRoutine(created.id)?.monthlyBudgetUsd).toBe(30)
+
+    updateRoutine({
+      id: created.id,
+      contactId: CONTACT,
+      schedule: '0 9 * * *',
+      prompt: 'Check for new issues.',
+      enabled: true,
+      monthlyBudgetUsd: null
+    })
+
+    expect(getRoutine(created.id)?.monthlyBudgetUsd).toBeNull()
   })
 })
 
@@ -232,6 +275,7 @@ describe('recordMissedRun', () => {
       schedule: '0 9 * * *',
       prompt: 'Edited prompt.',
       enabled: true,
+      monthlyBudgetUsd: null,
       // Stale run history a snapshot might carry; the update shape strips it.
       missedRunCount: 0,
       lastMissedAt: null

@@ -164,7 +164,8 @@ export function ListPanel(): React.JSX.Element {
           contactId: contact.id,
           schedule: NEW_ROUTINE_SCHEDULE,
           prompt: '',
-          enabled: false
+          enabled: false,
+          monthlyBudgetUsd: null
         },
         (routine) => setSelectedRoutineId(routine.id)
       )

@@ -278,7 +278,8 @@ describe('routine', () => {
         lastRunAt: null,
         lastRunSummary: null,
         missedRunCount: 0,
-        lastMissedAt: null
+        lastMissedAt: null,
+        monthlyBudgetUsd: null
       })
     ).not.toThrow()
   })

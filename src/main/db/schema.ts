@@ -269,7 +269,14 @@ export const routines = sqliteTable(
      * resets the count — Run now is the catch-up.
      */
     missedRunCount: integer('missed_run_count').notNull().default(0),
-    lastMissedAt: integer('last_missed_at', { mode: 'timestamp_ms' })
+    lastMissedAt: integer('last_missed_at', { mode: 'timestamp_ms' }),
+    /**
+     * Soft monthly spend threshold in USD, null = no budget (Phase 20).
+     * User-editable, unlike the run history above — it travels the draft and
+     * update shapes and updateRoutine's explicit column list. Alerts only:
+     * crossing it notifies and banners, and nothing is ever stopped.
+     */
+    monthlyBudgetUsd: real('monthly_budget_usd')
   },
   (table) => [index('routines_contact_idx').on(table.contactId)]
 )
