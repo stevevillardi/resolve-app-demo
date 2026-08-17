@@ -117,6 +117,13 @@ async function sweep(page: Page, app: ElectronApplication, profileName: string):
 
       const stem = `${profileName}-${theme.toLowerCase()}-${sizeName}`
 
+      // Home is shot on its own rather than inside the loop below: it is the
+      // one section with no list panel at all, so there is no first row to
+      // select and `selectFirstRow` would be looking for a `list-body` that
+      // does not exist.
+      await goTo(page, 'Home')
+      await shoot(page, `${stem}-home`)
+
       for (const section of SECTIONS) {
         await goTo(page, section)
         await shoot(page, `${stem}-${section.toLowerCase()}-list`)

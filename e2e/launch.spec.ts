@@ -238,6 +238,38 @@ test.describe('completing onboarding', () => {
   })
 })
 
+/**
+ * Home used to be the fall-through of Chats-with-nothing-selected, and nothing
+ * in the app ever cleared the selection except deleting a contact — so opening
+ * any conversation made the overview unreachable until the next relaunch. That
+ * survived three phases precisely because no test asserted you could get back.
+ */
+test.describe('the home section', () => {
+  test('is where the app lands, and stays reachable once you leave it', async () => {
+    const { window } = launched
+    await waitForShell(window)
+
+    const home = window.getByRole('button', { name: 'Home', exact: true })
+    const chats = window.getByRole('button', { name: 'Chats', exact: true })
+    // Base UI writes boolean state as a valueless `data-active`, so this is a
+    // presence check rather than a comparison against "true".
+    const activeHome = window.locator('button[aria-label="Home"][data-active]')
+
+    await expect(activeHome).toBeVisible()
+    // No master list here: Home summarises every section, so there is nothing
+    // for a list panel to list.
+    await expect(window.locator('[data-slot="list-body"]')).toHaveCount(0)
+
+    await chats.click()
+    await expect(window.locator('[data-slot="list-body"]')).toBeVisible()
+    await expect(activeHome).toHaveCount(0)
+
+    await home.click()
+    await expect(activeHome).toBeVisible()
+    await expect(window.locator('[data-slot="list-body"]')).toHaveCount(0)
+  })
+})
+
 test.describe('device flow state machine', () => {
   test('starts idle and survives a cancel with no flow running', async () => {
     const { window } = launched

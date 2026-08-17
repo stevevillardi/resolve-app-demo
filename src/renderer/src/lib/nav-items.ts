@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Clock, GitBranch, MessagesSquare, Users2 } from 'lucide-react'
+import { BarChart3, BookOpen, Clock, GitBranch, House, MessagesSquare, Users2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Section } from '@/store/useUiStore'
 
@@ -33,6 +33,11 @@ export const RAIL_BUTTON =
  * a non-component breaks React Fast Refresh.
  */
 export const NAV_ITEMS: NavItem[] = [
+  // First, and the one the app launches on. It used to be reachable only as the
+  // fall-through of Chats-with-nothing-selected — and since nothing ever clears
+  // the selection except deleting a contact, picking any conversation made the
+  // overview unreachable until the next relaunch.
+  { section: 'home', label: 'Home', icon: House },
   { section: 'chats', label: 'Chats', icon: MessagesSquare },
   { section: 'branches', label: 'Branches', icon: GitBranch },
   { section: 'personas', label: 'Personas', icon: Users2 },

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MessagesSquare, Square } from 'lucide-react'
+import { GitBranch, MessagesSquare, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { EmptyPane } from '@/components/common/EmptyPane'
@@ -8,6 +8,7 @@ import { PaneBody } from '@/components/common/PaneBody'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { RunPulse } from '@/components/common/RunIndicator'
 import { Section } from '@/components/common/Section'
+import { useBranches } from '@/hooks/useBranches'
 import { useContacts } from '@/hooks/useConversations'
 import { useActiveRuns, useCancelRun, useMessagePreviews } from '@/hooks/useMessages'
 import { usePersonas } from '@/hooks/usePersonas'
@@ -19,6 +20,18 @@ import { useUiStore } from '@/store/useUiStore'
 
 const RECENT_LIMIT = 6
 const SPEND_DAYS = 7
+
+/**
+ * Which of the two screens this is.
+ *
+ * `home` is the Home section: everything at rest, including spend. `chats` is
+ * the Chats pane with nothing selected — the same live activity, minus the
+ * money, because a section about conversations should not be where you find out
+ * what the month cost. One component rather than two because the running-turn
+ * and recent-activity blocks are identical, and two copies of them would drift
+ * the way the four pane headers did before Phase 13.
+ */
+type Variant = 'home' | 'chats'
 
 /**
  * The resting screen.
@@ -34,15 +47,20 @@ const SPEND_DAYS = 7
  * four empty headings on a fresh install. The Usage section owns charts; this
  * is a place to rest, not a dashboard.
  */
-export function WorkspaceHome(): React.JSX.Element {
+export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}): React.JSX.Element {
   const setDialog = useUiStore((state) => state.setDialog)
+  const setSection = useUiStore((state) => state.setSection)
   const setSelected = useUiStore((state) => state.setSelectedConversation)
+  const setSelectedBranch = useUiStore((state) => state.setSelectedBranch)
 
   const { data: contacts = [], isPending: contactsPending } = useContacts()
   const { data: personas = [] } = usePersonas()
   const { data: previews = [] } = useMessagePreviews()
   const { data: runs = [] } = useActiveRuns()
   const { data: events = [] } = useUsageEvents()
+  // Only Home shows these, and the query stats the filesystem, so Chats does
+  // not pay for a list it will not render.
+  const { data: branches = [] } = useBranches()
   const { cancel } = useCancelRun()
 
   // Runs are timed, so this screen has to re-render on its own — nothing else
@@ -58,6 +76,9 @@ export function WorkspaceHome(): React.JSX.Element {
   const recent = recentActivity(previews, contacts, personas, RECENT_LIMIT)
   const spend = spendWindow(events, now, SPEND_DAYS)
   const repoCount = new Set(contacts.map((contact) => contact.repoPath)).size
+  // Only the ones with something in them. A branch with no diff against the
+  // repo is not waiting on anybody.
+  const waiting = variant === 'home' ? branches.filter((b) => b.files.length > 0) : []
 
   // A fresh install is a different screen, not an emptier version of this one:
   // there is nothing to summarise and exactly one thing to do.
@@ -78,18 +99,31 @@ export function WorkspaceHome(): React.JSX.Element {
 
   const nothingToShow = runs.length === 0 && recent.length === 0 && spend.turns === 0
   if (nothingToShow) {
-    return (
+    return variant === 'chats' ? (
       <EmptyPane
         icon={MessagesSquare}
         title="No conversation selected"
-        description="Pick a contact to message one persona, or a repo group to see everything working in it."
+        description="Pick a contact to message one persona, or a repo group to see everything working in that repository."
+      />
+    ) : (
+      <EmptyPane
+        icon={MessagesSquare}
+        title="Nothing has run yet"
+        // Contacts exist, so the fresh-install branch above did not fire. What
+        // is missing is not setup, it is a first message.
+        description="Your contacts are set up. Send one a message and this screen starts reporting what the fleet is doing."
+        action={
+          <Button variant="outline" size="sm" onClick={() => setSection('chats')}>
+            Go to chats
+          </Button>
+        }
       />
     )
   }
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
-      <PaneHeader title="Overview" />
+      <PaneHeader title={variant === 'chats' ? 'Chats' : 'Overview'} />
       <PaneBody measure="wide">
         {runs.length > 0 && (
           <Section
@@ -128,7 +162,9 @@ export function WorkspaceHome(): React.JSX.Element {
 
         {recent.length > 0 && (
           <Section title="Recent" description="The last thing said in each conversation.">
-            <div className="flex flex-col">
+            {/* Two across once there is room. Six rows down the left of a
+                1200px pane is the same wasted width this pass exists to fix. */}
+            <div className="grid gap-x-4 @4xl/pane:grid-cols-2">
               {recent.map((item) => (
                 <ListRow
                   key={item.contactId}
@@ -159,7 +195,53 @@ export function WorkspaceHome(): React.JSX.Element {
           </Section>
         )}
 
-        {spend.turns > 0 && (
+        {/*
+          Work a persona finished that is now waiting on a human. Home only,
+          and worth the extra query: a branch on disk with commits nobody has
+          merged is the one thing in this app that quietly accumulates, and
+          until now it was visible only if you thought to open the Branches
+          section and look.
+        */}
+        {variant === 'home' && waiting.length > 0 && (
+          <Section
+            title={waiting.length === 1 ? '1 branch waiting' : `${waiting.length} branches waiting`}
+            description="Finished work that has not been merged or discarded."
+          >
+            <div className="grid gap-1.5 @4xl/pane:grid-cols-2">
+              {waiting.map((branch) => (
+                <ListRow
+                  key={`${branch.repoPath} ${branch.branch}`}
+                  active={false}
+                  align="center"
+                  bordered
+                  leading={<GitBranch className="text-muted-foreground size-4 shrink-0" />}
+                  onSelect={() => {
+                    setSelectedBranch({ repoPath: branch.repoPath, branch: branch.branch })
+                    setSection('branches')
+                  }}
+                  trailing={
+                    <span className="text-muted-foreground shrink-0 font-mono text-micro tabular-nums">
+                      {branch.files.length} {branch.files.length === 1 ? 'file' : 'files'}
+                    </span>
+                  }
+                >
+                  <span className="block truncate font-mono text-meta">{branch.branch}</span>
+                  {/* `contactName` is already "Persona · repo", so appending the
+                      repo again prints it twice — the exact thing Phase 13 fixed
+                      in BranchDetail's subtitle. Only added when it is missing. */}
+                  <span className="text-muted-foreground block truncate text-xs">
+                    {branch.contactName ?? `No contact · ${repoName(branch.repoPath)}`}
+                  </span>
+                </ListRow>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Home only. In Chats this is a section about money in a pane about
+            conversations — the Usage section already owns it, and the point of
+            splitting the two screens was to stop each one being everything. */}
+        {variant === 'home' && spend.turns > 0 && (
           <Section title={`Last ${spend.days} days`}>
             <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-6 gap-y-1 text-xs">
               <span>

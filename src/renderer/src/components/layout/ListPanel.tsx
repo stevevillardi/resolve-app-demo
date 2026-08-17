@@ -30,6 +30,11 @@ import type { PersonaTemplateDraft, SkillDraft } from '@/types'
 // fire one. Routines still need a Contact to bind to, so the button is present
 // but disabled until there is one — see `canCreate` below.
 const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLabel?: string }> = {
+  // Present only to satisfy `Record<Section, …>`. Home renders no list panel at
+  // all — AppShell drops the whole panel group for it — so nothing here is ever
+  // read. Kept rather than loosened to a Partial, because the exhaustiveness is
+  // what makes adding a section a compile error instead of an empty pane.
+  home: { title: 'Home' },
   chats: { title: 'Chats', searchPlaceholder: 'Search conversations', newLabel: 'New contact' },
   personas: { title: 'Personas', searchPlaceholder: 'Search personas', newLabel: 'New persona' },
   skills: { title: 'Skills', searchPlaceholder: 'Search skills', newLabel: 'New skill' },

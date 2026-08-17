@@ -26,6 +26,7 @@ export function WorkspaceView(): React.JSX.Element {
 }
 
 function view(section: Section, selected: ConversationSelection): React.JSX.Element {
+  if (section === 'home') return <WorkspaceHome />
   if (section === 'personas') return <PersonaDetailPanel />
   if (section === 'skills') return <SkillLibraryView />
   if (section === 'routines') return <RoutineEditor />
@@ -35,5 +36,8 @@ function view(section: Section, selected: ConversationSelection): React.JSX.Elem
   if (selected?.kind === 'contact') return <ThreadView contactId={selected.id} />
   if (selected?.kind === 'group') return <GroupThreadView groupId={selected.id} />
 
-  return <WorkspaceHome />
+  // Chats with nothing picked. Still shows what is running and what was said
+  // last — that is the useful thing to see while deciding which conversation to
+  // open — but not spend, which belongs to Home and to the Usage section.
+  return <WorkspaceHome variant="chats" />
 }
