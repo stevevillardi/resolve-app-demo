@@ -1,19 +1,25 @@
 import { asc, eq } from 'drizzle-orm'
-import { existsSync } from 'fs'
 import { initDb } from '../db'
 import { toContact } from '../db/mappers'
 import { contacts, personaTemplates } from '../db/schema'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import {
   changedFiles,
+  commitAll,
   deleteBranch,
+  dirtyFiles,
   headSha,
+  isAncestor,
   isDirty,
   listBranches,
   mergeBranch,
   mergePreview,
   worktreeList
 } from './git'
+import { resolveBranchRequests } from './group-messages'
 import { listGroups } from './groups'
+import { holdersOf } from './run-lock'
 import { PERSONA_BRANCH_PREFIX } from './worktrees'
 import type { MergePreview } from './git'
 import type { GithubScope } from '../../shared/domain'
@@ -44,6 +50,14 @@ export interface BranchSummary {
   files: string[]
   /** False when the Contact is gone or the user deleted the directory. */
   hasWorktree: boolean
+  /** Whether the main tree's HEAD already contains this branch (Phase 19). */
+  merged: boolean
+  /**
+   * Uncommitted paths sitting in the branch's worktree (Phase 19) — the work
+   * `files` cannot see because nothing committed it yet, and what the commit
+   * affordance offers to land. Empty when there is no live worktree to read.
+   */
+  dirtyFiles: string[]
   /**
    * The GitHub authority of the persona behind the branch (Phase 9), so the
    * panel knows whether to offer a pull request. Null for an orphan branch —
@@ -104,6 +118,7 @@ async function branchesIn(
   return Promise.all(
     refs.map(async (ref) => {
       const owner = repoContacts.find((contact) => contact.branch === ref.branch)
+      const hasWorktree = live.has(ref.branch)
       return {
         repoPath,
         branch: ref.branch,
@@ -112,7 +127,12 @@ async function branchesIn(
         contactId: owner?.id ?? null,
         contactName: owner?.displayName ?? null,
         files: await changedFiles(repoPath, 'HEAD', ref.branch),
-        hasWorktree: live.has(ref.branch),
+        hasWorktree,
+        merged: await isAncestor(repoPath, ref.branch, 'HEAD'),
+        dirtyFiles:
+          hasWorktree && owner?.worktreePath
+            ? await dirtyFiles(owner.worktreePath).catch(() => [])
+            : [],
         githubScope: owner ? (scopeOf(owner.personaTemplateId) ?? null) : null
       }
     })
@@ -164,6 +184,7 @@ export async function previewMerge(
 }
 
 export async function mergeIntoWorkingPath(
+  repoPath: string,
   targetPath: string,
   branch: string
 ): Promise<{ merged: boolean }> {
@@ -174,7 +195,64 @@ export async function mergeIntoWorkingPath(
   }
 
   await mergeBranch(targetPath, branch)
+  // The click that answers the ask (Phase 19): any open branch_request about
+  // this branch stops reading as a standing one.
+  resolveBranchRequests(repoPath, branch)
   return { merged: true }
+}
+
+/**
+ * Lands a branch's uncommitted work as a commit, on a click (Phase 19).
+ *
+ * The one caller of commitAll, and deliberately the only path by which this
+ * app authors a commit — Phase 9's rule against committing *unattended* work
+ * still stands on every turn and routine path. The persona is the `--author`,
+ * so `git log` attributes the work truthfully; the committer stays whoever
+ * git's own config says, which is the user whose click this was.
+ */
+export async function commitBranchWork(
+  repoPath: string,
+  branch: string,
+  message: string
+): Promise<{ committedSha: string; files: string[] }> {
+  const owner = allContacts().find(
+    (contact) => contact.repoPath === repoPath && contact.branch === branch
+  )
+  if (!owner?.worktreePath || !existsSync(join(owner.worktreePath, '.git'))) {
+    throw new Error(
+      'This branch has no live checkout to commit in. Only a branch whose Contact still exists can be committed here.'
+    )
+  }
+
+  // A run writing into this tree right now would race the `add -A`, and half a
+  // turn's work is the worst possible thing to commit.
+  const [holder] = holdersOf(owner.worktreePath)
+  if (holder) {
+    throw new Error(
+      `${holder.contactName} is working here. Wait for it to finish, or stop it first.`
+    )
+  }
+
+  const files = await dirtyFiles(owner.worktreePath)
+  if (files.length === 0) throw new Error('Nothing to commit — this checkout is clean.')
+
+  const persona = personaOf(owner.personaTemplateId)
+  const author = persona?.name ?? owner.displayName
+  const committedSha = await commitAll(owner.worktreePath, message, {
+    name: author,
+    email: `${emailSlug(author)}@personas.switchboard.local`
+  })
+
+  return { committedSha, files }
+}
+
+/** Lowercase alphanumerics and dashes — enough for a well-formed address. */
+function emailSlug(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'persona'
 }
 
 /**
@@ -188,6 +266,9 @@ export async function discardBranch(
   force = false
 ): Promise<{ deleted: boolean }> {
   await deleteBranch(repoPath, branch, force)
+  // Discarding answers the ask too — "no" is an answer, and the group thread
+  // should stop showing the request as standing either way.
+  resolveBranchRequests(repoPath, branch)
   return { deleted: true }
 }
 
@@ -199,6 +280,15 @@ async function headOf(workingPath: string): Promise<string> {
 
 function allContacts(): ReturnType<typeof toContact>[] {
   return initDb().select().from(contacts).orderBy(asc(contacts.displayName)).all().map(toContact)
+}
+
+/** One row rather than a join, since the panel lists a handful of branches. */
+function personaOf(personaTemplateId: string): { name: string } | undefined {
+  return initDb()
+    .select({ name: personaTemplates.name })
+    .from(personaTemplates)
+    .where(eq(personaTemplates.id, personaTemplateId))
+    .get()
 }
 
 /** One row rather than a join, since the panel lists a handful of branches. */

@@ -371,7 +371,9 @@ describe('stream normalization', () => {
     ])
 
     const ends = events.filter((e) => e.type === 'tool_end')
-    expect(ends).toContainEqual(expect.objectContaining({ toolCallId: 'tu-1', output: 'stdout here' }))
+    expect(ends).toContainEqual(
+      expect.objectContaining({ toolCallId: 'tu-1', output: 'stdout here' })
+    )
     expect(ends).toContainEqual(
       expect.objectContaining({ toolCallId: 'tu-2', output: 'part one\npart two' })
     )

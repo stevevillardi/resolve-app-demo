@@ -196,9 +196,9 @@ describe('toolOutputFor', () => {
   })
 
   it('is empty for items that answer with nothing', () => {
-    expect(
-      toolOutputFor({ id: 'i', type: 'file_change', changes: [], status: 'completed' })
-    ).toBe('')
+    expect(toolOutputFor({ id: 'i', type: 'file_change', changes: [], status: 'completed' })).toBe(
+      ''
+    )
   })
 })
 
