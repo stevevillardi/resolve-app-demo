@@ -214,8 +214,8 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
   const handleSend = (): void => {
     if (!parsed) return
     reset()
-    mention(parsed.contactId, parsed.content)
-    setDraft('')
+    // Cleared only on acceptance — same contract as ThreadView's send.
+    mention(parsed.contactId, parsed.content, { onSuccess: () => setDraft('') })
   }
 
   return (

@@ -113,7 +113,7 @@ export function useAgentStream(contactId: string): void {
 }
 
 export function useSendMessage(contactId: string): {
-  send: (content: string) => void
+  send: (content: string, opts?: { onSuccess?: () => void }) => void
   isPending: boolean
   error: string | null
   reset: () => void
@@ -130,7 +130,11 @@ export function useSendMessage(contactId: string): {
   })
 
   return {
-    send: (content) => mutation.mutate(content),
+    // The per-call onSuccess is how the composer's draft gets cleared only
+    // once main accepted the turn — a lock refusal rejects, and the draft
+    // has to survive it (review §B2).
+    send: (content, opts) =>
+      mutation.mutate(content, opts?.onSuccess ? { onSuccess: opts.onSuccess } : {}),
     isPending: mutation.isPending,
     // Carries the lock refusal naming whichever persona holds the repo, so the
     // composer can say who to wait for.

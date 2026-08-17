@@ -254,11 +254,14 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
       <Composer
         placeholder={`Message ${persona.name}…`}
+        value={draft}
         onValueChange={setDraft}
         commands={commands}
         onSend={(value) => {
           reset()
-          send(value)
+          // Cleared only on acceptance: a lock refusal rejects the mutation,
+          // and the refused draft must still be sitting in the field.
+          send(value, { onSuccess: () => setDraft('') })
         }}
         busy={isRunning}
         onStop={() => turn && cancel(turn.runId)}

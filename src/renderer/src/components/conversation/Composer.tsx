@@ -12,9 +12,16 @@ import { cn } from '@/lib/utils'
 
 interface ComposerProps {
   placeholder?: string
+  /**
+   * Fired with the trimmed draft. Deliberately does NOT clear the field —
+   * whether a send was accepted is the owner's knowledge (the IPC can refuse,
+   * e.g. a repo-lock refusal), and clearing here used to destroy the draft
+   * before the refusal came back. Owners clear on success.
+   */
   onSend?: (value: string) => void
-  onValueChange?: (value: string) => void
-  value?: string
+  onValueChange: (value: string) => void
+  /** Always controlled: both thread views own their draft state. */
+  value: string
   leadingAction?: ReactNode
   /** Shown under the field — e.g. which persona and sandbox will handle this. */
   hint?: ReactNode
@@ -46,7 +53,7 @@ export function Composer({
   placeholder = 'Message…',
   onSend,
   onValueChange,
-  value: controlledValue,
+  value,
   leadingAction,
   hint,
   busy = false,
@@ -55,9 +62,6 @@ export function Composer({
   notice,
   commands = []
 }: ComposerProps): React.JSX.Element {
-  const [internalValue, setInternalValue] = useState('')
-  const isControlled = controlledValue !== undefined
-  const value = isControlled ? controlledValue : internalValue
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Escape closes the picker without clearing what was typed. Keyed on the
@@ -83,8 +87,7 @@ export function Composer({
   }, [value])
 
   const handleChange = (next: string): void => {
-    if (!isControlled) setInternalValue(next)
-    onValueChange?.(next)
+    onValueChange(next)
     // Back to the top whenever the query changes: the old index pointed into a
     // list that no longer exists, and keeping it would highlight an unrelated
     // row.
@@ -99,8 +102,6 @@ export function Composer({
   const handleSend = (): void => {
     if (!value.trim() || disabled || busy) return
     onSend?.(value.trim())
-    if (!isControlled) setInternalValue('')
-    onValueChange?.('')
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
