@@ -26,6 +26,11 @@ export type AppStateKey =
    * somebody's convention. See services/repos.ts.
    */
   | 'workspace_root'
+  /**
+   * OS notifications on/off. Absence means ON — the unattended story is the
+   * reason they exist, so the toggle is an opt-out. See notifications.ts.
+   */
+  | 'notifications_enabled'
 
 export function getAppState(key: AppStateKey): string | null {
   const row = initDb().select().from(appState).where(eq(appState.key, key)).get()
