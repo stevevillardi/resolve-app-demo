@@ -100,6 +100,82 @@ export function ContextPanel({
                 )}
               </Row>
 
+              {/*
+                Everything below comes from the *repository*, and every one of
+                these is empty until a human opted this Contact in — which is
+                the app's whole governance story, so the panel says so out loud
+                rather than rendering nothing and letting silence mean two
+                different things.
+
+                Note the wording: these are the model's own executable skills,
+                discovered from disk, not the injected prose above that this app
+                also calls a Skill. The labels have to keep them apart.
+              */}
+              <Row label="From the repository">
+                {context.repoInstructions ? (
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="truncate font-mono text-meta">
+                      {context.repoInstructions.fileName}
+                    </span>
+                    <Chars n={context.repoInstructions.chars} />
+                  </span>
+                ) : (
+                  <Muted>
+                    No repository instructions. Its CLAUDE.md / AGENTS.md is not trusted by this
+                    contact, so the session never sees it.
+                  </Muted>
+                )}
+              </Row>
+
+              <Row
+                label={`Repo skills (${context.repoSkills.length + context.injectedSkills.length})`}
+              >
+                {context.repoSkills.length === 0 && context.injectedSkills.length === 0 ? (
+                  <Muted>
+                    None. Skills the repository ships are disabled by name unless opted in.
+                  </Muted>
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {context.repoSkills.map((name) => (
+                      <li key={name} className="flex items-baseline justify-between gap-3">
+                        <span className="truncate font-mono text-meta">{name}</span>
+                        <span className="text-muted-foreground shrink-0 text-meta">discovered</span>
+                      </li>
+                    ))}
+                    {context.injectedSkills.map((skill) => (
+                      <li key={skill.name} className="flex items-baseline justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block truncate font-mono text-meta">{skill.name}</span>
+                          <span className="text-muted-foreground block truncate text-meta">
+                            {skill.description}
+                          </span>
+                        </span>
+                        {/* Named in the prompt because the backend cannot find
+                            it for itself — on Claude that is every one of them. */}
+                        <span className="text-muted-foreground shrink-0 text-meta">described</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Row>
+
+              <Row label={`Tools (${context.mcpServers.length})`}>
+                {context.mcpServers.length === 0 ? (
+                  <Muted>No servers reachable. This session can only touch its own files.</Muted>
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {context.mcpServers.map((server) => (
+                      <li key={server.id} className="flex items-baseline justify-between gap-3">
+                        <span className="truncate font-mono text-meta">{server.url}</span>
+                        <span className="text-muted-foreground shrink-0 text-meta">
+                          {server.deniedTools} blocked
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Row>
+
               <Row label={`Repo log (${context.groupContext.length})`}>
                 {context.groupContext.length === 0 ? (
                   <Muted>Nothing recorded on this repository yet.</Muted>

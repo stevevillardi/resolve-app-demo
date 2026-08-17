@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
 import { contacts, groupMessages, groups, personaTemplates, skills } from '../db/schema'
 import type { AppDatabase } from '../db/create'
@@ -18,6 +21,12 @@ let db: AppDatabase
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({
   app: { getPath: () => '/Users/dev/Library/Application Support/persona-router' }
+}))
+// Reaches the OS keychain otherwise. Left disconnected so no MCP server is
+// offered — the capability assertions below are about repo content.
+vi.mock('./github-auth', () => ({
+  getGitHubStatus: () => ({ connected: false, configured: true }),
+  getGitHubToken: () => null
 }))
 
 const { buildSessionSpec, contactContext } = await import('./session-spec')
@@ -170,5 +179,68 @@ describe('buildSessionSpec', () => {
     expect(buildSessionSpec(contact, { ...persona, model: 'claude-opus-5' }).model).toBe(
       'claude-opus-5'
     )
+  })
+})
+
+/**
+ * Capability resolution belongs here rather than in startTurn, and this is the
+ * assertion that keeps it here.
+ *
+ * It was in startTurn when Phase 14 wrote it, which meant a turn sent the
+ * repository's instructions and its skills while this panel — the screen whose
+ * entire job is "what will this turn send" — did not know they existed. Nothing
+ * failed; the panel simply under-reported. Moving `capabilitiesFor` into
+ * buildSessionSpec is what makes the two provably the same, so the test uses a
+ * *real* repository on disk with content in it: asserting the fields are merely
+ * defined would still pass against empty arrays.
+ */
+describe('buildSessionSpec resolves what the repository contributes', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'session-spec-'))
+
+  afterAll(() => rmSync(scratch, { recursive: true, force: true }))
+
+  function trustedContact(trust: { instructions: boolean; skills: string[] }): void {
+    writeFileSync(join(scratch, 'AGENTS.md'), 'Run the linter before you commit.')
+    mkdirSync(join(scratch, '.claude/skills/release-notes'), { recursive: true })
+    writeFileSync(
+      join(scratch, '.claude/skills/release-notes/SKILL.md'),
+      '---\nname: release-notes\ndescription: Draft the release notes.\n---\nBody.'
+    )
+    db.update(contacts).set({ repoPath: scratch, repoTrust: trust }).run()
+  }
+
+  it('sends nothing from the repo until the contact is opted in', () => {
+    trustedContact({ instructions: false, skills: [] })
+    const spec = buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+
+    expect(spec.repoInstructions).toBeUndefined()
+    expect(spec.repoSkills).toEqual([])
+    expect(spec.injectedSkills).toEqual([])
+  })
+
+  it('carries the repo instructions and skills once it is', () => {
+    trustedContact({ instructions: true, skills: ['release-notes'] })
+    const spec = buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+
+    expect(spec.repoInstructions?.fileName).toBe('AGENTS.md')
+    expect(spec.repoInstructions?.content).toContain('Run the linter')
+    // Claude cannot discover its own skills under `settingSources: []`, so an
+    // approved one arrives described rather than named.
+    expect(spec.injectedSkills?.map((skill) => skill.name)).toEqual(['release-notes'])
+  })
+
+  it('reports to the panel exactly what it hands the turn', () => {
+    trustedContact({ instructions: true, skills: ['release-notes'] })
+    const spec = buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+    const shown = contactContext(CONTACT_ID)!
+
+    expect(shown.repoInstructions).toEqual({
+      fileName: spec.repoInstructions!.fileName,
+      chars: spec.repoInstructions!.content.length
+    })
+    expect(shown.injectedSkills.map((skill) => skill.name)).toEqual(
+      spec.injectedSkills!.map((skill) => skill.name)
+    )
+    expect(shown.repoSkills).toEqual(spec.repoSkills)
   })
 })

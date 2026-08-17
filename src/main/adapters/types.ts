@@ -26,6 +26,60 @@ export interface SiblingBranch {
 }
 
 /**
+ * A repo skill described to the model rather than discovered by it.
+ *
+ * Structurally the same as `RepoSkill` in services/repo-instructions.ts, and
+ * declared separately for the reason SiblingBranch is: this is the shape the
+ * adapters agree on, and nothing here may import a service. The fields the
+ * adapters actually render are the only ones repeated.
+ */
+export interface InjectedSkill {
+  name: string
+  description: string
+  /** Absolute, because the model has to be able to read it on request. */
+  path: string
+}
+
+/** The bound repository's own instructions, and which file they came from. */
+export interface RepoInstructionsBlock {
+  fileName: string
+  content: string
+}
+
+/**
+ * An MCP server, resolved down to what an adapter needs to configure it.
+ *
+ * The narrowing has already happened by the time this arrives: `url` is the
+ * endpoint the persona's `githubScope` earned, and `deniedTools` /
+ * `disallowedTools` are the second layer over it. An adapter's job is to pass
+ * these through, never to decide them — see githubMcpDenyList() in sandbox.ts,
+ * which is the single table both layers read.
+ */
+export interface ResolvedServer {
+  id: string
+  url: string
+  /** The bearer token itself. Claude sends it as an Authorization header. */
+  token: string
+  /**
+   * The environment variable the token has been placed in, for backends that
+   * take a variable name rather than the value.
+   *
+   * Codex is the one that does, and the indirection is not a style preference:
+   * its config object is flattened into `--config key=value` argv, which any
+   * process on the machine can read out of `ps`. Filled by backendEnv() in
+   * services/adapter-host.ts, the one place secrets meet a subprocess.
+   *
+   * Carried here rather than derived in the adapter so that an adapter never
+   * has to know which server this is — see the note above about deciding.
+   */
+  tokenEnvVar: string
+  /** Bare names, for the in-process `canUseTool` check. */
+  deniedTools: string[]
+  /** The same names qualified as `mcp__<id>__*`, for `disallowedTools`. */
+  disallowedTools: string[]
+}
+
+/**
  * Everything an adapter needs to start or resume a session.
  *
  * Deviates from blueprint §3's literal `createSession(persona, repoPath)`:
@@ -86,6 +140,41 @@ export interface SessionSpec {
    * committed to the repo after the approval does not inherit it.
    */
   repoSkills?: string[]
+  /**
+   * Repo skills the backend cannot discover for itself, described to the model
+   * instead: name, description, and the absolute path of the `SKILL.md` to read
+   * when it becomes relevant.
+   *
+   * Every approved skill on Claude arrives this way, because opening its
+   * discovery means `settingSources: ['project']`, which is one switch for six
+   * things — one of them `.claude/settings.json` and its `permissions.allow`
+   * Bash grants. On Codex only the `.claude/skills` entries land here; the rest
+   * are named in `repoSkills` above and discovered natively.
+   *
+   * Resolved by the caller (capabilitiesFor) for the usual reason: choosing
+   * which of the two lists a skill belongs in needs the Contact's trust record,
+   * which is in the database.
+   */
+  injectedSkills?: InjectedSkill[]
+  /**
+   * The bound repository's own `CLAUDE.md` or `AGENTS.md`, when this Contact
+   * has been opted in to trusting it.
+   *
+   * Unset is the default and the safe direction. Both backends can find these
+   * files by themselves and this app stops them (`settingSources: []`,
+   * `project_doc_max_bytes: 0`); the text arrives here or it does not arrive.
+   */
+  repoInstructions?: RepoInstructionsBlock
+  /**
+   * MCP servers this session may reach, already narrowed to what the persona's
+   * `githubScope` permits — the endpoint chosen and the denied tool names
+   * resolved before the adapter sees them.
+   *
+   * Resolved by the caller because it needs the OS keychain for the token and
+   * the database for the persona's server allowlist, and nothing here may reach
+   * either.
+   */
+  mcpServers?: ResolvedServer[]
   /**
    * The repo's recent Group summaries, oldest first — blueprint §5's second
    * injection source and the mechanism behind §16 Journey 2.

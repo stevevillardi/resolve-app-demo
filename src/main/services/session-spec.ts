@@ -1,4 +1,5 @@
 import { composeInstructions, orderSkills } from '../adapters/context'
+import { capabilitiesFor } from './capabilities'
 import { getContact } from './contacts'
 import { contextForRepo } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
@@ -28,10 +29,32 @@ export function buildSessionSpec(
     workingPath: ''
   }
 ): SessionSpec {
+  // What this Contact may reach beyond its own working directory: MCP servers
+  // narrowed to the persona's githubScope, plus whatever the repository itself
+  // has been trusted to say. Resolved per turn like the group context, so
+  // revoking trust or disconnecting GitHub takes effect on the next message
+  // rather than the next restart.
+  //
+  // Resolved *here* rather than in startTurn so the context panel reports it
+  // too. A capability the turn sends and the panel does not know about is
+  // exactly the drift this function exists to make impossible.
+  const capabilities = capabilitiesFor(contact, persona)
+
   return {
     persona,
     repoPath: options.workingPath || workingPathFor(contact),
     skills: skillsForPersona(persona),
+    repoSkills: capabilities.nativeSkillNames,
+    injectedSkills: capabilities.injectedSkills,
+    mcpServers: capabilities.mcpServers,
+    ...(capabilities.repoInstructions
+      ? {
+          repoInstructions: {
+            fileName: capabilities.repoInstructions.fileName,
+            content: capabilities.repoInstructions.content
+          }
+        }
+      : {}),
     // Blueprint §5: what the rest of the fleet has decided on this repo.
     // Resolved fresh per turn rather than per session, so a summary written by a
     // colleague between two of this contact's turns is visible on the next one
@@ -108,6 +131,29 @@ export function contactContext(contactId: string): ContactContext | null {
       id: skill.id,
       name: skill.name,
       chars: skill.content.trim().length
+    })),
+    // Deliberately not merged into `skills` above. A Skill in this app is
+    // injected prose; a repo skill is an executable capability the backend
+    // discovers. Same word, different things, and this panel is the one screen
+    // where both appear at once — so they stay separate fields and the UI
+    // labels them apart.
+    repoSkills: spec.repoSkills ?? [],
+    injectedSkills: (spec.injectedSkills ?? []).map((skill) => ({
+      name: skill.name,
+      description: skill.description
+    })),
+    repoInstructions: spec.repoInstructions
+      ? {
+          fileName: spec.repoInstructions.fileName,
+          chars: spec.repoInstructions.content.length
+        }
+      : null,
+    mcpServers: (spec.mcpServers ?? []).map((server) => ({
+      id: server.id,
+      url: server.url,
+      // A count, not the list: the table is 30-odd tool names and the useful
+      // fact is that the narrowing happened at all. The token is never sent.
+      deniedTools: server.deniedTools.length
     })),
     groupContext: (spec.groupContext ?? []).map((entry) => ({
       timestamp: entry.timestamp,

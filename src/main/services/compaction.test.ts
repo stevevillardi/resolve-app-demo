@@ -222,6 +222,22 @@ describe('summarizeTurn', () => {
     expect(lastSpec?.skills).toEqual([])
   })
 
+  it('gives the summariser no capabilities either', async () => {
+    // It runs after every single turn, so an MCP handshake here is a cost
+    // nobody asked for — and a summariser that could comment on an issue is a
+    // capability nobody granted. The same argument as the skills above, made
+    // for the axis Phase 14 added rather than left to be inferred from it.
+    summarizeResult = GOOD
+    await summarizeTurn('contact-1', 'q', 'a')
+
+    expect(lastSpec?.mcpServers ?? []).toEqual([])
+    expect(lastSpec?.repoSkills ?? []).toEqual([])
+    expect(lastSpec?.injectedSkills ?? []).toEqual([])
+    // Repo-authored instructions are the summariser's business least of all:
+    // it is describing what happened, not taking direction about it.
+    expect(lastSpec?.repoInstructions).toBeUndefined()
+  })
+
   it('sends both halves of the exchange', async () => {
     summarizeResult = GOOD
     await summarizeTurn('contact-1', 'why is auth slow?', 'It re-read the token file.')

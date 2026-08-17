@@ -11,7 +11,19 @@ import type { SessionSpec } from './types'
  */
 
 const query = vi.fn()
-vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: (args: unknown) => query(args) }))
+
+/**
+ * Only `query` is faked. The rest of the module is passed through, so
+ * SYSTEM_PROMPT_DYNAMIC_BOUNDARY in the assertions below is the SDK's own
+ * value rather than a copy of it — if a version bump changes the marker, the
+ * prompt-boundary tests fail instead of silently asserting a stale string.
+ */
+vi.mock('@anthropic-ai/claude-agent-sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@anthropic-ai/claude-agent-sdk')>()),
+  query: (args: unknown) => query(args)
+}))
+
+const { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } = await import('@anthropic-ai/claude-agent-sdk')
 
 const { classifyClaudeError, createClaudeAdapter, toolDetail, usageFromResult } =
   await import('./claude')
@@ -482,6 +494,125 @@ describe('sandbox wiring', () => {
   })
 })
 
+describe('MCP wiring', () => {
+  const server = {
+    id: 'github',
+    url: 'https://api.githubcopilot.com/mcp/',
+    token: 'ghp_secret_value',
+    tokenEnvVar: 'PERSONA_ROUTER_GITHUB_MCP_TOKEN',
+    deniedTools: ['merge_pull_request'],
+    disallowedTools: ['mcp__github__merge_pull_request']
+  }
+
+  async function runWith(spec: SessionSpec): Promise<void> {
+    const adapter = createClaudeAdapter({})
+    for await (const _ of adapter.run(adapter.createSession(spec), 'go')) void _
+  }
+
+  it('offers no server at all to a persona granted none', async () => {
+    await collect([])
+    expect(query.mock.calls[0][0].options).not.toHaveProperty('mcpServers')
+  })
+
+  it('refuses the repo its own .mcp.json either way', async () => {
+    // Unconditional on purpose. Setting it only alongside a granted server
+    // would relax the seal in exactly the case where nothing else is watching
+    // — a persona with no servers is the one with no deny list to fall back on.
+    await collect([])
+    expect(query.mock.calls[0][0].options.strictMcpConfig).toBe(true)
+  })
+
+  it('sends the token as a header on the endpoint the scope earned', async () => {
+    await runWith({ ...SPEC, mcpServers: [server] })
+    const { mcpServers } = query.mock.calls[0][0].options
+    expect(mcpServers.github).toEqual({
+      type: 'http',
+      url: 'https://api.githubcopilot.com/mcp/',
+      headers: { Authorization: 'Bearer ghp_secret_value' }
+    })
+  })
+
+  it('carries both axes into disallowedTools without either deriving the other', async () => {
+    await runWith({ ...SPEC, mcpServers: [server] })
+    const { disallowedTools } = query.mock.calls[0][0].options
+    expect(disallowedTools).toContain('Write')
+    expect(disallowedTools).toContain('mcp__github__merge_pull_request')
+  })
+
+  it('denies a write tool the scope withheld, through canUseTool', async () => {
+    const persona = { ...PERSONA, githubScope: 'open_pr' as const }
+    await runWith({ ...SPEC, persona, mcpServers: [server] })
+    const { canUseTool } = query.mock.calls[0][0].options
+    const result = await canUseTool('mcp__github__merge_pull_request', {}, {})
+
+    expect(result.behavior).toBe('deny')
+    expect(result.message).toContain('Propose the change instead')
+  })
+
+  it('lets an open_pr persona open the pull request it exists to open', async () => {
+    const persona = { ...PERSONA, githubScope: 'open_pr' as const }
+    await runWith({ ...SPEC, persona, mcpServers: [server] })
+    const { canUseTool } = query.mock.calls[0][0].options
+    expect((await canUseTool('mcp__github__create_pull_request', {}, {})).behavior).toBe('allow')
+  })
+
+  it('keeps GitHub denied when the filesystem axis is wide open', async () => {
+    // The combination this phase exists for. At full_access the permission mode
+    // is bypassPermissions and canUseTool is never consulted, so the deny that
+    // matters is the name list — asserting the callback here would be asserting
+    // a layer the SDK has already skipped.
+    const persona = {
+      ...PERSONA,
+      sandbox: 'full_access' as const,
+      githubScope: 'read_only' as const
+    }
+    await runWith({ ...SPEC, persona, mcpServers: [server] })
+
+    expect(query.mock.calls[0][0].options.disallowedTools).toContain(
+      'mcp__github__merge_pull_request'
+    )
+  })
+})
+
+describe('the system prompt boundary', () => {
+  it('splits the stable half from the per-turn half', async () => {
+    await collect([])
+    const { systemPrompt } = query.mock.calls[0][0].options
+    expect(systemPrompt).toContain(SYSTEM_PROMPT_DYNAMIC_BOUNDARY)
+    expect(systemPrompt[0]).toContain('You review code.')
+  })
+
+  it('puts the group context on the volatile side of it', async () => {
+    // The whole point: a colleague's summary landing between two turns must
+    // not invalidate the persona and its skills along with itself.
+    const adapter = createClaudeAdapter({})
+    const spec: SessionSpec = {
+      ...SPEC,
+      groupContext: [
+        {
+          id: 'gm1',
+          groupId: 'g1',
+          timestamp: 1_700_000_000_000,
+          type: 'system_summary',
+          content: 'a colleague decided something',
+          category: 'decision',
+          durable: true
+        }
+      ]
+    }
+    for await (const _ of adapter.run(adapter.createSession(spec), 'go')) void _
+
+    const { systemPrompt } = query.mock.calls[0][0].options
+    const boundary = systemPrompt.indexOf(SYSTEM_PROMPT_DYNAMIC_BOUNDARY)
+    const summary = systemPrompt.findIndex((block: string) =>
+      block.includes('a colleague decided something')
+    )
+
+    expect(boundary).toBeGreaterThan(-1)
+    expect(summary).toBeGreaterThan(boundary)
+  })
+})
+
 describe('summarize', () => {
   /**
    * Captured from a real run: `npm run probe:structured -- --backend claude
@@ -571,5 +702,31 @@ describe('summarize', () => {
     await run([summaryResult()])
     const { disallowedTools } = query.mock.calls[0][0].options
     expect(disallowedTools).toEqual(expect.arrayContaining(['Bash', 'Read', 'Write', 'Edit']))
+  })
+
+  it('gives the summariser no MCP server, even when the session has one', async () => {
+    // It runs after every single turn. A GitHub handshake to write a summary
+    // of a conversation is a cost nobody asked for, and the summariser has no
+    // canUseTool to fall back on if one were connected.
+    const adapter = createClaudeAdapter()
+    const spec: SessionSpec = {
+      ...SPEC,
+      mcpServers: [
+        {
+          id: 'github',
+          url: 'https://api.githubcopilot.com/mcp/',
+          token: 'ghp_secret_value',
+          tokenEnvVar: 'PERSONA_ROUTER_GITHUB_MCP_TOKEN',
+          deniedTools: [],
+          disallowedTools: []
+        }
+      ]
+    }
+    query.mockImplementation(() => mockStream([summaryResult()]))
+    await adapter.summarize(adapter.createSession(spec), 'summarise', SCHEMA)
+
+    const { options } = query.mock.calls[0][0]
+    expect(options).not.toHaveProperty('mcpServers')
+    expect(options.strictMcpConfig).toBe(true)
   })
 })

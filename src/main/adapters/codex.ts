@@ -208,18 +208,55 @@ export const DEFAULT_CODEX_MODEL = 'gpt-5.5'
  * The skills list is recomputed per turn rather than cached, because the seal
  * is only as current as the scan: a skill committed to the repo between two
  * turns would otherwise arrive unannounced.
+ *
+ * `mcpServers` is the one thing that differs between the two call sites, hence
+ * the flag rather than a second function: the summariser runs after every turn
+ * and an MCP handshake per turn is a cost nobody asked for. Keeping the seal
+ * keys in one place is worth more than keeping the signature clean.
+ *
+ * The `mcp_servers` schema is the CLI binary's, not the SDK's — @openai/codex-sdk
+ * types nothing about MCP and `config` is an open index signature, so a
+ * misspelled key here is silently ignored rather than a type error. The names
+ * used below were read off `codex mcp add --help` and the binary's own serde
+ * field list for RawMcpServerConfig. That is weaker evidence than a live
+ * handshake; `LIVE_MCP=1` is what upgrades it.
  */
-export function codexConfigFor(spec: SessionSpec): CodexConfigObject {
+export function codexConfigFor(
+  spec: SessionSpec,
+  include: { mcpServers: boolean } = { mcpServers: true }
+): CodexConfigObject {
   const allowed = new Set(spec.repoSkills ?? [])
   const disabled = discoverCodexSkills(spec.repoPath)
     .filter((name) => !allowed.has(name))
     .map((name) => ({ name, enabled: false }))
 
+  const servers = include.mcpServers ? (spec.mcpServers ?? []) : []
+
   return {
     developer_instructions: composeInstructions(spec),
     project_doc_max_bytes: 0,
     features: { hooks: false },
-    ...(disabled.length > 0 ? { skills: { config: disabled } } : {})
+    ...(disabled.length > 0 ? { skills: { config: disabled } } : {}),
+    ...(servers.length > 0
+      ? {
+          mcp_servers: Object.fromEntries(
+            servers.map((server) => [
+              server.id,
+              {
+                url: server.url,
+                // The variable name, never the token. This object is flattened
+                // into `--config key=value` argv, which any process on the
+                // machine can read out of `ps`; the binary refuses a literal
+                // `bearer_token` for the same reason.
+                bearer_token_env_var: server.tokenEnvVar,
+                // The bare names, which is the form Codex wants — the same
+                // table Claude receives qualified as mcp__github__*.
+                ...(server.deniedTools.length > 0 ? { disabled_tools: server.deniedTools } : {})
+              }
+            ])
+          )
+        }
+      : {})
   }
 }
 
@@ -462,7 +499,11 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
       const client = new Codex({
         ...(config.codexBinaryPath ? { codexPathOverride: config.codexBinaryPath } : {}),
         ...(config.env ? { env: { ...process.env, ...config.env } as Record<string, string> } : {}),
-        config: codexConfigFor(spec)
+        // The seals apply here too; the servers do not. This runs after every
+        // turn, and connecting to GitHub to write a summary of a conversation
+        // is a handshake nobody asked for. Claude's summariser is sealed the
+        // same way — see SUMMARY_DISALLOWED_TOOLS in claude.ts.
+        config: codexConfigFor(spec, { mcpServers: false })
       })
 
       const thread = client.startThread({

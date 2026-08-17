@@ -17,9 +17,9 @@ import {
   workingPathFor,
   type Release
 } from './run-lock'
+import { buildSessionSpec } from './session-spec'
 import type { TurnOrigin, TurnOutcome } from './turn-origin'
 import { baselineFor, recordUsage } from './usage-events'
-import { buildSessionSpec } from './session-spec'
 import { ensureWorktree } from './worktrees'
 import type { SessionSpec } from '../adapters/types'
 import type { AgentEvent } from '../../shared/agent'
@@ -295,10 +295,11 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
     runs.set(runId, { controller, release, contactId, origin, groupId, settle: settle! })
 
     // Built by session-spec.ts rather than inline, so the "what's in my
-    // context" panel resolves the same thing this turn is about to send. The
-    // usage baseline stays a caller's concern: Codex reports cumulatively
-    // across a thread, so without it every turn after the first over-reports —
-    // see baselineFor(). Claude ignores it, and the panel has no use for it.
+    // context" panel resolves the same thing this turn is about to send —
+    // capability resolution included. The usage baseline stays a caller's
+    // concern: Codex reports cumulatively across a thread, so without it every
+    // turn after the first over-reports — see baselineFor(). Claude ignores it,
+    // and the panel has no use for it.
     const spec = buildSessionSpec(contact, persona, {
       workingPath,
       usageBaseline: baselineFor(contactId, contact.backendSessionId)

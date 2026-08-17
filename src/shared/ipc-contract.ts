@@ -126,6 +126,21 @@ const contactContextSchema = z.object({
   systemPromptChars: z.number(),
   /** In the order composeInstructions writes them, which is persona.skillIds. */
   skills: z.array(z.object({ id: z.string(), name: z.string(), chars: z.number() })),
+  /**
+   * What the *repository* contributes, which is a different thing from `skills`
+   * above and shares a word with it (see CLAUDE.md).
+   *
+   * `repoSkills` are `SKILL.md` documents the backend discovers by itself;
+   * `injectedSkills` are the ones it cannot, described to the model instead.
+   * `repoInstructions` is the repo's own CLAUDE.md/AGENTS.md. All three are
+   * empty until a human has opted this Contact in, and that is the normal case
+   * — the panel has to be able to say "nothing" and mean it.
+   */
+  repoSkills: z.array(z.string()),
+  injectedSkills: z.array(z.object({ name: z.string(), description: z.string() })),
+  repoInstructions: z.object({ fileName: z.string(), chars: z.number() }).nullable(),
+  /** Reachable servers, already narrowed by the persona's githubScope. */
+  mcpServers: z.array(z.object({ id: z.string(), url: z.string(), deniedTools: z.number() })),
   /** The filtered, capped repo log — not everything groupMessages.list returns. */
   groupContext: z.array(
     z.object({

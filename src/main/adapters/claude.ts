@@ -1,8 +1,14 @@
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { query, SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentCapabilities, AgentErrorKind, AgentEvent, AgentUsage } from '../../shared/agent'
-import { composeInstructions } from './context'
+import { composeInstructionBlocks, composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
-import { claudeSandboxOptions, evaluateToolUse, osSandboxSupported } from './sandbox'
+import { GITHUB_MCP_ALL_TOOLS, qualifiedGithubToolName } from './github-mcp-tools'
+import {
+  claudeSandboxOptions,
+  evaluateMcpToolUse,
+  evaluateToolUse,
+  osSandboxSupported
+} from './sandbox'
 import type {
   AdapterConfig,
   AgentAdapter,
@@ -180,18 +186,49 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
       spec.writablePaths ?? []
     )
     const abort = signal ? abortControllerFor(signal) : null
+    const servers = spec.mcpServers ?? []
+    const { prefix, suffix } = composeInstructionBlocks(spec)
 
     const stream = query({
       prompt,
       options: {
         cwd: spec.repoPath,
-        systemPrompt: composeInstructions(spec),
+        // The boundary marks where the globally-cacheable half of the prompt
+        // ends. Everything before it is stable for the life of the session;
+        // the group summaries and sibling branches after it are re-resolved
+        // every turn, and used to invalidate the whole prefix with them.
+        systemPrompt: [...prefix, SYSTEM_PROMPT_DYNAMIC_BOUNDARY, ...suffix],
         // A persona's instructions are the persona's alone — never whatever
         // CLAUDE.md or settings happen to sit in the repo it is working on.
         settingSources: [],
         includePartialMessages: true,
         permissionMode: sandbox.permissionMode,
-        disallowedTools: sandbox.disallowedTools,
+        // Two axes, two lists, one concatenation. The sandbox names govern the
+        // filesystem and the mcp__github__* names govern GitHub, and neither
+        // was derived from the other — see githubMcpDenyList() in sandbox.ts.
+        disallowedTools: [...sandbox.disallowedTools, ...servers.flatMap((s) => s.disallowedTools)],
+        // The token travels in a header rather than the environment because
+        // Claude offers the header. Absent entirely when the persona was
+        // granted no server, which with strictMcpConfig below means no mcp__*
+        // tool exists in the session at all.
+        ...(servers.length > 0
+          ? {
+              mcpServers: Object.fromEntries(
+                servers.map((server) => [
+                  server.id,
+                  {
+                    type: 'http' as const,
+                    url: server.url,
+                    headers: { Authorization: `Bearer ${server.token}` }
+                  }
+                ])
+              )
+            }
+          : {}),
+        // Unconditional, and that is the point: it is what makes a repo's own
+        // .mcp.json unreachable. Setting it only alongside a server would
+        // relax the seal in exactly the case where nothing else is watching.
+        strictMcpConfig: true,
         ...(sandbox.allowDangerouslySkipPermissions
           ? { allowDangerouslySkipPermissions: true }
           : {}),
@@ -203,6 +240,15 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
         // in claude-auth.ts) or the CLI loses PATH and HOME.
         env: { ...process.env, ...config.env } as Record<string, string>,
         canUseTool: async (toolName, input) => {
+          // GitHub first, and separately: evaluateToolUse opens with
+          // `if (level === 'full_access') return ALLOWED`, so folding the two
+          // together would let the filesystem axis decide a GitHub question.
+          // This returns ALLOWED for every name that is not this server's, so
+          // Bash and Edit fall straight through to the check below.
+          const mcp = evaluateMcpToolUse(spec.persona.githubScope, toolName)
+          if (!mcp.allowed) {
+            return { behavior: 'deny', message: mcp.reason ?? 'Denied by GitHub scope.' }
+          }
           const decision = evaluateToolUse(spec.persona.sandbox, toolName, input, spec.repoPath)
           return decision.allowed
             ? { behavior: 'allow', updatedInput: input }
@@ -397,6 +443,10 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
           cwd: spec.repoPath,
           systemPrompt: composeInstructions(spec),
           settingSources: [],
+          // No mcpServers, deliberately — see SUMMARY_DISALLOWED_TOOLS below.
+          // strictMcpConfig is still set, so a repo .mcp.json cannot supply one
+          // through the back door on the one path that has no canUseTool.
+          strictMcpConfig: true,
           outputFormat: { type: 'json_schema', schema },
           disallowedTools: SUMMARY_DISALLOWED_TOOLS,
           env: { ...process.env, ...config.env } as Record<string, string>,
@@ -443,6 +493,14 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
  * A summariser reads the prompt it was given and nothing else. Named
  * explicitly rather than derived from the sandbox level so that widening
  * `sandbox.ts` later cannot quietly hand the summariser filesystem access.
+ *
+ * The MCP names are here for exactly that reason. The summariser is never
+ * passed `mcpServers`, so today no `mcp__*` tool exists in its session at all —
+ * but this was a list of bare tool names that no qualified MCP name could ever
+ * have matched, which would have made it look like a guard covering a case it
+ * did not cover. It runs after every single turn; an MCP handshake per turn is
+ * a cost nobody asked for, and a summariser that could comment on an issue is
+ * a capability nobody granted.
  */
 const SUMMARY_DISALLOWED_TOOLS = [
   'Bash',
@@ -453,7 +511,8 @@ const SUMMARY_DISALLOWED_TOOLS = [
   'Read',
   'WebFetch',
   'WebSearch',
-  'Write'
+  'Write',
+  ...GITHUB_MCP_ALL_TOOLS.map(qualifiedGithubToolName)
 ]
 
 /**
