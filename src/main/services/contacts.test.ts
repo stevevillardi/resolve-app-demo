@@ -19,8 +19,14 @@ vi.mock('electron', () => ({
   app: { getPath: () => '/Users/dev/Library/Application Support/persona-router' }
 }))
 
-const { createContact, getContact, listContacts, renameContact, setBackendSessionId } =
-  await import('./contacts')
+const {
+  createContact,
+  getContact,
+  listContacts,
+  renameContact,
+  setBackendSessionId,
+  setRepoTrust
+} = await import('./contacts')
 const { ensureGroupForRepo, listGroups } = await import('./groups')
 
 const PERSONA_ID = 'persona-1'
@@ -283,5 +289,58 @@ describe('ensureGroupForRepo', () => {
     // one-group-per-repo rule everywhere downstream.
     ensureGroupForRepo('~/code/app')
     expect(() => db.insert(groups).values({ id: 'dupe', repoPath: '~/code/app' }).run()).toThrow()
+  })
+})
+
+describe('repo trust', () => {
+  it('starts closed, which is the only safe default', () => {
+    // Every Contact begins trusting nothing its repository says. A clone of
+    // somebody else's project should not be able to instruct a persona because
+    // a human once pointed a Contact at it.
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    expect(contact.repoTrust).toBeNull()
+  })
+
+  it('records instructions and skills separately', () => {
+    // Two different grants. Trusting a repo's CLAUDE.md is not the same as
+    // letting it hand the model executable skills, and a UI that offered one
+    // switch for both would be making that decision on the user's behalf.
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    const trusted = setRepoTrust(contact.id, { instructions: true, skills: ['release-notes'] })
+
+    expect(trusted.repoTrust).toEqual({ instructions: true, skills: ['release-notes'] })
+    expect(getContact(contact.id)?.repoTrust).toEqual(trusted.repoTrust)
+  })
+
+  it('revokes by writing the closed state, not by deleting the row', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setRepoTrust(contact.id, { instructions: true, skills: ['release-notes'] })
+    const revoked = setRepoTrust(contact.id, { instructions: false, skills: [] })
+
+    expect(revoked.repoTrust).toEqual({ instructions: false, skills: [] })
+  })
+
+  it('touches nothing else on the row', () => {
+    // Same claim as rename, and the same reason it needs the load-bearing
+    // columns actually set: a mutation that nulled backendSessionId on every
+    // trust change would pass against a fresh contact where it is already null.
+    const contact = createContact({
+      personaTemplateId: PERSONA_ID,
+      repoPath: '~/code/app',
+      displayName: 'Code Reviewer · app',
+      isolation: 'worktree'
+    })
+    setBackendSessionId(contact.id, 'session-abc123')
+    const before = getContact(contact.id) as Contact
+
+    const after = setRepoTrust(contact.id, { instructions: true, skills: [] })
+
+    expect(after).toEqual({ ...before, repoTrust: { instructions: true, skills: [] } })
+  })
+
+  it('refuses a contact that does not exist', () => {
+    expect(() => setRepoTrust('nope', { instructions: true, skills: [] })).toThrow(
+      /No such contact/
+    )
   })
 })

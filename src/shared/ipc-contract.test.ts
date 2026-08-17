@@ -68,9 +68,43 @@ describe('contract shape', () => {
         'branches.targets',
         'branches.preview',
         'branches.merge',
-        'branches.discard'
+        'branches.discard',
+        // Phase 14
+        'contacts.setRepoTrust',
+        'contacts.repoOffers'
       ])
     )
+  })
+})
+
+describe('repo trust', () => {
+  it('is its own procedure, not a field on the contact update', () => {
+    // Renaming a contact and granting its repository the right to instruct it
+    // are different decisions. Keeping them apart at the Zod boundary is what
+    // stops the second happening as a side effect of the first.
+    const update = ipcContract['contacts.update'].input
+    expect(() => update.parse({ id: 'c1', displayName: 'Reviewer' })).not.toThrow()
+
+    const parsed = update.parse({
+      id: 'c1',
+      displayName: 'Reviewer',
+      trust: { instructions: true, skills: [] }
+    }) as Record<string, unknown>
+    expect(parsed).not.toHaveProperty('trust')
+  })
+
+  it('takes an allowlist of names rather than a boolean', () => {
+    // A human approves the skills that were there when they looked. "Trust this
+    // repo's skills" would silently extend to one committed tomorrow.
+    const input = ipcContract['contacts.setRepoTrust'].input
+    expect(() =>
+      input.parse({ id: 'c1', trust: { instructions: false, skills: ['release-notes'] } })
+    ).not.toThrow()
+    expect(() => input.parse({ id: 'c1', trust: { instructions: true, skills: true } })).toThrow()
+  })
+
+  it('lets the offers list be null for a contact that is gone', () => {
+    expect(() => ipcContract['contacts.repoOffers'].output.parse(null)).not.toThrow()
   })
 })
 

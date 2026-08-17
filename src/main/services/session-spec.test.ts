@@ -29,7 +29,8 @@ vi.mock('./github-auth', () => ({
   getGitHubToken: () => null
 }))
 
-const { buildSessionSpec, contactContext } = await import('./session-spec')
+const { buildSessionSpec, contactContext, repoOffers } = await import('./session-spec')
+const { setRepoTrust } = await import('./contacts')
 const { composeInstructions } = await import('../adapters/context')
 const { getContact } = await import('./contacts')
 const { getPersonaTemplate } = await import('./persona-templates')
@@ -297,5 +298,104 @@ describe('a capability granted and not reachable', () => {
     expect(shown.unavailableServers).toEqual(
       buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!).unavailableServers
     )
+  })
+})
+
+/**
+ * The write path, end to end.
+ *
+ * Everything above sets `repoTrust` by writing the column directly, which
+ * proves capabilitiesFor reads it but not that anything in the app can change
+ * it. Until Phase 14 nothing could: there was no procedure, so the switch
+ * governing whether a repository may instruct a persona was unreachable from
+ * the UI. These assertions are about that gap being closed.
+ */
+describe('granting trust changes what the next turn sends', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'trust-write-'))
+
+  afterAll(() => rmSync(scratch, { recursive: true, force: true }))
+
+  function repoWithContent(): void {
+    writeFileSync(join(scratch, 'CLAUDE.md'), 'Always run the linter.')
+    mkdirSync(join(scratch, '.claude/skills/release-notes'), { recursive: true })
+    writeFileSync(
+      join(scratch, '.claude/skills/release-notes/SKILL.md'),
+      '---\nname: release-notes\ndescription: Draft the release notes.\n---\nBody.'
+    )
+    db.update(contacts).set({ repoPath: scratch, repoTrust: null }).run()
+  }
+
+  it('sends nothing from a repository nobody has opted into', () => {
+    repoWithContent()
+    const composed = composeInstructions(
+      buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+    )
+
+    expect(composed).not.toContain('Always run the linter.')
+    expect(composed).not.toContain('release-notes')
+  })
+
+  it('sends both once setRepoTrust has been called', () => {
+    repoWithContent()
+    setRepoTrust(CONTACT_ID, { instructions: true, skills: ['release-notes'] })
+
+    const composed = composeInstructions(
+      buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+    )
+
+    expect(composed).toContain('Always run the linter.')
+    expect(composed).toContain('release-notes')
+  })
+
+  it('stops sending them again when trust is revoked', () => {
+    // Revocation has to be as real as the grant, or "turn it off" is a lie the
+    // UI tells. Resolved per turn, so this takes effect on the next message.
+    repoWithContent()
+    setRepoTrust(CONTACT_ID, { instructions: true, skills: ['release-notes'] })
+    setRepoTrust(CONTACT_ID, { instructions: false, skills: [] })
+
+    const composed = composeInstructions(
+      buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+    )
+
+    expect(composed).not.toContain('Always run the linter.')
+    expect(composed).not.toContain('release-notes')
+  })
+
+  it('does not extend an approval to a skill committed afterwards', () => {
+    // The reason repoTrust.skills is an allowlist of names and not a boolean.
+    // A human approved what was in the repository when they looked at it.
+    repoWithContent()
+    setRepoTrust(CONTACT_ID, { instructions: false, skills: ['release-notes'] })
+
+    mkdirSync(join(scratch, '.claude/skills/deploy-prod'), { recursive: true })
+    writeFileSync(
+      join(scratch, '.claude/skills/deploy-prod/SKILL.md'),
+      '---\nname: deploy-prod\ndescription: Ship it.\n---\nBody.'
+    )
+
+    const spec = buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
+    const names = (spec.injectedSkills ?? []).map((skill) => skill.name)
+
+    expect(names).toContain('release-notes')
+    expect(names).not.toContain('deploy-prod')
+  })
+
+  it('offers what is on disk regardless of what has been approved', () => {
+    // You cannot approve a skill nothing told you exists, so the offer list is
+    // deliberately not gated on the choice already made.
+    repoWithContent()
+    const offers = repoOffers(CONTACT_ID)!
+
+    expect(offers.instructionsFile).toBe('CLAUDE.md')
+    expect(offers.skills.map((skill) => skill.name)).toContain('release-notes')
+    // Claude cannot discover a .claude/skills entry under settingSources: [],
+    // so approving it means the app describes it rather than the backend
+    // finding it.
+    expect(offers.skills.find((skill) => skill.name === 'release-notes')?.codexNative).toBe(false)
+  })
+
+  it('returns no offers for a contact that does not exist', () => {
+    expect(repoOffers('nope')).toBeNull()
   })
 })

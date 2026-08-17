@@ -16,6 +16,8 @@ export type {
   UsageSource,
   /** Where a Contact's session runs — see docs/plan/12-worktree-isolation.md. */
   Isolation,
+  /** What a Contact lets its repository say to it — Phase 14, opt-in per Contact. */
+  RepoTrust,
   Skill,
   PersonaTemplate,
   Contact,

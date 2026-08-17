@@ -3,12 +3,13 @@ import { capabilitiesFor } from './capabilities'
 import { getContact } from './contacts'
 import { contextForRepo } from './group-messages'
 import { getPersonaTemplate } from './persona-templates'
+import { discoverRepoSkills, readRepoInstructions } from './repo-instructions'
 import { workingPathFor } from './run-lock'
 import { skillsForPersona } from './skills'
 import { siblingBranchesFor } from './worktrees'
 import type { SessionSpec } from '../adapters/types'
 import type { Contact, PersonaTemplate } from '../../shared/domain'
-import type { ContactContext } from '../../shared/ipc-contract'
+import type { ContactContext, RepoOffers } from '../../shared/ipc-contract'
 
 /**
  * Everything a turn injects, resolved from the database and the filesystem.
@@ -109,6 +110,38 @@ export function buildSessionSpec(
  * A snapshot of what would be sent *now*, not a record of what was sent last
  * turn. The spec is resolved per turn, so this moves as colleagues work.
  */
+/**
+ * What this contact's repository is offering, approved or not.
+ *
+ * The other half of contactContext(). That one reports what a turn would send,
+ * which is the empty set until somebody opts in — so on its own it cannot tell
+ * you whether the repository ships nothing or ships ten things nobody has
+ * looked at. You cannot approve a skill that nothing told you exists.
+ *
+ * Reads the working path, so an isolated Contact is offered what is in *its*
+ * checkout, and reads it fresh: a skill committed since the app started should
+ * be approvable without a restart.
+ */
+export function repoOffers(contactId: string): RepoOffers | null {
+  const contact = getContact(contactId)
+  if (!contact) return null
+
+  const workingPath = workingPathFor(contact)
+  // Deliberately not gated on repoTrust. This is the list you choose *from*;
+  // gating it on the choice already made would make the first grant impossible.
+  const instructions = readRepoInstructions(workingPath)
+
+  return {
+    instructionsFile: instructions?.fileName ?? null,
+    skills: discoverRepoSkills(workingPath).map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      root: skill.root,
+      codexNative: skill.codexNative
+    }))
+  }
+}
+
 export function contactContext(contactId: string): ContactContext | null {
   const contact = getContact(contactId)
   if (!contact) return null

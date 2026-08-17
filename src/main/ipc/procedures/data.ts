@@ -4,9 +4,10 @@ import {
   deleteContact,
   getContact,
   listContacts,
-  renameContact
+  renameContact,
+  setRepoTrust
 } from '../../services/contacts'
-import { contactContext } from '../../services/session-spec'
+import { contactContext, repoOffers } from '../../services/session-spec'
 import { listGroups } from '../../services/groups'
 import {
   createPersonaTemplate,
@@ -48,6 +49,10 @@ registerProcedure('contacts.get', ({ id }) => getContact(id))
 registerProcedure('contacts.create', (draft) => createContact(draft))
 registerProcedure('contacts.update', ({ id, displayName }) => renameContact(id, displayName))
 registerProcedure('contacts.context', ({ contactId }) => contactContext(contactId))
+// The only writer of repo_trust, and so the only way a repository's own
+// instructions or skills ever reach a persona.
+registerProcedure('contacts.setRepoTrust', ({ id, trust }) => setRepoTrust(id, trust))
+registerProcedure('contacts.repoOffers', ({ contactId }) => repoOffers(contactId))
 registerProcedure('contacts.delete', async ({ id, discardUncommitted }) => ({
   deleted: await deleteContact(id, discardUncommitted ?? false)
 }))

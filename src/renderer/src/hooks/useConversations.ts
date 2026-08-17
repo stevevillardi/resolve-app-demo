@@ -3,8 +3,8 @@ import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
 import { branchesKey } from './useBranches'
 import { messagePreviewsKey, runsKey, usageRootKey } from './useMessages'
 import { routinesKey } from './useRoutines'
-import type { Contact, ContactDraft, Group } from '@/types'
-import type { ContactContext } from '../../../shared/ipc-contract'
+import type { Contact, ContactDraft, Group, RepoTrust } from '@/types'
+import type { ContactContext, RepoOffers } from '../../../shared/ipc-contract'
 
 /**
  * The two entities the Chats list is built from (Phase 4).
@@ -48,6 +48,58 @@ export function useContactContext(
     staleTime: 0,
     gcTime: 0
   })
+}
+
+/**
+ * What the repository is offering, approved or not — the list you choose from.
+ *
+ * A separate query from useContactContext because it answers a different
+ * question. That one reports what a turn would send, which stays empty until
+ * somebody opts in; this is how you find out there is anything to opt into.
+ */
+export function useRepoOffers(
+  contactId: string,
+  enabled: boolean
+): UseQueryResult<RepoOffers | null> {
+  return useQuery({
+    queryKey: ['contacts', 'repoOffers', contactId],
+    queryFn: () => callProcedure('contacts.repoOffers', { contactId }),
+    enabled,
+    // Read off the filesystem, so a skill committed while the app is open turns
+    // up the next time the panel opens rather than after a restart.
+    staleTime: 0,
+    gcTime: 0
+  })
+}
+
+/**
+ * Grants or revokes what this contact's repository may say to it.
+ *
+ * Invalidates the context query as well as the contact list, because this is
+ * the one mutation in the app that changes what the *next turn* will contain —
+ * the panel showing that turn would otherwise keep describing the trust state
+ * from before the click.
+ */
+export function useSetRepoTrust(): {
+  set: (contactId: string, trust: RepoTrust) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: ({ contactId, trust }: { contactId: string; trust: RepoTrust }) =>
+      callProcedure('contacts.setRepoTrust', { id: contactId, trust }),
+    onSuccess: (_result, { contactId }) => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+      void queryClient.invalidateQueries({ queryKey: ['contacts', 'context', contactId] })
+    }
+  })
+
+  return {
+    set: (contactId, trust) => mutation.mutate({ contactId, trust }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
 }
 
 export function useGroups(): UseQueryResult<Group[]> {

@@ -8,7 +8,7 @@ import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
 import { plannedWorktree } from './worktrees'
 import { defaultIsolation } from '../../shared/domain'
-import type { Contact, ContactDraft } from '../../shared/domain'
+import type { Contact, ContactDraft, RepoTrust } from '../../shared/domain'
 
 /**
  * Contact records (blueprint §4): one persona template bound to one repo.
@@ -150,6 +150,38 @@ export function renameContact(id: string, displayName: string): Contact {
   // Re-read rather than patching the caller's copy: listContacts orders by
   // display_name, so the row's place in the list has just moved and the caller
   // should be looking at what is actually stored.
+  return getContact(id) as Contact
+}
+
+/**
+ * What this Contact lets its repository say to it (blueprint §4, Phase 14).
+ *
+ * The only writer of `repo_trust`, and the only way any of it turns on: a new
+ * Contact is created with `repoTrust: null`, which `repoTrustOf()` reads as
+ * nothing trusted, and until a human calls this the repository's `CLAUDE.md`
+ * and every skill it ships stay unreachable no matter what the persona is
+ * allowed to do elsewhere.
+ *
+ * Its own procedure rather than a field on renameContact for the reason that
+ * one is narrow: these are different decisions with different consequences, and
+ * a single permissive contact update would make it possible to change trust as
+ * a side effect of a rename.
+ *
+ * **An allowlist of skill names, not a boolean.** A human approves the skills
+ * that were in the repository when they looked; one committed afterwards has
+ * not been approved by anybody and must not inherit it. That is why this stores
+ * names and `capabilitiesFor` intersects them with what is on disk, rather than
+ * storing "trust this repo's skills" and resolving it later.
+ */
+export function setRepoTrust(id: string, trust: RepoTrust): Contact {
+  const result = initDb()
+    .update(contacts)
+    .set({ repoTrust: trust })
+    .where(eq(contacts.id, id))
+    .run()
+
+  if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+
   return getContact(id) as Contact
 }
 

@@ -9,6 +9,7 @@ import {
   personaBackendSchema,
   personaTemplateDraftSchema,
   personaTemplateSchema,
+  repoTrustSchema,
   routineDraftSchema,
   routineSchema,
   routineUpdateSchema,
@@ -184,6 +185,7 @@ const contactContextSchema = z.object({
 })
 
 export type ContactContext = z.infer<typeof contactContextSchema>
+export type RepoOffers = NonNullable<IpcOutput<'contacts.repoOffers'>>
 
 const activeRunSchema = z.object({
   runId: z.string(),
@@ -476,6 +478,58 @@ export const ipcContract = {
   'contacts.update': {
     input: z.object({ id: z.string(), displayName: z.string().min(1) }),
     output: contactSchema
+  },
+  /**
+   * What this contact lets its repository say to it (blueprint §4, Phase 14).
+   *
+   * Separate from `contacts.update` on purpose. A rename and a grant of trust
+   * are different decisions with different consequences, and one permissive
+   * contact update would make it possible to turn a repository's instructions
+   * on as a side effect of renaming a contact.
+   *
+   * `skills` is an allowlist of names, not a boolean: a human approves what was
+   * in the repository when they looked, and a skill committed afterwards has
+   * been approved by nobody. capabilitiesFor() intersects these names with what
+   * is actually on disk at the time of the turn.
+   */
+  'contacts.setRepoTrust': {
+    input: z.object({ id: z.string(), trust: repoTrustSchema }),
+    output: contactSchema
+  },
+  /**
+   * What this contact's repository is *offering* — every `SKILL.md` on disk and
+   * whether it ships instructions, approved or not.
+   *
+   * Distinct from `contacts.context`, which reports what a turn would actually
+   * send. This is the other half of the same screen: you cannot approve a skill
+   * that nothing has told you exists, and the panel would otherwise show an
+   * empty list whether the repository ships nothing or ships ten things nobody
+   * has looked at yet.
+   *
+   * Read fresh from disk rather than cached, so a skill added to the repository
+   * since the app started is offerable without a restart.
+   */
+  'contacts.repoOffers': {
+    input: z.object({ contactId: z.string() }),
+    output: z
+      .object({
+        instructionsFile: z.string().nullable(),
+        skills: z.array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+            /** Which convention it came from, e.g. `.claude/skills`. */
+            root: z.string(),
+            /**
+             * Whether the backend would discover this itself once approved, or
+             * whether the app has to describe it. Codex-only, and false for
+             * every skill on Claude — see capabilitiesFor().
+             */
+            codexNative: z.boolean()
+          })
+        )
+      })
+      .nullable()
   },
   /**
    * What the *next* turn on this contact would inject (blueprint §5).
