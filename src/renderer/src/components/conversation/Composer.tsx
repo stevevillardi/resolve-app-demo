@@ -1,6 +1,13 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SlashPicker } from './SlashPicker'
+import {
+  applySlashCommand,
+  parseSlashQuery,
+  rankSlashCommands,
+  type SlashCommand
+} from '@/lib/slash'
 import { cn } from '@/lib/utils'
 
 interface ComposerProps {
@@ -23,6 +30,14 @@ interface ComposerProps {
   disabled?: boolean
   /** Why sending is blocked. Replaces the hint while set. */
   notice?: ReactNode
+  /**
+   * What `/` offers. Absent or empty disables the picker entirely.
+   *
+   * Resolved by the caller from what this contact can actually reach, so the
+   * menu never offers a capability the session is sealed against — see
+   * lib/slash.ts.
+   */
+  commands?: SlashCommand[]
 }
 
 const MAX_HEIGHT = 168
@@ -37,12 +52,24 @@ export function Composer({
   busy = false,
   onStop,
   disabled = false,
-  notice
+  notice,
+  commands = []
 }: ComposerProps): React.JSX.Element {
   const [internalValue, setInternalValue] = useState('')
   const isControlled = controlledValue !== undefined
   const value = isControlled ? controlledValue : internalValue
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Escape closes the picker without clearing what was typed. Keyed on the
+  // value so that typing another character reopens it — dismissing `/rel` and
+  // then typing `e` is a new intention, not a continuation of the old one.
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  const query = parseSlashQuery(value)
+  const matches = query === null ? [] : rankSlashCommands(commands, query)
+  const pickerOpen = matches.length > 0 && dismissedFor !== value
+  const active = matches[Math.min(activeIndex, matches.length - 1)]
 
   // The previous revision set rows={1} with a max-height and never grew: a
   // textarea's height is fixed by `rows` unless something measures scrollHeight
@@ -58,6 +85,15 @@ export function Composer({
   const handleChange = (next: string): void => {
     if (!isControlled) setInternalValue(next)
     onValueChange?.(next)
+    // Back to the top whenever the query changes: the old index pointed into a
+    // list that no longer exists, and keeping it would highlight an unrelated
+    // row.
+    setActiveIndex(0)
+  }
+
+  const pick = (command: SlashCommand): void => {
+    handleChange(applySlashCommand(value, command))
+    textareaRef.current?.focus()
   }
 
   const handleSend = (): void => {
@@ -68,6 +104,37 @@ export function Composer({
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    // The picker owns the keyboard while it is open, and this block has to come
+    // first: the Enter arm below sends unconditionally, so leaving it ahead
+    // would fire off "/rel" as a message the moment somebody chose a command.
+    //
+    // Nothing here fights ⌘K — that is bound on `window` in the capture phase
+    // precisely so a composer keydown cannot beat it, and `/` is not a chord.
+    if (pickerOpen) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActiveIndex((index) => (index + 1) % matches.length)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActiveIndex((index) => (index - 1 + matches.length) % matches.length)
+        return
+      }
+      if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+        event.preventDefault()
+        if (active) pick(active)
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        // Closes the menu, keeps the text. Someone who typed `/` meaning a path
+        // should not lose the line to get rid of the suggestion.
+        setDismissedFor(value)
+        return
+      }
+    }
+
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       handleSend()
@@ -80,6 +147,17 @@ export function Composer({
     // window the field you reply in was visibly wider than everything you were
     // replying to — two independent decisions about width inside one pane.
     <div className="mx-auto w-full max-w-4xl shrink-0 px-4 pt-2 pb-4">
+      {/* Relative so the picker can sit directly above the field rather than
+          being positioned against the pane. */}
+      <div className="relative">
+        {pickerOpen && (
+          <SlashPicker
+            commands={matches}
+            activeIndex={Math.min(activeIndex, matches.length - 1)}
+            onPick={pick}
+          />
+        )}
+      </div>
       <div
         className={cn(
           'bg-card border-border flex items-end gap-1.5 rounded-xl border p-1.5 transition-shadow',

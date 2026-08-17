@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
@@ -12,7 +12,7 @@ import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
 import { MessageBubble } from './MessageBubble'
 import { Composer } from './Composer'
-import { useContacts } from '@/hooks/useConversations'
+import { useContacts, useContactContext } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import {
   useActiveRuns,
@@ -25,6 +25,7 @@ import { useUsageEvents } from '@/hooks/useUsage'
 import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests'
 import { useRunStore } from '@/store/useRunStore'
 import { streamText } from '@/lib/stream'
+import { slashCommands } from '@/lib/slash'
 import { usageForContact } from '@/lib/usage'
 import { isSameDay, repoName } from '@/lib/format'
 
@@ -47,6 +48,13 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
   const { send, error: sendError, reset } = useSendMessage(contactId)
   const { cancel } = useCancelRun()
+
+  // Only fetched once somebody types a slash. contacts.context stats the
+  // filesystem for sibling branches, and a thread being open is no reason to
+  // pay for that — the same gating the context panel uses.
+  const [draft, setDraft] = useState('')
+  const { data: capability } = useContactContext(contactId, draft.startsWith('/'))
+  const commands = useMemo(() => slashCommands(capability), [capability])
 
   const { data: prState } = usePullRequestState(contactId)
   const { open: openPr, isPending: opening, error: prError, reset: resetPr } = useOpenPullRequest()
@@ -182,6 +190,8 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
       <Composer
         placeholder={`Message ${persona.name}…`}
+        onValueChange={setDraft}
+        commands={commands}
         onSend={(value) => {
           reset()
           send(value)
