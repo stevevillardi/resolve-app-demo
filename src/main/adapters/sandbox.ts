@@ -374,6 +374,110 @@ export function githubMcpDisallowedTools(scope: GithubScope): string[] {
  * or a bare one, and returns ALLOWED for anything that is not this server's —
  * a Bash call arrives through the same callback and belongs to the other axis.
  */
+/**
+ * Commands that reach GitHub without going near the MCP server.
+ *
+ * The hole this closes was found by running the live check rather than by
+ * reading anything: a `githubScope: read_only` persona at
+ * `sandbox: workspace_write` was asked to comment on an issue, found no MCP
+ * write tool — the endpoint genuinely does not serve one — and then ran
+ * `gh issue comment` from the shell, using the developer's own `gh`
+ * credentials. The comment appeared on the issue. Measured 2026-08-17.
+ *
+ * Both governance layers had worked exactly as designed and the outcome was
+ * still wrong, because `githubScope` was only ever applied to MCP tool names.
+ * A developer machine has `gh` on the PATH, `git` with push credentials, and
+ * `curl`; any of those is a route to the same API.
+ *
+ * **This is a deny-list over a heuristic, and it can be evaded.** SHELL_CONTROL
+ * already rejects chaining and substitution, which removes the easy escapes,
+ * but a determined model could still write a script to a file and run it. It
+ * raises the cost of walking around the axis from "type the obvious command" to
+ * "deliberately work around a stated restriction", which is the difference
+ * between an accident and a decision. What it is *not* is a boundary — see
+ * docs/plan/15-deferred-capability-work.md for the part that cannot be fixed
+ * in this process at all.
+ */
+const GITHUB_REACHING_HEADS = new Set(['gh', 'curl', 'wget', 'http', 'https'])
+
+/** `gh` subcommands that only read. Everything else on `gh` is treated as write. */
+const GH_READ_SUBCOMMANDS = new Set(['auth', 'browse', 'search', 'status', 'version', 'help'])
+const GH_READ_ACTIONS = new Set(['list', 'view', 'status', 'diff', 'checks'])
+
+function ghIsWrite(tokens: string[]): boolean {
+  const [subcommand, action] = tokens.filter((token) => !token.startsWith('-'))
+  if (!subcommand) return false
+  if (GH_READ_SUBCOMMANDS.has(subcommand)) return false
+  // `gh issue list` reads; `gh issue comment` writes. An unrecognised action is
+  // treated as a write, so a subcommand added by a future gh release fails
+  // closed rather than open.
+  return !action || !GH_READ_ACTIONS.has(action)
+}
+
+/**
+ * The shell half of `githubScope`, called alongside evaluateMcpToolUse.
+ *
+ * Returns ALLOWED for everything that is not a GitHub-reaching command, so an
+ * ordinary `npm test` or `git status` falls straight through. Only ever
+ * narrows: `full_access` returns ALLOWED immediately, and this is never
+ * consulted at `sandbox: full_access` at all, because that sets
+ * `bypassPermissions` and the SDK stops asking.
+ */
+export function evaluateGithubShellUse(
+  scope: GithubScope,
+  toolName: string,
+  input: Record<string, unknown>
+): SandboxDecision {
+  if (scope === 'full_access' || toolName !== 'Bash') return ALLOWED
+
+  const command = typeof input.command === 'string' ? input.command.trim() : ''
+  if (command === '') return ALLOWED
+
+  const [head, ...rest] = command.split(/\s+/)
+
+  if (head === 'git') {
+    const subcommand = gitSubcommand(rest)
+    // `push` is how a branch becomes a pull request, so open_pr keeps it.
+    if (subcommand === 'push' && scope === 'read_only') {
+      return deny(
+        'This persona has read-only GitHub access, so it cannot push. Refused: ' + command
+      )
+    }
+    return ALLOWED
+  }
+
+  if (!GITHUB_REACHING_HEADS.has(head)) return ALLOWED
+
+  if (head === 'gh') {
+    if (!ghIsWrite(rest)) return ALLOWED
+    const merging = rest.includes('merge')
+    if (scope === 'read_only') {
+      return deny(
+        `This persona has read-only GitHub access, so it cannot run this. Refused: ${command}`
+      )
+    }
+    if (merging) {
+      return deny(`This persona can open pull requests but not merge them. Refused: ${command}`)
+    }
+    return ALLOWED
+  }
+
+  // curl and friends: only the ones actually aimed at GitHub, and only when
+  // they are not plain reads. A GET to the API is within read_only's remit.
+  if (!/github\.com/i.test(command)) return ALLOWED
+  const writesOverHttp =
+    /\s-X\s*(POST|PUT|PATCH|DELETE)|--request\s*(POST|PUT|PATCH|DELETE)|(^|\s)(-d|--data)(\s|=)/i.test(
+      command
+    )
+  if (!writesOverHttp) return ALLOWED
+
+  return deny(
+    scope === 'read_only'
+      ? `This persona has read-only GitHub access, so it cannot write to GitHub. Refused: ${command}`
+      : `This persona cannot write to GitHub outside its pull-request scope. Refused: ${command}`
+  )
+}
+
 export function evaluateMcpToolUse(scope: GithubScope, toolName: string): SandboxDecision {
   const bare = bareGithubToolName(toolName) ?? toolName
   if (!githubMcpDenyList(scope).includes(bare)) return ALLOWED

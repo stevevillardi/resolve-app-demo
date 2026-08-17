@@ -27,7 +27,7 @@ import type { PersonaBackend } from '../../shared/domain'
  * ANTHROPIC_API_KEY reads to the SDK as "a key was provided and it is invalid",
  * which produces a worse error than no key at all.
  */
-function backendEnv(): NodeJS.ProcessEnv {
+function backendEnv(needsGithubToken: boolean): NodeJS.ProcessEnv {
   const anthropic = getSecret('anthropic_api_key') ?? import.meta.env.MAIN_VITE_ANTHROPIC_API_KEY
   const openai = getSecret('openai_api_key') ?? import.meta.env.MAIN_VITE_OPENAI_API_KEY
   // Codex's MCP configuration has no header option — it takes
@@ -37,12 +37,20 @@ function backendEnv(): NodeJS.ProcessEnv {
   // needs the environment, so it belongs here: this function is already the
   // only place a secret meets a subprocess.
   //
-  // Set whenever an account is connected rather than per persona. Whether a
-  // session can reach GitHub is decided by whether capabilitiesFor() hands it
-  // the server at all; a session with no server configured has nothing that
-  // would read this, and a persona is never given a shell that could echo it —
-  // `secrets.ts` is already in denyReadPaths below for the same reason.
-  const github = getGitHubToken()
+  // **Only when this session was actually granted the server.** The first
+  // version set it whenever an account was connected, on the reasoning that "a
+  // session with no server configured has nothing that would read this, and a
+  // persona is never given a shell that could echo it". The second half of that
+  // was false and was measured to be false: `echo $PERSONA_ROUTER_GITHUB_MCP_TOKEN`
+  // is allowed at `workspace_write`, so every persona at that level or above
+  // could read the app's GitHub token out of its own environment — including
+  // personas granted no MCP server at all.
+  //
+  // Narrowing it does not make the token safe from a shell that was granted the
+  // server; it makes the blast radius the set of personas a human deliberately
+  // gave GitHub to, rather than all of them. See docs/plan/15 for the part that
+  // cannot be fixed here.
+  const github = needsGithubToken ? getGitHubToken() : null
 
   return {
     ...process.env,
@@ -62,10 +70,10 @@ function backendEnv(): NodeJS.ProcessEnv {
  * resolver needs `electron` to find it, which is exactly why the adapters take
  * it as config instead of importing it.
  */
-export function adapterConfig(): AdapterConfig {
+export function adapterConfig(options: { needsGithubToken?: boolean } = {}): AdapterConfig {
   return {
     codexBinaryPath: resolveCodexBinary(),
-    env: backendEnv(),
+    env: backendEnv(options.needsGithubToken ?? false),
     // The field has existed since Phase 5, is plumbed all the way into the
     // Claude OS sandbox, and until now nothing ever filled it — so the one
     // directory its own doc comment names was reachable by every persona. A
@@ -74,6 +82,14 @@ export function adapterConfig(): AdapterConfig {
   }
 }
 
-export function adapterForBackend(backend: PersonaBackend): AgentAdapter {
-  return adapterFor(backend, adapterConfig())
+/**
+ * `needsGithubToken` defaults to false, so a caller that forgets it gets the
+ * closed configuration rather than the open one. The summariser never passes
+ * it — it is given no servers at all.
+ */
+export function adapterForBackend(
+  backend: PersonaBackend,
+  options: { needsGithubToken?: boolean } = {}
+): AgentAdapter {
+  return adapterFor(backend, adapterConfig(options))
 }

@@ -46,7 +46,21 @@ describe('adapterConfig', () => {
     // Codex's MCP config takes `bearer_token_env_var` and nothing else — no
     // header option exists — so this variable is the only door. Claude sends
     // the same token as an Authorization header and never reads it.
-    expect(adapterConfig().env?.[GITHUB_MCP_TOKEN_ENV]).toBe('gho_test')
+    expect(adapterConfig({ needsGithubToken: true }).env?.[GITHUB_MCP_TOKEN_ENV]).toBe('gho_test')
+  })
+
+  it('withholds it from a session that was never granted the server', () => {
+    // The first version set this whenever an account was connected, reasoning
+    // that a session with no server has nothing that would read it and no
+    // shell that could echo it. The second half was measured false:
+    // `echo $PERSONA_ROUTER_GITHUB_MCP_TOKEN` is allowed at workspace_write, so
+    // every persona at that level could read the app's GitHub token out of its
+    // own environment — including ones granted no MCP server at all.
+    expect(GITHUB_MCP_TOKEN_ENV in (adapterConfig().env ?? {})).toBe(false)
+  })
+
+  it('defaults closed, so a caller that forgets the flag leaks nothing', () => {
+    expect(adapterConfig({}).env?.[GITHUB_MCP_TOKEN_ENV]).toBeUndefined()
   })
 
   it('leaves the variable unset rather than empty when no account is connected', () => {
@@ -55,7 +69,9 @@ describe('adapterConfig', () => {
     // none at all.
     githubToken.value = null
     try {
-      expect(GITHUB_MCP_TOKEN_ENV in (adapterConfig().env ?? {})).toBe(false)
+      expect(GITHUB_MCP_TOKEN_ENV in (adapterConfig({ needsGithubToken: true }).env ?? {})).toBe(
+        false
+      )
     } finally {
       githubToken.value = 'gho_test'
     }

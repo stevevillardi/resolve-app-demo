@@ -3,6 +3,7 @@ import { asc, desc, eq, sql } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toMessage } from '../db/mappers'
 import { messages } from '../db/schema'
+import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
 import { emitAgentEvent, emitRunsChanged } from './agent-events'
 import { summarizeTurn } from './compaction'
@@ -305,7 +306,11 @@ function startTurn(contactId: string, content: string, origin: TurnOrigin): Star
       usageBaseline: baselineFor(contactId, contact.backendSessionId)
     })
 
-    const adapter = adapterForBackend(persona.backend)
+    // The token reaches the subprocess only when this session actually holds
+    // the server, rather than whenever an account is connected somewhere.
+    const adapter = adapterForBackend(persona.backend, {
+      needsGithubToken: (spec.mcpServers ?? []).some((server) => server.id === GITHUB_MCP_SERVER_ID)
+    })
     const session = contact.backendSessionId
       ? adapter.resume(spec, contact.backendSessionId)
       : adapter.createSession(spec)

@@ -11,6 +11,7 @@ import {
 import {
   claudeSandboxOptions,
   codexSandboxMode,
+  evaluateGithubShellUse,
   evaluateMcpToolUse,
   evaluateToolUse,
   githubMcpDenyList,
@@ -559,5 +560,116 @@ describe('the two axes are independent', () => {
         expect(githubMcpDenyList(scope), `${level}/${scope}`).toHaveLength(expected[scope])
       }
     }
+  })
+})
+
+/**
+ * The route around the MCP gate, found by running the live check.
+ *
+ * A `githubScope: read_only` persona at `sandbox: workspace_write` was asked to
+ * comment on an issue. The MCP layer refused correctly — the read-only endpoint
+ * serves no write tool, and the model said so — and it then ran
+ * `gh issue comment` from the shell and the comment appeared. Both governance
+ * layers had worked and the outcome was still wrong, because githubScope had
+ * only ever been applied to MCP tool names.
+ *
+ * These are written from that claim: a persona that cannot comment through a
+ * tool must not be able to comment through a shell either.
+ */
+describe('the GitHub axis applied to the shell', () => {
+  const bash = (command: string): Record<string, unknown> => ({ command })
+
+  it('denies gh writes at read_only', () => {
+    expect(
+      evaluateGithubShellUse('read_only', 'Bash', bash('gh issue comment 5 -b x')).allowed
+    ).toBe(false)
+    expect(evaluateGithubShellUse('read_only', 'Bash', bash('gh pr create')).allowed).toBe(false)
+  })
+
+  it('allows gh reads at read_only, which is what the scope is for', () => {
+    // "Can read issues and code on GitHub" has to stay true, or the level
+    // becomes indistinguishable from having no GitHub access at all.
+    expect(evaluateGithubShellUse('read_only', 'Bash', bash('gh issue list')).allowed).toBe(true)
+    expect(evaluateGithubShellUse('read_only', 'Bash', bash('gh pr view 1')).allowed).toBe(true)
+  })
+
+  it('treats an unrecognised gh action as a write', () => {
+    // Fails closed: a subcommand added by a future gh release is denied rather
+    // than allowed, which is the safe direction for a deny list over a moving
+    // target.
+    expect(evaluateGithubShellUse('read_only', 'Bash', bash('gh issue frobnicate 5')).allowed).toBe(
+      false
+    )
+  })
+
+  it('denies git push at read_only and allows it at open_pr', () => {
+    // Pushing a branch is how a pull request comes to exist, so open_pr keeps
+    // it — the level would be unusable otherwise.
+    expect(evaluateGithubShellUse('read_only', 'Bash', bash('git push origin x')).allowed).toBe(
+      false
+    )
+    expect(evaluateGithubShellUse('open_pr', 'Bash', bash('git push origin x')).allowed).toBe(true)
+  })
+
+  it('denies a merge at open_pr, matching the MCP deny list', () => {
+    // The same boundary githubMcpDenyList draws for merge_pull_request. Two
+    // routes to one API, and they have to agree or the narrower one is theatre.
+    expect(evaluateGithubShellUse('open_pr', 'Bash', bash('gh pr merge 1')).allowed).toBe(false)
+    expect(evaluateGithubShellUse('open_pr', 'Bash', bash('gh issue comment 5 -b x')).allowed).toBe(
+      true
+    )
+  })
+
+  it('denies a POST to the GitHub API and allows a GET', () => {
+    expect(
+      evaluateGithubShellUse(
+        'read_only',
+        'Bash',
+        bash('curl -X POST https://api.github.com/repos/a/b/issues/1/comments')
+      ).allowed
+    ).toBe(false)
+    expect(
+      evaluateGithubShellUse('read_only', 'Bash', bash('curl https://api.github.com/repos/a/b'))
+        .allowed
+    ).toBe(true)
+  })
+
+  it('ignores curl aimed at anything that is not GitHub', () => {
+    // This axis governs GitHub. Denying every POST anywhere would be the
+    // filesystem axis's job and a different decision.
+    expect(
+      evaluateGithubShellUse('read_only', 'Bash', bash('curl -X POST https://example.com/x'))
+        .allowed
+    ).toBe(true)
+  })
+
+  it('lets ordinary work through untouched', () => {
+    for (const command of ['npm test', 'git status', 'ls -la', 'rg auth src/']) {
+      expect(evaluateGithubShellUse('read_only', 'Bash', bash(command)).allowed).toBe(true)
+    }
+  })
+
+  it('governs nothing but Bash', () => {
+    expect(evaluateGithubShellUse('read_only', 'Read', { file_path: '/a/b' }).allowed).toBe(true)
+  })
+
+  it('allows everything at full_access', () => {
+    // Not because it is safe, but because it is the level that means "no
+    // GitHub restriction" — and at sandbox: full_access this is never consulted
+    // anyway, since bypassPermissions stops the SDK asking. See
+    // docs/plan/15-deferred-capability-work.md.
+    expect(evaluateGithubShellUse('full_access', 'Bash', bash('gh pr merge 1')).allowed).toBe(true)
+  })
+
+  it('is independent of the filesystem axis', () => {
+    // The whole point. evaluateToolUse allows `gh issue comment` at
+    // workspace_write, and this refuses it — so the two axes compose rather
+    // than one overriding the other.
+    expect(
+      evaluateToolUse('workspace_write', 'Bash', bash('gh issue comment 5 -b x'), '/r').allowed
+    ).toBe(true)
+    expect(
+      evaluateGithubShellUse('read_only', 'Bash', bash('gh issue comment 5 -b x')).allowed
+    ).toBe(false)
   })
 })

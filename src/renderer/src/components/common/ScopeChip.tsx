@@ -48,18 +48,31 @@ const SANDBOX: Record<SandboxLevel, Descriptor> = {
   }
 }
 
+/**
+ * The hints say "unless the sandbox is full_access" because that is true and
+ * was measured to be true.
+ *
+ * A live run found a read_only persona commenting on an issue through the `gh`
+ * CLI: the MCP server correctly served it no write tool, and the shell reached
+ * the same API anyway. The shell route is now governed too
+ * (evaluateGithubShellUse), but only where the app is consulted at all —
+ * `sandbox: full_access` sets `bypassPermissions` on Claude and
+ * `danger-full-access` on Codex, and neither asks. A chip that kept promising
+ * "cannot push or comment" at that combination would be the interface lying
+ * about the one thing it exists to report.
+ */
 const GITHUB: Record<GithubScope, Descriptor> = {
   read_only: {
     label: 'read_only',
     icon: Eye,
     severity: 'safe',
-    hint: 'Can read issues and code on GitHub. Cannot push or comment.'
+    hint: 'Can read issues and code on GitHub. Cannot push or comment — unless its sandbox is full_access, which lifts every restriction including this one.'
   },
   open_pr: {
     label: 'open_pr',
     icon: GitPullRequest,
     severity: 'elevated',
-    hint: 'Can push a branch and open a pull request. Cannot merge.'
+    hint: 'Can push a branch and open a pull request. Cannot merge — unless its sandbox is full_access.'
   },
   full_access: {
     label: 'full_access',

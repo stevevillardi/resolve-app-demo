@@ -5,6 +5,7 @@ import { classifyErrorMessage } from './errors'
 import { GITHUB_MCP_ALL_TOOLS, qualifiedGithubToolName } from './github-mcp-tools'
 import {
   claudeSandboxOptions,
+  evaluateGithubShellUse,
   evaluateMcpToolUse,
   evaluateToolUse,
   osSandboxSupported
@@ -248,6 +249,14 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
           const mcp = evaluateMcpToolUse(spec.persona.githubScope, toolName)
           if (!mcp.allowed) {
             return { behavior: 'deny', message: mcp.reason ?? 'Denied by GitHub scope.' }
+          }
+          // ...and the same axis applied to the shell, because `gh`, `git push`
+          // and `curl` all reach the same API without touching the server. A
+          // live run found a read_only persona commenting through `gh` after
+          // the MCP layer correctly refused it.
+          const shell = evaluateGithubShellUse(spec.persona.githubScope, toolName, input)
+          if (!shell.allowed) {
+            return { behavior: 'deny', message: shell.reason ?? 'Denied by GitHub scope.' }
           }
           const decision = evaluateToolUse(spec.persona.sandbox, toolName, input, spec.repoPath)
           return decision.allowed
