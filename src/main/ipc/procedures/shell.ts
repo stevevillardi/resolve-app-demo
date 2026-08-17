@@ -1,5 +1,6 @@
 import { shell } from 'electron'
 import { registerProcedure } from '../registerProcedure'
+import { isKnownLocalPath } from '../../services/local-paths'
 
 /**
  * The renderer can ask to open a verification URL in the real browser, but not
@@ -22,4 +23,19 @@ registerProcedure('shell.openExternal', async ({ url }) => {
   }
   await shell.openExternal(parsed.toString())
   return { opened: true }
+})
+
+// Local paths (Phase 19): same shape as the URL allowlist above — the roots
+// are what the app already knows (bound repos, its own worktrees), validated
+// in services/local-paths.ts where the rule has tests.
+registerProcedure('shell.openPath', async ({ path }) => {
+  if (!isKnownLocalPath(path)) return { opened: false }
+  const failure = await shell.openPath(path)
+  return { opened: failure === '' }
+})
+
+registerProcedure('shell.revealPath', async ({ path }) => {
+  if (!isKnownLocalPath(path)) return { revealed: false }
+  shell.showItemInFolder(path)
+  return { revealed: true }
 })

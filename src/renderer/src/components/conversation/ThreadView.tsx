@@ -11,6 +11,8 @@ import { ContactMenu } from './ContactMenu'
 import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
 import { MessageBubble } from './MessageBubble'
+import { WorkChips } from './WorkChips'
+import { WorkDiffDialog } from './WorkDiffDialog'
 import { Composer } from './Composer'
 import { useContacts, useContactContext } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
@@ -55,6 +57,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   // filesystem for sibling branches, and a thread being open is no reason to
   // pay for that — the same gating the context panel uses.
   const [draft, setDraft] = useState('')
+  const [workMessageId, setWorkMessageId] = useState<string | null>(null)
   const { data: capability } = useContactContext(contactId, draft.startsWith('/'))
   const commands = useMemo(() => slashCommands(capability), [capability])
 
@@ -163,7 +166,8 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                 .map((call) => ({
                   id: call.id,
                   name: call.name,
-                  detail: call.status === 'running' ? 'interrupted' : '',
+                  detail: call.status === 'running' ? 'interrupted' : (call.detail ?? ''),
+                  ...(call.output ? { output: call.output } : {}),
                   status: (call.status === 'running' ? 'failed' : call.status) as
                     'completed' | 'failed'
                 }))
@@ -177,6 +181,9 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                     backend={persona.backend}
                     {...(calls.length > 0 ? { toolCalls: calls } : {})}
                   />
+                  {message.role === 'assistant' && message.work && (
+                    <WorkChips work={message.work} onOpen={() => setWorkMessageId(message.id)} />
+                  )}
                 </Fragment>
               )
             })
@@ -210,6 +217,12 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
           )}
         </div>
       </ScrollArea>
+
+      <WorkDiffDialog
+        contactId={contactId}
+        messageId={workMessageId}
+        onClose={() => setWorkMessageId(null)}
+      />
 
       <Composer
         placeholder={`Message ${persona.name}…`}

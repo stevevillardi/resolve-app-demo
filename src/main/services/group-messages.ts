@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toGroup, toGroupMessage } from '../db/mappers'
 import { groupMessages, groups } from '../db/schema'
@@ -86,6 +86,33 @@ export function groupMessagePreviews(): GroupMessage[] {
     if (!latest.has(row.groupId)) latest.set(row.groupId, toGroupMessage(row))
   }
   return [...latest.values()]
+}
+
+/**
+ * Stamps every open `branch_request` about `branch` as answered (Phase 19).
+ *
+ * Called from the merge and discard paths — the two clicks that answer the
+ * ask — and idempotent by construction: only rows still unresolved are
+ * stamped, so answering twice does not rewrite when the answer happened.
+ * Returns how many were stamped, which is what lets a test claim "this merge
+ * resolved that ask" without reading the table itself.
+ */
+export function resolveBranchRequests(repoPath: string, branch: string): number {
+  const group = groupForRepo(repoPath)
+  if (!group) return 0
+
+  return initDb()
+    .update(groupMessages)
+    .set({ resolvedAt: new Date() })
+    .where(
+      and(
+        eq(groupMessages.groupId, group.id),
+        eq(groupMessages.type, 'branch_request'),
+        eq(groupMessages.branch, branch),
+        isNull(groupMessages.resolvedAt)
+      )
+    )
+    .run().changes
 }
 
 /** Null rather than throwing: a repo with no contact bound has no group yet. */

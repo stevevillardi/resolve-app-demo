@@ -192,21 +192,48 @@ export const groupMessageSchema = z.object({
    * case for readers: there is no branch worth naming when the changes are
    * simply on disk.
    */
-  branch: z.string().optional()
+  branch: z.string().optional(),
+  /**
+   * `branch_request` only (Phase 19): when the ask was answered — the branch
+   * was merged or discarded by a click in the Branches panel. Absent while the
+   * request is still open, which is what lets the group thread and Home tell a
+   * standing ask from a settled one.
+   */
+  resolvedAt: z.number().optional()
+})
+
+/**
+ * What one turn did to the working tree, stamped by git rather than claimed by
+ * the model (Phase 19) — the same rule recordOfWork() set for summaries.
+ *
+ * `committed` is head-before → head-after; `dirty` is only what the turn *newly*
+ * left uncommitted (paths already dirty before it are not attributed to it — a
+ * turn that edits an already-dirty file goes unchipped, which is stated here
+ * rather than hidden). Both empty means the record is not written at all.
+ */
+export const turnWorkSchema = z.object({
+  branch: z.string().nullable(),
+  headBefore: z.string().nullable(),
+  headAfter: z.string().nullable(),
+  committed: z.array(z.string()),
+  dirty: z.array(z.string())
 })
 
 /**
  * The persisted message. Blueprint §12 is deliberately just these five fields:
  * `status` and `error` describe an in-flight turn rather than a stored fact,
  * so they stay renderer-local (src/renderer/src/types/message.ts) and no
- * column is added for them.
+ * column is added for them. `work` (Phase 19) *is* a stored fact — what the
+ * turn changed on disk — and only assistant rows whose turn changed something
+ * carry it.
  */
 export const messageSchema = z.object({
   id: z.string(),
   contactId: z.string(),
   role: messageRoleSchema,
   content: z.string(),
-  timestamp: z.number()
+  timestamp: z.number(),
+  work: turnWorkSchema.optional()
 })
 
 export const routineSchema = z.object({
@@ -298,7 +325,16 @@ export const contactDraftSchema = contactSchema
  * `timestamp` is omitted alongside `id` because main mints it too — a
  * renderer-supplied time would let a clock skew reorder the thread.
  */
-export const groupMessageDraftSchema = groupMessageSchema.omit({ id: true, timestamp: true })
+/**
+ * `resolvedAt` is omitted along with the minted fields: a request is never
+ * born answered — resolution is stamped by the merge/discard that answers it
+ * (resolveBranchRequests), not accepted from a writer.
+ */
+export const groupMessageDraftSchema = groupMessageSchema.omit({
+  id: true,
+  timestamp: true,
+  resolvedAt: true
+})
 /**
  * `lastRunAt`/`lastRunSummary` are omitted from *both* write shapes, not just
  * the create one, because they are run history — written by the scheduler and
@@ -335,6 +371,7 @@ export type Contact = z.infer<typeof contactSchema>
 export type Group = z.infer<typeof groupSchema>
 export type GroupMessage = z.infer<typeof groupMessageSchema>
 export type PersistedMessage = z.infer<typeof messageSchema>
+export type TurnWork = z.infer<typeof turnWorkSchema>
 export type Routine = z.infer<typeof routineSchema>
 export type UsageEvent = z.infer<typeof usageEventSchema>
 

@@ -40,7 +40,12 @@ export function ContactMenu({
           }
         />
         <DropdownMenuContent align="end" className="w-52">
-          <ContactActionItems kind="dropdown" contactId={contact.id} onOpen={setDialog} />
+          <ContactActionItems
+            kind="dropdown"
+            contactId={contact.id}
+            workingPath={contact.worktreePath ?? contact.repoPath}
+            onOpen={setDialog}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
 

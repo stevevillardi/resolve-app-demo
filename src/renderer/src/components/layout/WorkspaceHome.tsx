@@ -103,9 +103,11 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   const upcoming = variant === 'home' ? upcomingRuns(nextRunRows, UPCOMING_LIMIT) : []
   const banner = variant === 'home' ? authBannerFor(authStatus) : null
   const repoCount = new Set(contacts.map((contact) => contact.repoPath)).size
-  // Only the ones with something in them. A branch with no diff against the
+  // Only the ones with something in them, and not yet landed. A merged branch
+  // is finished work, not waiting work — counting it kept the banner up
+  // forever (Phase 19). A branch with no diff against the
   // repo is not waiting on anybody.
-  const waiting = variant === 'home' ? branches.filter((b) => b.files.length > 0) : []
+  const waiting = variant === 'home' ? branches.filter((b) => b.files.length > 0 && !b.merged) : []
 
   // A fresh install is a different screen, not an emptier version of this one:
   // there is nothing to summarise and exactly one thing to do.

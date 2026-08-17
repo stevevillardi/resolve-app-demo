@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { groupMessagesRootKey } from '@/hooks/useMessages'
 import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
 import type { BranchSummary, MergeTarget } from '../../../shared/ipc-contract'
 
@@ -52,17 +53,26 @@ export function useMergePreview(
 }
 
 export function useMergeBranch(): {
-  merge: (input: { targetPath: string; branch: string }, onMerged?: () => void) => void
+  merge: (
+    input: { repoPath: string; targetPath: string; branch: string },
+    onMerged?: () => void
+  ) => void
   isPending: boolean
   error: string | null
 } {
   const queryClient = useQueryClient()
   const mutation = useMutation({
-    mutationFn: (input: { targetPath: string; branch: string }) =>
+    mutationFn: (input: { repoPath: string; targetPath: string; branch: string }) =>
       callProcedure('branches.merge', input),
     // Every branch's file list is measured against a working copy that just
-    // changed, so the whole list is stale rather than one row of it.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: branchesKey })
+    // changed, so the whole list is stale rather than one row of it. The merge
+    // also stamped any branch_request it answered (Phase 19), so the group
+    // threads and the cached diffs move with it.
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: branchesKey })
+      void queryClient.invalidateQueries({ queryKey: groupMessagesRootKey })
+      void queryClient.invalidateQueries({ queryKey: ['diff'] })
+    }
   })
 
   return {
@@ -84,7 +94,11 @@ export function useDiscardBranch(): {
   const mutation = useMutation({
     mutationFn: (input: { repoPath: string; branch: string; force?: boolean }) =>
       callProcedure('branches.discard', input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: branchesKey })
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: branchesKey })
+      void queryClient.invalidateQueries({ queryKey: groupMessagesRootKey })
+      void queryClient.invalidateQueries({ queryKey: ['diff'] })
+    }
   })
 
   return {

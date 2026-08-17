@@ -3,18 +3,29 @@ import {
   AlertTriangle,
   Check,
   ExternalLink,
+  FolderOpen,
   GitBranch,
+  GitCommitHorizontal,
   GitMerge,
   GitPullRequest,
   Trash2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { EmptyPane } from '@/components/common/EmptyPane'
 import { ListRow } from '@/components/common/ListRow'
 import { PaneBody } from '@/components/common/PaneBody'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { Section } from '@/components/common/Section'
+import { DiffPanel } from '@/components/diff/DiffPanel'
 import {
   useBranches,
   useDiscardBranch,
@@ -22,8 +33,10 @@ import {
   useMergePreview,
   useMergeTargets
 } from '@/hooks/useBranches'
+import { useBranchDiff, useCommitBranch, revealLocalPath } from '@/hooks/useDiffs'
 import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests'
 import { openExternal } from '@/hooks/useAuth'
+import { ipcErrorMessage } from '@/lib/ipc-client'
 import { repoName } from '@/lib/format'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -81,6 +94,8 @@ function BranchDetailBody({
   const preview = useMergePreview(repoPath, targetPath, branchName)
   const { merge, isPending: merging, error: mergeError } = useMergeBranch()
   const { discard, isPending: discarding, error: discardError } = useDiscardBranch()
+  const diff = useBranchDiff(repoPath, branchName)
+  const [committing, setCommitting] = useState(false)
 
   // Null for an orphan branch, which has no persona left to authorise anything —
   // merge and discard are all it gets.
@@ -111,6 +126,12 @@ function BranchDetailBody({
         subtitle={branch.branch}
         actions={
           <>
+            {branch.merged && (
+              <span className="text-muted-foreground text-meta flex items-center gap-1 pr-1">
+                <Check className="size-3" aria-hidden />
+                Merged
+              </span>
+            )}
             {/* Merging takes the work into somebody's checkout; a pull request
                 sends it out for review instead. Both are the human's call, which
                 is why they sit side by side. Hidden entirely for a read_only
@@ -143,6 +164,25 @@ function BranchDetailBody({
                 </Button>
               </>
             )}
+            {branch.hasWorktree && branch.dirtyFiles.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setCommitting(true)}
+              >
+                <GitCommitHorizontal className="size-3.5" />
+                Commit work…
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Reveal in Finder"
+              onClick={() => revealLocalPath(branch.repoPath)}
+            >
+              <FolderOpen className="size-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -156,7 +196,10 @@ function BranchDetailBody({
               size="sm"
               className="gap-1.5"
               disabled={!targetPath || blocked || merging}
-              onClick={() => targetPath && merge({ targetPath, branch: branch.branch })}
+              onClick={() =>
+                targetPath &&
+                merge({ repoPath: branch.repoPath, targetPath, branch: branch.branch })
+              }
             >
               <GitMerge className="size-3.5" />
               {merging ? 'Merging…' : 'Merge'}
@@ -178,9 +221,33 @@ function BranchDetailBody({
           )}
         </div>
 
+        {branch.hasWorktree && branch.dirtyFiles.length > 0 && (
+          <Section
+            title={
+              branch.dirtyFiles.length === 1
+                ? '1 file not committed yet'
+                : `${branch.dirtyFiles.length} files not committed yet`
+            }
+            description="Sitting in the checkout, invisible to the diff below and to a pull request until committed."
+          >
+            <ul className="grid gap-x-6 gap-y-0.5 @2xl/pane:grid-cols-2 @5xl/pane:grid-cols-3">
+              {branch.dirtyFiles.map((file) => (
+                <li key={file} className="text-foreground/85 truncate font-mono text-xs">
+                  {file}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+
         <Section
           title={
             branch.files.length === 1 ? '1 file changed' : `${branch.files.length} files changed`
+          }
+          description={
+            branch.files.length > 0
+              ? 'Committed on this branch, measured from where it left your checkout.'
+              : undefined
           }
         >
           {branch.files.length === 0 ? (
@@ -188,15 +255,13 @@ function BranchDetailBody({
               Nothing this branch has that your checkout doesn&apos;t.
             </p>
           ) : (
-            // A changed-file list is many short strings, so it columnises
-            // rather than running down the middle of the pane truncating.
-            <ul className="grid gap-x-6 gap-y-0.5 @2xl/pane:grid-cols-2 @5xl/pane:grid-cols-3">
-              {branch.files.map((file) => (
-                <li key={file} className="text-foreground/85 truncate font-mono text-xs">
-                  {file}
-                </li>
-              ))}
-            </ul>
+            <DiffPanel
+              files={diff.data?.files ?? []}
+              filesOmitted={diff.data?.filesOmitted ?? 0}
+              isLoading={diff.isLoading}
+              error={diff.error ? ipcErrorMessage(diff.error) : null}
+              className="h-[30rem]"
+            />
           )}
         </Section>
 
@@ -262,6 +327,15 @@ function BranchDetailBody({
         )}
       </PaneBody>
 
+      <CommitWorkDialog
+        open={committing}
+        onOpenChange={setCommitting}
+        repoPath={branch.repoPath}
+        branch={branch.branch}
+        contactName={branch.contactName}
+        dirtyFiles={branch.dirtyFiles}
+      />
+
       {/* The same dialog every other destructive action in the app goes
           through. This used to be a pair of buttons that appeared in place,
           which made discarding a branch — the one irreversible action here —
@@ -297,5 +371,86 @@ function BranchDetailBody({
         }
       />
     </div>
+  )
+}
+
+/**
+ * The one place the app authors a commit, and it is this click (Phase 19).
+ *
+ * The persona is the author, so history attributes the work truthfully; the
+ * user is the committer, because the click was theirs. The message is the
+ * user's to write — pre-filling model prose here would put words in the
+ * committer's mouth.
+ */
+function CommitWorkDialog({
+  open,
+  onOpenChange,
+  repoPath,
+  branch,
+  contactName,
+  dirtyFiles
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  repoPath: string
+  branch: string
+  contactName: string | null
+  dirtyFiles: string[]
+}): React.JSX.Element {
+  const [message, setMessage] = useState('')
+  const { commit, isPending, error, reset } = useCommitBranch()
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next)
+        if (!next) {
+          setMessage('')
+          reset()
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Commit {contactName ?? branch}&apos;s work</DialogTitle>
+          <DialogDescription>
+            {dirtyFiles.length === 1
+              ? '1 uncommitted file'
+              : `${dirtyFiles.length} uncommitted files`}{' '}
+            will be staged and committed on <span className="font-mono">{branch}</span>, authored by
+            the persona, committed by you.
+          </DialogDescription>
+        </DialogHeader>
+
+        <textarea
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          placeholder="Commit message"
+          rows={3}
+          autoFocus
+          className="border-input bg-background focus-visible:ring-ring w-full resize-none rounded-md border px-3 py-2 font-mono text-xs focus-visible:ring-1 focus-visible:outline-none"
+        />
+
+        {error && <p className="text-destructive text-xs">{error}</p>}
+
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            disabled={message.trim().length === 0 || isPending}
+            onClick={() =>
+              commit({ repoPath, branch, message: message.trim() }, () => onOpenChange(false))
+            }
+          >
+            <GitCommitHorizontal className="size-3.5" />
+            {isPending ? 'Committing…' : 'Commit'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

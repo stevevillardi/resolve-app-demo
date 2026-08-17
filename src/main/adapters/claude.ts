@@ -1,4 +1,5 @@
 import { query, SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from '@anthropic-ai/claude-agent-sdk'
+import { TOOL_OUTPUT_MAX, toolExcerpt } from '../../shared/agent'
 import type { AgentCapabilities, AgentErrorKind, AgentEvent, AgentUsage } from '../../shared/agent'
 import { composeInstructionBlocks, composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
@@ -67,6 +68,28 @@ interface ContentBlock {
   tool_use_id?: string
   is_error?: boolean
   content?: unknown
+}
+
+/**
+ * How a tool call answered, as bounded text (Phase 19).
+ *
+ * A tool_result's `content` is either a plain string or an array of content
+ * parts; only the text parts are worth keeping — an image result excerpted to
+ * characters would be noise. Empty string means "nothing worth carrying", and
+ * the caller omits the field rather than emitting an empty one.
+ */
+export function toolResultExcerpt(content: unknown): string {
+  if (typeof content === 'string') return toolExcerpt(content, TOOL_OUTPUT_MAX)
+  if (!Array.isArray(content)) return ''
+  const text = content
+    .map((part) =>
+      part && typeof part === 'object' && (part as { type?: string }).type === 'text'
+        ? ((part as { text?: string }).text ?? '')
+        : ''
+    )
+    .filter(Boolean)
+    .join('\n')
+  return text ? toolExcerpt(text, TOOL_OUTPUT_MAX) : ''
 }
 
 /** A short human-readable summary of what a tool call is about to do. */
@@ -359,7 +382,10 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
                 // from the tool_use that opened this id. Empty only if the
                 // start was never seen, which would mean a malformed stream.
                 name: toolNames.get(block.tool_use_id) ?? '',
-                status: block.is_error ? 'failed' : 'completed'
+                status: block.is_error ? 'failed' : 'completed',
+                ...(toolResultExcerpt(block.content)
+                  ? { output: toolResultExcerpt(block.content) }
+                  : {})
               }
             }
             break

@@ -6,6 +6,7 @@ import type { ThreadEvent, ThreadItem, Usage } from '@openai/codex-sdk'
 // silently ignored `--config` override.
 type CodexConfigValue = string | number | boolean | CodexConfigValue[] | CodexConfigObject
 type CodexConfigObject = { [key: string]: CodexConfigValue }
+import { TOOL_OUTPUT_MAX, toolExcerpt } from '../../shared/agent'
 import type { AgentCapabilities, AgentEvent, AgentUsage } from '../../shared/agent'
 import { composeInstructions } from './context'
 import { classifyErrorMessage } from './errors'
@@ -78,6 +79,28 @@ export function toolNameFor(item: ThreadItem): string {
     default:
       return item.type
   }
+}
+
+/**
+ * How a tool item answered, as bounded text (Phase 19).
+ *
+ * Commands carry their aggregated stdout/stderr; an MCP call carries either
+ * its error message or its result's text parts. file_change and web_search
+ * answer with nothing beyond their detail line.
+ */
+export function toolOutputFor(item: ThreadItem): string {
+  if (item.type === 'command_execution' && item.aggregated_output) {
+    return toolExcerpt(item.aggregated_output, TOOL_OUTPUT_MAX)
+  }
+  if (item.type === 'mcp_tool_call') {
+    if (item.error?.message) return toolExcerpt(item.error.message, TOOL_OUTPUT_MAX)
+    const text = (item.result?.content ?? [])
+      .map((part) => ('text' in part && typeof part.text === 'string' ? part.text : ''))
+      .filter(Boolean)
+      .join('\n')
+    if (text) return toolExcerpt(text, TOOL_OUTPUT_MAX)
+  }
+  return ''
 }
 
 export function toolDetailFor(item: ThreadItem): string {
@@ -436,7 +459,8 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
               toolCallId: item.id,
               name: toolNameFor(item),
               status: failed ? 'failed' : 'completed',
-              detail: toolDetailFor(item)
+              detail: toolDetailFor(item),
+              ...(toolOutputFor(item) ? { output: toolOutputFor(item) } : {})
             }
           }
           break

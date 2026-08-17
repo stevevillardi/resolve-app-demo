@@ -224,6 +224,10 @@ export const branchSummarySchema = z.object({
   contactName: z.string().nullable(),
   files: z.array(z.string()),
   hasWorktree: z.boolean(),
+  /** Whether the main tree's HEAD already contains this branch (Phase 19). */
+  merged: z.boolean(),
+  /** Uncommitted paths in the branch's live worktree; what commit would land. */
+  dirtyFiles: z.array(z.string()),
   /**
    * The GitHub authority of the persona behind this branch, so the panel knows
    * whether to offer a pull request. Null when the Contact is gone — an orphan
@@ -231,6 +235,24 @@ export const branchSummarySchema = z.object({
    * discarded.
    */
   githubScope: githubScopeSchema.nullable()
+})
+
+/**
+ * One file of a diff (Phase 19). Content is served whole under stated budgets
+ * — an over-budget side is withheld with `truncated: true`, never clipped, so
+ * half a file can never review as a whole one. `live` marks a pair whose new
+ * side was read off the working tree just now rather than from the turn's own
+ * moment.
+ */
+export const fileDiffSchema = z.object({
+  path: z.string(),
+  oldPath: z.string().optional(),
+  status: z.enum(['added', 'modified', 'deleted', 'renamed']),
+  binary: z.boolean(),
+  truncated: z.boolean(),
+  live: z.boolean(),
+  oldText: z.string().nullable(),
+  newText: z.string().nullable()
 })
 
 /** An open pull request, as GitHub reports it. Never stored — see pull-requests.ts. */
@@ -779,10 +801,19 @@ export const ipcContract = {
   // returned here. A turn can take minutes, which is far too long to hold an
   // invoke open.
   /**
-   * The persisted tool record for a thread (Phase 17, doc 15 item 1): which
-   * tools each turn ran and how each ended — name and status only, never
-   * arguments. messageId is null for calls whose turn died before its reply
-   * was written; the renderer shows those as interrupted.
+   * Per-file content for one turn's work (Phase 19, review A6): the committed
+   * half between the turn's own heads, and the newly-dirty half read live.
+   */
+  'messages.workDiff': {
+    input: z.object({ contactId: z.string(), messageId: z.string() }),
+    output: z.object({ files: z.array(fileDiffSchema), filesOmitted: z.number() })
+  },
+  /**
+   * The persisted tool record for a thread (Phase 17, doc 15 item 1; widened
+   * in Phase 19): which tools each turn ran, how each ended, and the bounded
+   * detail/output excerpts the live stream showed — capped where they are
+   * written, in messaging.ts. messageId is null for calls whose turn died
+   * before its reply was written; the renderer shows those as interrupted.
    */
   'messages.toolCalls': {
     input: z.object({ contactId: z.string() }),
@@ -792,7 +823,9 @@ export const ipcContract = {
         messageId: z.string().nullable(),
         name: z.string(),
         status: z.enum(['running', 'completed', 'failed']),
-        createdAt: z.number()
+        createdAt: z.number(),
+        detail: z.string().optional(),
+        output: z.string().optional()
       })
     )
   },
@@ -879,8 +912,31 @@ export const ipcContract = {
     output: z.object({ clean: z.boolean(), conflicts: z.array(z.string()) })
   },
   'branches.merge': {
-    input: z.object({ targetPath: z.string(), branch: z.string() }),
+    // repoPath rides along so the merge can stamp the branch_request it
+    // answers — the target path alone does not say which repo's group asked.
+    input: z.object({ repoPath: z.string(), targetPath: z.string(), branch: z.string() }),
     output: z.object({ merged: z.boolean() })
+  },
+  /**
+   * Per-file content for a branch's diff (Phase 19, review A1): merge-base →
+   * tip, renames detected, binaries flagged, budgets stated on fileDiffSchema.
+   */
+  'branches.diff': {
+    input: z.object({ repoPath: z.string(), branch: z.string() }),
+    output: z.object({
+      baseSha: z.string().nullable(),
+      files: z.array(fileDiffSchema),
+      filesOmitted: z.number()
+    })
+  },
+  /**
+   * Lands a branch's uncommitted work as a commit — the one way this app ever
+   * authors one, and it is a human click (Phase 19, review A4). Author is the
+   * persona; committer is the user's own git identity.
+   */
+  'branches.commit': {
+    input: z.object({ repoPath: z.string(), branch: z.string(), message: z.string().min(1) }),
+    output: z.object({ committedSha: z.string(), files: z.array(z.string()) })
   },
   /** Refuses unmerged work unless `force`, which the confirm dialog supplies. */
   'branches.discard': {
@@ -892,6 +948,21 @@ export const ipcContract = {
   'shell.openExternal': {
     input: z.object({ url: z.string().url() }),
     output: z.object({ opened: z.boolean() })
+  },
+
+  // --- Local paths (Phase 19, review A2) ----------------------------------
+  // Both validated in main against the roots the app actually knows — bound
+  // repos and its own worktrees — so this never becomes a general "open
+  // whatever the renderer says" primitive, the same rule openExternal set.
+  /** Opens a folder (Finder/Explorer) or a file in its default app. */
+  'shell.openPath': {
+    input: z.object({ path: z.string() }),
+    output: z.object({ opened: z.boolean() })
+  },
+  /** Reveals a file or folder in Finder/Explorer, selected. */
+  'shell.revealPath': {
+    input: z.object({ path: z.string() }),
+    output: z.object({ revealed: z.boolean() })
   }
 } satisfies Record<string, { input: z.ZodType; output: z.ZodType }>
 
@@ -906,5 +977,6 @@ export type CodexAuthStatus = z.infer<typeof codexStatusSchema>
 export type GitHubAuthStatus = z.infer<typeof githubStatusSchema>
 export type AuthStatus = z.infer<typeof authStatusSchema>
 export type ActiveRun = z.infer<typeof activeRunSchema>
+export type FileDiff = z.infer<typeof fileDiffSchema>
 export type RepoOption = z.infer<typeof repoOptionSchema>
 export type BoundRepo = z.infer<typeof boundRepoSchema>

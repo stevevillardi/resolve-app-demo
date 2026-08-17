@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { personaTemplates } from '../db/schema'
+import { groupMessages, groups, personaTemplates } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
@@ -24,8 +24,15 @@ let userData: string
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
 
-const { listPersonaBranches, mergeTargetsFor, previewMerge, mergeIntoWorkingPath, discardBranch } =
-  await import('./branches')
+const {
+  commitBranchWork,
+  listPersonaBranches,
+  mergeTargetsFor,
+  previewMerge,
+  mergeIntoWorkingPath,
+  discardBranch
+} = await import('./branches')
+const { acquire, resetRunLocks } = await import('./run-lock')
 const { createContact, deleteContact } = await import('./contacts')
 const { ensureWorktree } = await import('./worktrees')
 const { branchExists } = await import('./git')
@@ -54,6 +61,7 @@ beforeEach(() => {
   commitIn(repo, 'src/a.ts', 'export const a = 1\n', 'init')
 
   db = createTestDb()
+  resetRunLocks()
   db.insert(personaTemplates)
     .values({
       id: PERSONA_WRITER,
@@ -191,7 +199,7 @@ describe('mergeIntoWorkingPath', () => {
     const reviewer = writer('Reviewer · my-app')
     await ensureWorktree(reviewer)
 
-    await mergeIntoWorkingPath(reviewer.worktreePath as string, buddy.branch as string)
+    await mergeIntoWorkingPath(repo, reviewer.worktreePath as string, buddy.branch as string)
 
     expect(existsSync(join(reviewer.worktreePath as string, 'src/b.ts'))).toBe(true)
     expect(existsSync(join(repo, 'src/b.ts'))).toBe(false)
@@ -204,7 +212,7 @@ describe('mergeIntoWorkingPath', () => {
     const contact = await workingWriter()
     writeFileSync(join(repo, 'src/unsaved.ts'), 'in progress\n')
 
-    await expect(mergeIntoWorkingPath(repo, contact.branch as string)).rejects.toThrow(
+    await expect(mergeIntoWorkingPath(repo, repo, contact.branch as string)).rejects.toThrow(
       /uncommitted changes/i
     )
   })
@@ -221,5 +229,150 @@ describe('discardBranch', () => {
 
     await discardBranch(repo, contact.branch as string, true)
     expect(await branchExists(repo, contact.branch as string)).toBe(false)
+  })
+})
+
+// --- Phase 19: the review surface's claims -----------------------------------
+
+describe('merged and dirtyFiles (Phase 19)', () => {
+  it('reports a branch unmerged until its work lands, then merged', async () => {
+    const contact = await workingWriter()
+    expect((await listPersonaBranches())[0].merged).toBe(false)
+
+    await mergeIntoWorkingPath(repo, repo, contact.branch as string)
+    expect((await listPersonaBranches())[0].merged).toBe(true)
+  })
+
+  it('lists the uncommitted paths sitting in the worktree', async () => {
+    const contact = await workingWriter()
+    writeFileSync(join(contact.worktreePath as string, 'src/loose.ts'), 'uncommitted\n')
+
+    expect((await listPersonaBranches())[0].dirtyFiles).toEqual(['src/loose.ts'])
+  })
+
+  it('reports no dirt for a branch whose checkout is gone', async () => {
+    const contact = await workingWriter()
+    await deleteContact(contact.id, true)
+
+    expect((await listPersonaBranches())[0].dirtyFiles).toEqual([])
+  })
+})
+
+describe('commitBranchWork (Phase 19)', () => {
+  it('commits everything with the persona as author, on a click', async () => {
+    const contact = await workingWriter()
+    writeFileSync(join(contact.worktreePath as string, 'src/loose.ts'), 'uncommitted\n')
+
+    const { committedSha, files } = await commitBranchWork(
+      repo,
+      contact.branch as string,
+      'persona work, landed by hand'
+    )
+
+    expect(files).toEqual(['src/loose.ts'])
+    expect(run(['rev-parse', contact.branch as string])).toBe(committedSha)
+    expect(run(['status', '--porcelain'], contact.worktreePath as string)).toBe('')
+    expect(run(['log', '-1', '--format=%an <%ae>', contact.branch as string])).toBe(
+      'Refactor Buddy <refactor-buddy@personas.switchboard.local>'
+    )
+    // The click was the user's, and git's own config names them as committer.
+    expect(run(['log', '-1', '--format=%cn', contact.branch as string])).toBe('Test')
+  })
+
+  it('refuses a clean checkout', async () => {
+    const contact = await workingWriter()
+    await expect(commitBranchWork(repo, contact.branch as string, 'nothing')).rejects.toThrow(
+      /Nothing to commit/
+    )
+  })
+
+  it('refuses an orphan branch — no Contact, no checkout to commit in', async () => {
+    const contact = await workingWriter()
+    await deleteContact(contact.id, true)
+
+    await expect(commitBranchWork(repo, contact.branch as string, 'orphan')).rejects.toThrow(
+      /no live checkout/
+    )
+  })
+
+  it('refuses while a run holds the worktree — half a turn must never be committed', async () => {
+    const contact = await workingWriter()
+    writeFileSync(join(contact.worktreePath as string, 'src/loose.ts'), 'mid-turn\n')
+    const release = acquire({
+      runId: 'run-1',
+      contactId: contact.id,
+      contactName: 'Refactor Buddy · my-app',
+      workingPath: contact.worktreePath as string,
+      mode: 'exclusive',
+      startedAt: Date.now()
+    })
+
+    await expect(commitBranchWork(repo, contact.branch as string, 'racing')).rejects.toThrow(
+      /is working here/
+    )
+    release?.()
+  })
+})
+
+describe('branch_request resolution (Phase 19)', () => {
+  function seedRequest(branch: string): string {
+    const group = db.select().from(groups).all()[0]
+    const id = `req-${branch}`
+    db.insert(groupMessages)
+      .values({
+        id,
+        groupId: group.id,
+        timestamp: new Date(),
+        type: 'branch_request',
+        content: 'please merge my work',
+        branch
+      })
+      .run()
+    return id
+  }
+
+  it('a merge stamps the open request as answered', async () => {
+    const contact = await workingWriter()
+    const requestId = seedRequest(contact.branch as string)
+
+    await mergeIntoWorkingPath(repo, repo, contact.branch as string)
+
+    const row = db
+      .select()
+      .from(groupMessages)
+      .all()
+      .find((r) => r.id === requestId)
+    expect(row?.resolvedAt).not.toBeNull()
+  })
+
+  it('a discard answers it too — "no" is an answer', async () => {
+    const contact = await workingWriter()
+    await deleteContact(contact.id, true)
+    const requestId = seedRequest(contact.branch as string)
+
+    await discardBranch(repo, contact.branch as string, true)
+
+    const row = db
+      .select()
+      .from(groupMessages)
+      .all()
+      .find((r) => r.id === requestId)
+    expect(row?.resolvedAt).not.toBeNull()
+  })
+
+  it('an already-answered request keeps its original stamp', async () => {
+    const contact = await workingWriter()
+    const requestId = seedRequest(contact.branch as string)
+    const first = new Date(Date.now() - 60_000)
+    db.update(groupMessages).set({ resolvedAt: first }).run()
+
+    await mergeIntoWorkingPath(repo, repo, contact.branch as string)
+
+    const row = db
+      .select()
+      .from(groupMessages)
+      .all()
+      .find((r) => r.id === requestId)
+    expect(row?.resolvedAt?.getTime()).toBe(first.getTime())
   })
 })

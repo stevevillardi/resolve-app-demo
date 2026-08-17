@@ -79,6 +79,7 @@ function GroupEntry({
           branch={message.branch ?? ''}
           authorName={authorPersona?.name}
           timestamp={message.timestamp}
+          {...(message.resolvedAt !== undefined ? { resolvedAt: message.resolvedAt } : {})}
           onReview={onReviewBranch}
         />
       )

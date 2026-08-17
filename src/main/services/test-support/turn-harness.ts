@@ -171,8 +171,14 @@ export function openableGate(): { promise: Promise<void>; open: () => void } {
   return { promise, open }
 }
 
-/** Lets the microtask queue drain so the un-awaited runTurn() can finish. */
-export async function settle(turns = 10): Promise<void> {
+/**
+ * Lets the microtask queue drain so the un-awaited runTurn() can finish.
+ *
+ * The depth is plumbing, not a claim — it only has to exceed the number of
+ * awaits on the longest turn path (Phase 19's work capture added one), with
+ * headroom so the next await added doesn't fail every suite at once.
+ */
+export async function settle(turns = 16): Promise<void> {
   for (let i = 0; i < turns; i += 1) await Promise.resolve()
 }
 
