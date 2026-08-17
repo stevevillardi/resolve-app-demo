@@ -26,7 +26,7 @@ vi.mock('../db', () => ({
   closeDb: () => {
     closeDbCalls += 1
   },
-  DB_FILE_NAME: 'persona-router.db'
+  DB_FILE_NAME: 'switchboard.db'
 }))
 
 const deleteBranchCalls: Array<{ repoPath: string; branch: string; force: boolean | undefined }> =
@@ -84,7 +84,7 @@ afterEach(() => {
 
 describe('clearAppData', () => {
   it('wipes the profile: database files, secrets, worktrees', async () => {
-    for (const name of ['persona-router.db', 'persona-router.db-wal', 'persona-router.db-shm']) {
+    for (const name of ['switchboard.db', 'switchboard.db-wal', 'switchboard.db-shm']) {
       writeFileSync(join(userData, name), 'x')
     }
     mkdirSync(join(userData, 'secrets'))
@@ -93,7 +93,7 @@ describe('clearAppData', () => {
 
     await clearAppData()
 
-    for (const name of ['persona-router.db', 'persona-router.db-wal', 'persona-router.db-shm']) {
+    for (const name of ['switchboard.db', 'switchboard.db-wal', 'switchboard.db-shm']) {
       expect(existsSync(join(userData, name))).toBe(false)
     }
     expect(existsSync(join(userData, 'secrets'))).toBe(false)

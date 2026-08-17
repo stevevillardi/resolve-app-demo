@@ -81,7 +81,7 @@ beforeAll(async () => {
   // rather than only in the local-remote unit test.
   checkout = await cloneRepo(`https://github.com/${SLUG}.git`, scratch, 'live', TOKEN)
   git(['config', 'user.email', 'live-test@example.com'])
-  git(['config', 'user.name', 'Persona Router live test'])
+  git(['config', 'user.name', 'Switchboard live test'])
 
   db = createTestDb()
   db.insert(personaTemplates)
@@ -159,7 +159,7 @@ describe.skipIf(!LIVE)('GitHub remote actions, live', () => {
     expect(data.state).toBe('open')
     expect(data.head.ref).toBe(contact.branch)
     expect(data.base.ref).not.toBe(contact.branch)
-    expect(data.body).toContain('Persona Router')
+    expect(data.body).toContain('Switchboard')
   }, 120_000)
 
   it('comments on the second attempt instead of opening a duplicate', async () => {

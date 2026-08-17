@@ -74,7 +74,7 @@ beforeAll(async () => {
   userData = join(scratch, 'profile')
   checkout = await cloneRepo(`https://github.com/${SLUG}.git`, scratch, 'live', TOKEN)
   execFileSync('git', ['config', 'user.email', 'live-test@example.com'], { cwd: checkout })
-  execFileSync('git', ['config', 'user.name', 'Persona Router live test'], { cwd: checkout })
+  execFileSync('git', ['config', 'user.name', 'Switchboard live test'], { cwd: checkout })
 
   db = createTestDb()
   db.insert(personaTemplates)

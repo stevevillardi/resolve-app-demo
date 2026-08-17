@@ -39,7 +39,7 @@ test.afterAll(async () => {
 test.describe('first run', () => {
   test('lands on onboarding, not the shell', async () => {
     const { window } = launched
-    await expect(window.getByRole('heading', { name: 'Welcome to Persona Router' })).toBeVisible()
+    await expect(window.getByRole('heading', { name: 'Welcome to Switchboard' })).toBeVisible()
   })
 
   test('offers all three backends', async () => {
@@ -97,7 +97,7 @@ test.describe('first run', () => {
 
 test.describe('database', () => {
   test('creates the SQLite file and applies every migration', async () => {
-    const dbPath = join(profile, 'userData', 'persona-router.db')
+    const dbPath = join(profile, 'userData', 'switchboard.db')
     expect(existsSync(dbPath)).toBe(true)
 
     // app_state is queryable, which only holds if 0001 ran.
@@ -254,7 +254,7 @@ test.describe('completing onboarding', () => {
     const { window } = launched
 
     await waitForShell(window)
-    await expect(window.getByRole('heading', { name: 'Welcome to Persona Router' })).toBeHidden()
+    await expect(window.getByRole('heading', { name: 'Welcome to Switchboard' })).toBeHidden()
     await expect(window.locator('[data-slot="sidebar"]')).toBeAttached()
 
     const status = await invoke<AuthStatus>(window, 'auth.getStatus')

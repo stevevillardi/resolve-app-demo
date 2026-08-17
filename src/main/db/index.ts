@@ -5,7 +5,7 @@ import { createDb, rawHandle, type AppDatabase } from './create'
 export type { AppDatabase }
 
 /** One place for the filename, so the reset service cannot drift from it. */
-export const DB_FILE_NAME = 'persona-router.db'
+export const DB_FILE_NAME = 'switchboard.db'
 
 let db: AppDatabase | null = null
 

@@ -1,5 +1,5 @@
-appId: com.stevevillardi.persona-router
-productName: Persona Router
+appId: com.stevevillardi.switchboard
+productName: Switchboard
 directories:
   buildResources: build
 files:
@@ -23,7 +23,7 @@ extraResources:
   - from: drizzle
     to: drizzle
 win:
-  executableName: persona-router
+  executableName: switchboard
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

@@ -20,7 +20,7 @@ export interface LaunchedApp {
 }
 
 export function createProfile(): string {
-  return mkdtempSync(join(tmpdir(), 'persona-router-e2e-'))
+  return mkdtempSync(join(tmpdir(), 'switchboard-e2e-'))
 }
 
 export function destroyProfile(profile: string): void {
@@ -144,7 +144,7 @@ export function readProfileDb<T = Record<string, unknown>>(
   sql: string,
   ...params: unknown[]
 ): T[] {
-  const db = new DatabaseSync(join(profile, 'userData', 'persona-router.db'), { readOnly: true })
+  const db = new DatabaseSync(join(profile, 'userData', 'switchboard.db'), { readOnly: true })
   try {
     return db.prepare(sql).all(...(params as never[])) as T[]
   } finally {

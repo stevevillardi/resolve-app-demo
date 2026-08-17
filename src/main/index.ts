@@ -31,7 +31,7 @@ import { MENU_ACTION_CHANNEL, type MenuActionId } from '../shared/menu'
 // In dev the bold macOS app-menu title still says "Electron" regardless —
 // macOS reads the running bundle's Info.plist; see app-menu.ts.
 app.setPath('userData', app.getPath('userData'))
-app.setName('Persona Router')
+app.setName('Switchboard')
 
 function createWindow(): void {
   // Create the browser window.
@@ -106,7 +106,7 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.stevevillardi.persona-router')
+  electronApp.setAppUserModelId('com.stevevillardi.switchboard')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

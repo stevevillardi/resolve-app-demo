@@ -5,7 +5,7 @@ import { appState } from '../db/schema'
 /**
  * Non-secret app-level key/value state. Secrets go to services/secrets.ts —
  * nothing written through here is encrypted, and that's deliberate: it should
- * stay safe to `sqlite3 persona-router.db "select * from app_state"`.
+ * stay safe to `sqlite3 switchboard.db "select * from app_state"`.
  */
 export type AppStateKey =
   | 'onboarding_completed'

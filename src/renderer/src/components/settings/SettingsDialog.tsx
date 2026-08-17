@@ -326,7 +326,7 @@ function SettingsContent(): React.JSX.Element {
           <SectionLabel>About</SectionLabel>
           <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-6 gap-y-1 text-xs">
             <span>
-              Persona Router{' '}
+              Switchboard{' '}
               <span className="text-foreground font-mono tabular-nums">{appInfo?.version}</span>
             </span>
             <span className="font-mono">{appInfo?.platform}</span>

@@ -30,7 +30,7 @@ export function AppShell(): React.JSX.Element {
   // way you left it. react-resizable-panels v4 replaced the old `autoSaveId`
   // prop with this hook.
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: 'persona-router-panes',
+    id: 'switchboard-panes',
     storage: localStorage
   })
   const section = useUiStore((state) => state.section)

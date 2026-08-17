@@ -33,7 +33,7 @@ export function createTray(onShow: () => void): void {
 
   showWindow = onShow
   tray = new Tray(image)
-  tray.setToolTip('Persona Router')
+  tray.setToolTip('Switchboard')
   refreshTrayMenu()
 }
 

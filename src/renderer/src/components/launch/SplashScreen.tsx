@@ -43,7 +43,7 @@ export function SplashScreen({
           draggable={false}
         />
         <div className="flex flex-col items-center gap-1">
-          <h1 className="text-lg font-semibold tracking-tight">Persona Router</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Switchboard</h1>
           <p className="text-muted-foreground text-sm">
             {error ? 'Could not start' : 'Checking your connections…'}
           </p>

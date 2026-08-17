@@ -155,7 +155,7 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
   await launched.app.close()
 
   const now = Date.now()
-  const db = new DatabaseSync(join(profile, 'userData', 'persona-router.db'))
+  const db = new DatabaseSync(join(profile, 'userData', 'switchboard.db'))
   try {
     const message = db.prepare(
       `insert into messages (id, contact_id, role, content, timestamp) values (?, ?, ?, ?, ?)`

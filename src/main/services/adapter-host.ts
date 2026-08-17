@@ -41,7 +41,7 @@ function backendEnv(backend: PersonaBackend, needsGithubToken: boolean): NodeJS.
   // version set it whenever an account was connected, on the reasoning that "a
   // session with no server configured has nothing that would read this, and a
   // persona is never given a shell that could echo it". The second half of that
-  // was false and was measured to be false: `echo $PERSONA_ROUTER_GITHUB_MCP_TOKEN`
+  // was false and was measured to be false: `echo $SWITCHBOARD_GITHUB_MCP_TOKEN`
   // is allowed at `workspace_write`, so every persona at that level or above
   // could read the app's GitHub token out of its own environment — including
   // personas granted no MCP server at all.

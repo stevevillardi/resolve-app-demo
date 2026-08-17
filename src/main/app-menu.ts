@@ -14,7 +14,7 @@ import type { MenuActionId } from '../shared/menu'
  * the app's own verbs. The one thing it cannot fix is the *bold app-menu title*
  * in development — macOS reads that from the running bundle's Info.plist, which
  * in dev is node_modules/electron's. The packaged app (electron-builder's
- * productName) reads "Persona Router" everywhere.
+ * productName) reads "Switchboard" everywhere.
  */
 
 export interface AppMenuTemplateOptions {
@@ -44,7 +44,7 @@ export function buildAppMenuTemplate({ platform, isDev }: AppMenuTemplateOptions
   }
 
   const appMenu: AppMenuItem = {
-    label: 'Persona Router',
+    label: 'Switchboard',
     submenu: [
       { role: 'about' },
       { type: 'separator' },
@@ -116,7 +116,7 @@ export function buildAppMenuTemplate({ platform, isDev }: AppMenuTemplateOptions
 
   const helpMenu: AppMenuItem = {
     label: 'Help',
-    submenu: [{ label: 'Persona Router Help', action: 'open-docs' }]
+    submenu: [{ label: 'Switchboard Help', action: 'open-docs' }]
   }
 
   return [...(darwin ? [appMenu] : []), fileMenu, editMenu, viewMenu, windowMenu, helpMenu]

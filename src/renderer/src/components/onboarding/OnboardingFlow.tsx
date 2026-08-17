@@ -122,7 +122,7 @@ export function OnboardingFlow(): React.JSX.Element {
         <header className="drag-region flex flex-col items-center gap-3 text-center">
           <img src={icon} alt="" className="size-14 rounded-[22%] shadow-sm" draggable={false} />
           <div className="flex flex-col gap-1">
-            <h1 className="text-xl font-semibold tracking-tight">Welcome to Persona Router</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Welcome to Switchboard</h1>
             <p className="text-muted-foreground text-sm text-pretty">{subtitle[step]}</p>
           </div>
           {/* Where you are, not something to click — navigation is the two
@@ -142,7 +142,7 @@ export function OnboardingFlow(): React.JSX.Element {
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>
               Your OS has no available keychain, so credentials can&apos;t be stored securely.
-              Persona Router will not save them in plaintext — set up a system keyring and restart.
+              Switchboard will not save them in plaintext — set up a system keyring and restart.
             </span>
           </p>
         )}

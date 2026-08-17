@@ -347,7 +347,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                 compact
                 icon={Search}
                 title="Connect GitHub to browse repos"
-                description="Persona Router lists your repositories once GitHub is connected."
+                description="Switchboard lists your repositories once GitHub is connected."
                 action={
                   <Button size="sm" className="gap-2" onClick={() => setDialog('github')}>
                     <Github />

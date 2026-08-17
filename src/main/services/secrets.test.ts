@@ -94,7 +94,7 @@ describe('on-disk shape', () => {
   it('writes to userData/secrets, never near the database', () => {
     setSecret('github_token', 'gho_x')
     expect(existsSync(tokenPath())).toBe(true)
-    expect(existsSync(join(userData, 'persona-router.db'))).toBe(false)
+    expect(existsSync(join(userData, 'switchboard.db'))).toBe(false)
   })
 })
 

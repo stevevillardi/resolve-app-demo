@@ -100,7 +100,7 @@ export const GITHUB_MCP_SERVER_ID = 'github'
  * takes an Authorization header — so this is used on one backend only. Filled
  * by backendEnv() in services/adapter-host.ts.
  */
-export const GITHUB_MCP_TOKEN_ENV = 'PERSONA_ROUTER_GITHUB_MCP_TOKEN'
+export const GITHUB_MCP_TOKEN_ENV = 'SWITCHBOARD_GITHUB_MCP_TOKEN'
 
 /** `list_issues` → `mcp__github__list_issues`. */
 export function qualifiedGithubToolName(tool: string): string {

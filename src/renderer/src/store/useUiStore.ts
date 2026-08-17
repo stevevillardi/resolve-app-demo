@@ -129,7 +129,7 @@ export const useUiStore = create<UiState>()(
       setThemePreference: (themePreference) => set({ themePreference })
     }),
     {
-      name: 'persona-router-ui',
+      name: 'switchboard-ui',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         themePreference: state.themePreference,
