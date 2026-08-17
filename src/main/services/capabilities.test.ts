@@ -65,6 +65,7 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     branch: null,
     isolation: null,
     repoTrust: null,
+    lastReadAt: null,
     ...overrides
   }
 }

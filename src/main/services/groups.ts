@@ -30,11 +30,31 @@ export function listGroups(): Group[] {
  */
 export function ensureGroupForRepo(repoPath: string, db: AppDatabase = initDb()): Group {
   db.insert(groups)
-    .values({ id: randomUUID(), repoPath })
+    // Born read, same as createContact.
+    .values({ id: randomUUID(), repoPath, lastReadAt: new Date() })
     .onConflictDoNothing({ target: groups.repoPath })
     .run()
 
   const row = db.select().from(groups).where(eq(groups.repoPath, repoPath)).get()
   if (!row) throw new Error(`Failed to create group for repo: ${repoPath}`)
   return toGroup(row)
+}
+
+/**
+ * The groups table's first write since its creation. Same monotonic,
+ * idempotent contract as markContactRead — see that comment.
+ */
+export function markGroupRead(id: string, at = Date.now()): Group {
+  const row = initDb().select().from(groups).where(eq(groups.id, id)).get()
+  if (!row) throw new Error(`No such group: ${id}`)
+
+  const current = toGroup(row)
+  if (current.lastReadAt !== null && at <= current.lastReadAt) return current
+
+  initDb()
+    .update(groups)
+    .set({ lastReadAt: new Date(at) })
+    .where(eq(groups.id, id))
+    .run()
+  return { ...current, lastReadAt: at }
 }

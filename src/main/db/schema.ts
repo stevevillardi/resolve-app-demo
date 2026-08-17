@@ -128,7 +128,15 @@ export const contacts = sqliteTable(
      * together, always through repoTrustOf() in shared/domain.ts, and because
      * a third kind of trust would otherwise be another migration.
      */
-    repoTrust: text('repo_trust', { mode: 'json' }).$type<RepoTrust>()
+    repoTrust: text('repo_trust', { mode: 'json' }).$type<RepoTrust>(),
+    /**
+     * When this thread was last on screen (Phase 20). The unread boundary:
+     * rows after it count, rows at or before it are read. Migration 0016
+     * backfills existing rows to its own run time — an upgrade must land with
+     * zero badges, not a wall of stale ones — and creation stamps new rows,
+     * so null is defensive only and reads as "everything read".
+     */
+    lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' })
   },
   (table) => [index('contacts_repo_path_idx').on(table.repoPath)]
 )
@@ -137,7 +145,9 @@ export const groups = sqliteTable(
   'groups',
   {
     id: text('id').primaryKey(),
-    repoPath: text('repo_path').notNull()
+    repoPath: text('repo_path').notNull(),
+    /** Same contract as contacts.lastReadAt — see that comment. */
+    lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' })
   },
   // Blueprint §4: exactly one Group per repo. Enforced here rather than only
   // in ensureGroupForRepo(), so a second writer can't race a duplicate in.

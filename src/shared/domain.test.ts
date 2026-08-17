@@ -140,7 +140,8 @@ describe('contact', () => {
     worktreePath: null,
     branch: null,
     isolation: null,
-    repoTrust: null
+    repoTrust: null,
+    lastReadAt: null
   }
 
   function without(key: keyof typeof base): Record<string, unknown> {

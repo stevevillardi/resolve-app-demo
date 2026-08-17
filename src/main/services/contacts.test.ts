@@ -25,10 +25,11 @@ const {
   listContacts,
   rebindContactPersona,
   renameContact,
+  markContactRead,
   setBackendSessionId,
   setRepoTrust
 } = await import('./contacts')
-const { ensureGroupForRepo, listGroups } = await import('./groups')
+const { ensureGroupForRepo, listGroups, markGroupRead } = await import('./groups')
 const { acquire, resetRunLocks } = await import('./run-lock')
 
 const PERSONA_ID = 'persona-1'
@@ -292,6 +293,50 @@ describe('ensureGroupForRepo', () => {
     // one-group-per-repo rule everywhere downstream.
     ensureGroupForRepo('~/code/app')
     expect(() => db.insert(groups).values({ id: 'dupe', repoPath: '~/code/app' }).run()).toThrow()
+  })
+})
+
+describe('read state (Phase 20)', () => {
+  it('is born read — a new thread has nothing unread in it', () => {
+    const contact = createContact(draft('~/code/app', 'Code Reviewer · app'))
+    expect(contact.lastReadAt).not.toBeNull()
+    expect(getContact(contact.id)?.lastReadAt).toBe(contact.lastReadAt)
+  })
+
+  it('marks read forward and round-trips', () => {
+    const contact = createContact(draft('~/code/app', 'Code Reviewer · app'))
+    const later = (contact.lastReadAt as number) + 60_000
+
+    const updated = markContactRead(contact.id, later)
+
+    expect(updated.lastReadAt).toBe(later)
+    expect(getContact(contact.id)?.lastReadAt).toBe(later)
+  })
+
+  // Two mounted views can race their mark-read effects; the losing write must
+  // not resurrect read messages as unread.
+  it('never moves the boundary backwards', () => {
+    const contact = createContact(draft('~/code/app', 'Code Reviewer · app'))
+    const later = (contact.lastReadAt as number) + 60_000
+    markContactRead(contact.id, later)
+
+    markContactRead(contact.id, later - 30_000)
+
+    expect(getContact(contact.id)?.lastReadAt).toBe(later)
+  })
+
+  it('groups carry the same contract, including birth', () => {
+    const group = ensureGroupForRepo('~/code/app')
+    expect(group.lastReadAt).not.toBeNull()
+
+    const later = (group.lastReadAt as number) + 60_000
+    expect(markGroupRead(group.id, later).lastReadAt).toBe(later)
+    expect(markGroupRead(group.id, later - 1).lastReadAt).toBe(later)
+  })
+
+  it('refuses an unknown id rather than inventing a row', () => {
+    expect(() => markContactRead('nope')).toThrow(/No such contact/)
+    expect(() => markGroupRead('nope')).toThrow(/No such group/)
   })
 })
 

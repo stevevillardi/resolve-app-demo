@@ -62,6 +62,7 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     worktreePath: null,
     branch: null,
     isolation: null,
+    lastReadAt: null,
     ...overrides
   }
 }
