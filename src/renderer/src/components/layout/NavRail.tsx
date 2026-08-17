@@ -43,9 +43,16 @@ export function NavRail(): React.JSX.Element {
        *
        * The border is kept but made transparent rather than removed, so the 1px
        * it reserves in the layout stays put and the hairline can sit exactly
-       * where it used to.
+       * where it used to. `bg-sidebar` on the container is what fills that 1px:
+       * a transparent border shows whatever is *behind* the fixed container,
+       * which is --background — white against --card in light mode and pure
+       * black in dark, i.e. the same line through the traffic lights this was
+       * meant to remove, just in the opposite colour. Painting the container
+       * (background-clip defaults to border-box) puts the rail's own surface
+       * under the border instead, and --sidebar and --card are equal, so the
+       * strip stays seamless too.
        */
-      className="border-transparent after:absolute after:-right-px after:top-12 after:bottom-0 after:w-px after:bg-sidebar-border after:content-['']"
+      className="bg-sidebar border-transparent after:absolute after:-right-px after:top-12 after:bottom-0 after:w-px after:bg-sidebar-border after:content-['']"
     >
       {/* Holds no content: the traffic lights are inset over it. `PANE_STRIP`
           rather than the rail's own classes, so this is the same surface and the
