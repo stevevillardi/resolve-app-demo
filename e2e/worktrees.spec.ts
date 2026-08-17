@@ -158,16 +158,21 @@ test('deleting a contact takes its checkout with it and leaves the branch', asyn
   expect(git(['rev-parse', '--verify', contact.branch!])).toMatch(/^[0-9a-f]{40}$/)
 })
 
-test('renaming a contact leaves its checkout and its session alone', async () => {
-  // The unit test in contacts.test.ts asserts the same claim against a
-  // :memory: database; this one proves the contract entry, the Zod shapes and
-  // the preload round trip agree with it — and that a rename does not disturb
-  // the worktree, which only exists on a real filesystem.
+test('renaming a contact leaves its checkout alone', async () => {
+  // What this adds over the unit test in contacts.test.ts, which already
+  // asserts that a rename touches no other column: the contract entry, the Zod
+  // shapes and the preload round trip agree with it, and the worktree on a real
+  // filesystem is undisturbed.
+  //
+  // It does *not* assert on backendSessionId. No turn in this suite reaches a
+  // backend — the fixtures blank both API keys deliberately — so there is never
+  // a resume key to preserve here. That half of the claim belongs to the unit
+  // test, which can set one.
   const contact = await bindWriter('Writer F · my-app')
   await runTurnAndSettle(contact.id)
 
   const before = await invoke<Contact | null>(launched.window, 'contacts.get', { id: contact.id })
-  expect(before?.backendSessionId, 'a turn should have left a resume key').toBeTruthy()
+  expect(before?.worktreePath, 'a writer should have been given a worktree').toBeTruthy()
 
   const renamed = await invoke<Contact>(launched.window, 'contacts.update', {
     id: contact.id,
