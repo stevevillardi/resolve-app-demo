@@ -1,0 +1,60 @@
+<!--
+  The Switchboard app icon, and the single source for every rasterised copy of
+  it: build/icon.png (electron-builder derives .icns and .ico from that),
+  resources/icon.png (the Linux window icon), and the renderer's inline
+  SwitchboardIcon. Edit here, then `npm run icons` — see docs/plan/18-switchboard.md.
+
+  The mark is the app: four persona nodes wired into one orchestrator core.
+
+  Colours are the app's own, not a generic indigo — #1e9df1 is `--primary`
+  (oklch(0.6723 0.1606 244.9955)) written out, and the second node hue is
+  --chart-3's teal lifted for a dark ground. Two hues rather than four keeps the
+  nodes legible at 32px, where four would smear into confetti.
+
+  Full-bleed squircle at rx=112/512 (21.875%), which is why the renderer's
+  `rounded-[22%]` used to line up with the old raster and why the inline SVG
+  needs no clipping at all.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="sb-ground" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a1120" />
+      <stop offset="100%" stop-color="#10375e" />
+    </linearGradient>
+  </defs>
+
+  <!-- Ground. The rim is a separate inset rect: stroking the full-bleed rect
+       would centre the stroke on the edge and lose its outer half to the
+       viewBox. -->
+  <rect width="512" height="512" rx="112" fill="url(#sb-ground)" />
+  <rect x="3" y="3" width="506" height="506" rx="109.5" fill="none" stroke="#1e9df1"
+    stroke-width="6" stroke-opacity="0.38" />
+
+  <!-- Channels. Drawn before the core so the core's disc covers where they
+       meet, rather than four caps piling up under it. -->
+  <path d="M 170 170 L 256 256 M 342 170 L 256 256 M 170 342 L 256 256 M 342 342 L 256 256"
+    stroke="#1e9df1" stroke-width="14" stroke-linecap="round" stroke-opacity="0.75" />
+
+  <!-- Persona nodes: ring on the ground colour, filled cap inside. -->
+  <g fill="#0c1c2e" stroke-width="10">
+    <circle cx="170" cy="170" r="28" stroke="#4fb8f7" />
+    <circle cx="342" cy="170" r="28" stroke="#2ed3a7" />
+    <circle cx="170" cy="342" r="28" stroke="#2ed3a7" />
+    <circle cx="342" cy="342" r="28" stroke="#4fb8f7" />
+  </g>
+  <g>
+    <circle cx="170" cy="170" r="10" fill="#4fb8f7" />
+    <circle cx="342" cy="170" r="10" fill="#2ed3a7" />
+    <circle cx="170" cy="342" r="10" fill="#2ed3a7" />
+    <circle cx="342" cy="342" r="10" fill="#4fb8f7" />
+  </g>
+
+  <!-- Orchestrator core: a patch-panel jack, not an eye. The draft's three
+       concentric circles (azure disc, white ring, dark pupil) rendered as an
+       eyeball staring out of the Dock — an unmistakable read once seen, and not
+       one this app wants. Two rings fix it: the dark pupil is what made it a
+       pupil. -->
+  <circle cx="256" cy="256" r="54" fill="#1e9df1" />
+  <circle cx="256" cy="256" r="25" fill="none" stroke="#ffffff" stroke-opacity="0.92"
+    stroke-width="9" />
+</svg>

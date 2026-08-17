@@ -14,7 +14,7 @@ import {
   useSetAnthropicApiKey,
   useSetOpenAiApiKey
 } from '@/hooks/useAuth'
-import icon from '@/assets/icon.png'
+import { SwitchboardIcon } from '@/components/brand/SwitchboardIcon'
 import { useApplyStarterSelection, useSeedCatalog } from '@/hooks/useSeed'
 import { ApiKeyField } from './ApiKeyField'
 import { AuthStepCard } from './AuthStepCard'
@@ -120,7 +120,7 @@ export function OnboardingFlow(): React.JSX.Element {
         className={`no-drag @container/pane mx-auto flex min-h-full w-full flex-col justify-center gap-6 px-6 py-14 ${step === 'auth' ? 'max-w-xl' : 'max-w-2xl'}`}
       >
         <header className="drag-region flex flex-col items-center gap-3 text-center">
-          <img src={icon} alt="" className="size-14 rounded-[22%] shadow-sm" draggable={false} />
+          <SwitchboardIcon className="size-14 rounded-[22%] shadow-sm" />
           <div className="flex flex-col gap-1">
             <h1 className="text-xl font-semibold tracking-tight">Welcome to Switchboard</h1>
             <p className="text-muted-foreground text-sm text-pretty">{subtitle[step]}</p>

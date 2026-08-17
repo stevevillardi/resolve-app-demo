@@ -1,7 +1,9 @@
 import { app, Menu, nativeImage, Tray } from 'electron'
 import { existsSync, readFileSync } from 'fs'
-import trayIcon1x from '../../resources/trayTemplate.png?asset'
-import trayIcon2x from '../../resources/trayTemplate@2x.png?asset'
+import trayIdle1x from '../../resources/trayTemplate.png?asset'
+import trayIdle2x from '../../resources/trayTemplate@2x.png?asset'
+import trayActive1x from '../../resources/trayActiveTemplate.png?asset'
+import trayActive2x from '../../resources/trayActiveTemplate@2x.png?asset'
 import { listActiveRuns } from './services/messaging'
 import { nextRuns } from './services/scheduler'
 import { buildTrayMenu, type TrayMenuItem } from './tray-menu'
@@ -19,20 +21,26 @@ import { buildTrayMenu, type TrayMenuItem } from './tray-menu'
  */
 let tray: Tray | null = null
 let showWindow: (() => void) | null = null
+/** Built once at startup — `addRepresentation` reads from disk. */
+let icons: { idle: Electron.NativeImage; active: Electron.NativeImage } | null = null
 
 export function createTray(onShow: () => void): void {
   if (tray) return
 
-  const image = trayImage()
-  if (!image) {
+  const idle = trayImage(trayIdle1x, trayIdle2x)
+  if (!idle) {
     // Better a missing menu-bar icon than a failed launch: everything else in
     // the app still works, and the scheduler does not depend on this at all.
     console.error('[tray] no usable tray icon; skipping the menu-bar item')
     return
   }
 
+  // A missing badge asset should cost the badge, not the menu-bar item — so the
+  // active variant falls back to idle rather than failing the same check.
+  icons = { idle, active: trayImage(trayActive1x, trayActive2x) ?? idle }
+
   showWindow = onShow
-  tray = new Tray(image)
+  tray = new Tray(idle)
   tray.setToolTip('Switchboard')
   refreshTrayMenu()
 }
@@ -54,9 +62,12 @@ export function refreshTrayMenu(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate(buildTrayMenu(nextRuns(), { runningTurns }).map(toMenuItem))
   )
-  // The count beside the icon, macOS only — the one glanceable "agents are
-  // working" signal that survives the window being hidden. Cleared, not '0':
-  // a zero in the menu bar reads as a badge stuck on nothing.
+  // "Agents are working" without opening the menu, in two registers. The badged
+  // icon is the cross-platform one, and carries in peripheral vision where a
+  // digit does not; the count beside it is macOS only (`setTitle` is a no-op
+  // elsewhere) and answers how many. Cleared, not '0': a zero in the menu bar
+  // reads as a badge stuck on nothing.
+  if (icons) tray.setImage(runningTurns > 0 ? icons.active : icons.idle)
   if (process.platform === 'darwin') {
     tray.setTitle(runningTurns > 0 ? String(runningTurns) : '')
   }
@@ -77,6 +88,7 @@ export function destroyTray(): void {
   tray?.destroy()
   tray = null
   showWindow = null
+  icons = null
 }
 
 function toMenuItem(item: TrayMenuItem): Electron.MenuItemConstructorOptions {
@@ -95,13 +107,18 @@ function toMenuItem(item: TrayMenuItem): Electron.MenuItemConstructorOptions {
  * convention, but the representations are added explicitly rather than relying
  * on `@2x` filename resolution — electron-vite emits `?asset` imports as hashed
  * filenames, so the `@2x` sibling convention does not survive the build.
+ *
+ * Being monochrome is also why the active variant badges the icon by *shape*
+ * rather than turning a node green: colour in a template image is discarded, and
+ * a non-template coloured icon would have to guess the menu bar's own
+ * appearance to stay visible. See resources/tray-active.svg.
  */
-function trayImage(): Electron.NativeImage | null {
+function trayImage(path1x: string, path2x: string): Electron.NativeImage | null {
   const image = nativeImage.createEmpty()
 
   for (const [scaleFactor, path] of [
-    [1, trayIcon1x],
-    [2, trayIcon2x]
+    [1, path1x],
+    [2, path2x]
   ] as const) {
     if (!existsSync(path)) continue
     image.addRepresentation({ scaleFactor, buffer: readFileSync(path) })

@@ -1,0 +1,40 @@
+<!--
+  The menu-bar mark while turns are in flight. Source for
+  resources/trayActiveTemplate.png and its @2x sibling.
+
+  A template image has no colour to spend, so "active" is carried by shape: the
+  top-right node swells into a badge, held off the rest of the hub by a
+  transparent halo. The halo is the whole trick — without it the badge merely
+  merges with the channel pointing at it and the icon just looks fatter.
+
+  It is punched with a mask rather than drawn as a ring in the ground colour,
+  because there is no ground colour to draw in; the pixels have to actually be
+  clear for the OS to leave them alone. The halo is 1.5 units wide (4.2 outer
+  against a 2.7 badge) so it survives as a whole device pixel at 16px — a
+  narrower gap antialiases to grey and reads as a join.
+
+  Every coordinate except the top-right corner is the idle mark's, unchanged, so
+  switching between the two does not appear to redraw the icon. The top-right
+  channel starts at 15.9,8.1 instead of 16.4,7.6: the point where it clears the
+  halo, so the mask trims nothing visible and the channel keeps its round cap
+  rather than ending on a cut edge.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <mask id="sb-tray-halo">
+    <rect width="24" height="24" fill="#ffffff" />
+    <circle cx="19.4" cy="4.6" r="4.2" fill="#000000" />
+  </mask>
+
+  <g mask="url(#sb-tray-halo)">
+    <path d="M 7.6 7.6 L 12 12 M 15.9 8.1 L 12 12 M 7.6 16.4 L 12 12 M 16.4 16.4 L 12 12"
+      stroke="#000000" stroke-width="1.5" stroke-linecap="round" />
+    <g fill="#000000">
+      <circle cx="4.6" cy="4.6" r="1.8" />
+      <circle cx="4.6" cy="19.4" r="1.8" />
+      <circle cx="19.4" cy="19.4" r="1.8" />
+      <circle cx="12" cy="12" r="2.8" />
+    </g>
+  </g>
+
+  <circle cx="19.4" cy="4.6" r="2.7" fill="#000000" />
+</svg>

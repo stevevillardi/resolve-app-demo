@@ -1,7 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import icon from '@/assets/icon.png'
+import { SwitchboardIcon } from '@/components/brand/SwitchboardIcon'
 
 interface SplashScreenProps {
   /** Set once the launch check has settled; drives the fade-out. */
@@ -36,12 +36,7 @@ export function SplashScreen({
       )}
     >
       <div className="flex flex-col items-center gap-4">
-        <img
-          src={icon}
-          alt=""
-          className="size-20 rounded-[22%] shadow-lg select-none"
-          draggable={false}
-        />
+        <SwitchboardIcon className="size-20 rounded-[22%] shadow-lg select-none" />
         <div className="flex flex-col items-center gap-1">
           <h1 className="text-lg font-semibold tracking-tight">Switchboard</h1>
           <p className="text-muted-foreground text-sm">

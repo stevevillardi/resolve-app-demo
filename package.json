@@ -11,6 +11,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "icons": "tsx scripts/build-icons.ts",
     "probe:adapters": "tsx scripts/probe-adapters.ts",
     "probe:structured": "tsx scripts/probe-structured.ts",
     "probe:mcp": "tsx scripts/probe-mcp.ts",
