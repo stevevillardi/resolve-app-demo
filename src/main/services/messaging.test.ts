@@ -1,3 +1,4 @@
+import { execFileSync } from 'child_process'
 import { eq } from 'drizzle-orm'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
@@ -16,6 +17,7 @@ import {
   createTurnHarness,
   DEFAULT_USAGE as USAGE,
   defaultScript,
+  openableGate,
   REPO,
   seedContact,
   seedPersona,
@@ -978,17 +980,32 @@ describe('tool-call persistence', () => {
     expect(rows.every((row) => row.messageId === reply?.id)).toBe(true)
   })
 
-  it('stores no arguments — the detail string never reaches the database', async () => {
-    // Doc 15 item 1, as decided: name and status only. The table has no
-    // column for it, and this pins that no other column smuggles it in.
-    harness.script = TOOLED
+  it('stores bounded detail and output excerpts — the Phase 19 reversal of doc 15 item 1', async () => {
+    // The predecessor of this test pinned "the detail string never reaches the
+    // database". Phase 19 reversed that decision on purpose (see
+    // 19-review-landing.md): what it pins now is that the excerpts arrive
+    // *bounded*, so the reversal cannot quietly become unbounded storage.
+    harness.script = [
+      { type: 'session_started', sessionId: 'session-abc' },
+      { type: 'tool_start', toolCallId: 'call-1', name: 'Read', detail: 'x'.repeat(2000) },
+      {
+        type: 'tool_end',
+        toolCallId: 'call-1',
+        name: 'Read',
+        status: 'completed',
+        output: 'file contents here'
+      },
+      { type: 'done', finalText: 'Checked.', usage: USAGE }
+    ]
     sendMessage('contact-a', 'go')
     await settle(30)
 
-    for (const row of db.select().from(toolCalls).all()) {
-      expect(JSON.stringify(row)).not.toContain('src/auth.ts')
-      expect(JSON.stringify(row)).not.toContain('npm test')
-    }
+    const [row] = db.select().from(toolCalls).all()
+    // Bounded with the visible marker, never raw.
+    expect(row.detail?.length).toBeLessThan(600)
+    expect(row.detail).toMatch(/\[truncated\]$/)
+    // Output is stored as the adapter emitted it — the adapter already bounded it.
+    expect(row.output).toBe('file contents here')
   })
 
   it('leaves a call that never ended as running, with no message to claim it', async () => {
@@ -1014,5 +1031,56 @@ describe('tool-call persistence', () => {
 
     db.delete(contacts).run()
     expect(db.select().from(toolCalls).all()).toEqual([])
+  })
+})
+
+describe('work records (Phase 19)', () => {
+  /**
+   * The join test the denyReadPaths lesson asks for: turn-work.test.ts proves
+   * the capture and this proves finish() actually stamps it — both halves
+   * tested but not the join is the shape of hole an integration point leaves.
+   *
+   * Runs against a real git repo, so the flushes are real-time waits rather
+   * than settle()'s microtask ticks. The gate makes the timing deterministic:
+   * `harness.lastSignal` is set when the fake stream starts, which is strictly
+   * after captureWorkStart resolved, so the mutation below is always the
+   * turn's own work and never pre-existing dirt.
+   */
+  it('stamps what the turn changed onto the assistant reply, measured by git', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'messaging-work-'))
+    execFileSync('git', ['init', '-q', '-b', 'main', repo])
+    execFileSync('git', ['-C', repo, 'config', 'user.email', 'test@example.com'])
+    execFileSync('git', ['-C', repo, 'config', 'user.name', 'Test'])
+    execFileSync('git', ['-C', repo, 'commit', '-q', '--allow-empty', '-m', 'init'])
+
+    seedContact(db, 'contact-work', 'persona-read', repo)
+    harness.gate = openableGate()
+    sendMessage('contact-work', 'go')
+
+    await vi.waitUntil(() => harness.lastSignal !== null, { timeout: 5000 })
+    writeFileSync(join(repo, 'made-by-the-turn.ts'), 'export const x = 1\n')
+    harness.gate.open()
+
+    const reply = await vi.waitUntil(
+      () => listMessages('contact-work').find((message) => message.role === 'assistant'),
+      { timeout: 5000 }
+    )
+    expect(reply.work).toMatchObject({
+      branch: 'main',
+      committed: [],
+      dirty: ['made-by-the-turn.ts']
+    })
+
+    rmSync(repo, { recursive: true, force: true })
+  })
+
+  it('stamps no record on a turn that changed nothing', async () => {
+    harness.script = defaultScript()
+    sendMessage('contact-a', 'go')
+    await settle(30)
+
+    const reply = listMessages('contact-a').find((message) => message.role === 'assistant')
+    expect(reply).toBeDefined()
+    expect(reply?.work).toBeUndefined()
   })
 })

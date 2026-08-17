@@ -19,12 +19,14 @@ import {
   type Release
 } from './run-lock'
 import { buildSessionSpec } from './session-spec'
+import { captureWorkEnd, captureWorkStart } from './turn-work'
 import type { TurnOrigin, TurnOutcome } from './turn-origin'
 import { baselineFor, recordUsage } from './usage-events'
 import { ensureWorktree } from './worktrees'
 import type { SessionSpec } from '../adapters/types'
+import { TOOL_DETAIL_MAX, toolExcerpt } from '../../shared/agent'
 import type { AgentEvent } from '../../shared/agent'
-import type { Contact, GroupMessage, PersistedMessage } from '../../shared/domain'
+import type { Contact, GroupMessage, PersistedMessage, TurnWork } from '../../shared/domain'
 
 /**
  * Sending a message to a Contact and streaming the reply back (blueprint §16
@@ -165,18 +167,20 @@ export function listActiveRuns(): ActiveRun[] {
 function insertMessage(
   contactId: string,
   role: 'user' | 'assistant',
-  content: string
+  content: string,
+  work: TurnWork | null = null
 ): PersistedMessage {
   const message: PersistedMessage = {
     id: randomUUID(),
     contactId,
     role,
     content,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    ...(work ? { work } : {})
   }
   initDb()
     .insert(messages)
-    .values({ ...message, timestamp: new Date(message.timestamp) })
+    .values({ ...message, work: work ?? null, timestamp: new Date(message.timestamp) })
     .run()
   return message
 }
@@ -392,10 +396,12 @@ async function runTurn(
   // shed), and only before anything has streamed — past that point a restart
   // would silently discard output the user already saw.
   let canHealDeadResume = Boolean(contact.backendSessionId)
-  // Persisted per call as it happens — name and status only, never arguments
-  // (doc 15 item 1). Row ids kept so finish() can stamp them with the message
-  // this turn ends in; the backend's toolCallId is only unique per turn.
+  // Persisted per call as it happens, with the bounded detail/output excerpts
+  // (Phase 19, reversing doc 15 item 1). Row ids kept so finish() can stamp
+  // them with the message this turn ends in; the backend's toolCallId is only
+  // unique per turn.
   const toolRowIds = new Map<string, string>()
+  let workStart: Awaited<ReturnType<typeof captureWorkStart>> | null = null
 
   try {
     // The first thing the turn does, because it decides where the turn runs.
@@ -403,6 +409,10 @@ async function runTurn(
     // an unused Contact costs no checkout — and it cannot happen any earlier
     // than this, because startTurn() is synchronous and git is not.
     spec.writablePaths = await ensureWorktree(contact)
+
+    // Read before the model does anything, so the record measures this turn
+    // alone. Failure degrades to "no record" — see turn-work.ts.
+    workStart = await captureWorkStart(workingPathFor(contact)).catch(() => null)
 
     attempts: while (true) {
       for await (const event of adapter.run(activeSession, prompt, run.controller.signal)) {
@@ -442,7 +452,8 @@ async function runTurn(
               toolCallId: event.toolCallId,
               name: event.name,
               status: 'running',
-              createdAt: new Date()
+              createdAt: new Date(),
+              detail: event.detail ? toolExcerpt(event.detail, TOOL_DETAIL_MAX) : null
             })
             .run()
         }
@@ -451,7 +462,8 @@ async function runTurn(
           if (rowId) {
             initDb()
               .update(toolCalls)
-              .set({ status: event.status })
+              // The adapter bounded `output` at emit time; stored as emitted.
+              .set({ status: event.status, ...(event.output ? { output: event.output } : {}) })
               .where(eq(toolCalls.id, rowId))
               .run()
           }
@@ -468,9 +480,22 @@ async function runTurn(
     failure = error instanceof Error ? error.message : String(error)
     emitAgentEvent(runId, { type: 'error', kind: 'unknown', message: failure })
   } finally {
-    finish(runId, run, activeSession, prompt, done?.finalText ?? streamed, done, failure, [
-      ...toolRowIds.values()
-    ])
+    // Measured in the teardown so an adapter throw still gets its record; a
+    // couple of git reads is what it costs. Never fails the turn.
+    const work = workStart
+      ? await captureWorkEnd(workingPathFor(contact), workStart).catch(() => null)
+      : null
+    finish(
+      runId,
+      run,
+      activeSession,
+      prompt,
+      done?.finalText ?? streamed,
+      done,
+      failure,
+      [...toolRowIds.values()],
+      work
+    )
   }
 }
 
@@ -490,7 +515,8 @@ function finish(
   finalText: string,
   done: Extract<AgentEvent, { type: 'done' }> | null,
   failure: string | null,
-  toolRowIds: string[] = []
+  toolRowIds: string[] = [],
+  work: TurnWork | null = null
 ): void {
   const { contactId, origin, groupId } = run
   try {
@@ -498,7 +524,7 @@ function finish(
     // billable tokens all the same — so the two are recorded independently
     // rather than one gating the other.
     if (finalText.trim()) {
-      const reply = insertMessage(contactId, 'assistant', finalText)
+      const reply = insertMessage(contactId, 'assistant', finalText, work)
 
       // Stamp the turn's tool rows with the message it ended in, so history
       // can render the calls with the reply they produced. A turn that dies
