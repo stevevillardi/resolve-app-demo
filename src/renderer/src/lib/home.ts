@@ -159,7 +159,7 @@ export function formatUpcoming(at: number, now: number): string {
 interface AuthStatusLike {
   claude: { error?: string }
   codex: { error?: string }
-  github: { tokenState?: 'unverified' | 'good' | 'rejected' | 'unreachable' }
+  github: { tokenState?: 'unverified' | 'good' | 'rejected' | 'unreachable' | 'locked' }
 }
 
 export interface AuthBanner {
@@ -182,6 +182,13 @@ export function authBannerFor(status: AuthStatusLike | undefined): AuthBanner | 
       kind: 'github',
       message:
         'GitHub rejected the stored token. Reconnect to keep repository browsing and pull requests working.'
+    }
+  }
+  if (status.github.tokenState === 'locked') {
+    return {
+      kind: 'github',
+      message:
+        "The stored GitHub credential can't be unlocked by this build of the app. Reconnect once to re-save it — nothing was revoked."
     }
   }
   const backendError = status.claude.error ?? status.codex.error

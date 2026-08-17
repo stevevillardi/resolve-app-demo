@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const secretStore = new Map<string, string>()
+const unreadableKeys = new Set<string>()
 const appStateStore = new Map<string, string>()
 let encryptionAvailable = true
 let clientId: string | undefined = 'Ov23liTESTCLIENTID'
@@ -39,10 +40,19 @@ vi.mock('@octokit/rest', () => ({
 }))
 
 vi.mock('./secrets', () => ({
-  getSecret: (k: string) => secretStore.get(k) ?? null,
-  setSecret: (k: string, v: string) => void secretStore.set(k, v),
-  deleteSecret: (k: string) => void secretStore.delete(k),
+  // A key present in unreadableKeys simulates ciphertext this build cannot
+  // decrypt: the file exists (hasSecret true) but getSecret yields null.
+  getSecret: (k: string) => (unreadableKeys.has(k) ? null : (secretStore.get(k) ?? null)),
+  setSecret: (k: string, v: string) => {
+    secretStore.set(k, v)
+    unreadableKeys.delete(k)
+  },
+  deleteSecret: (k: string) => {
+    secretStore.delete(k)
+    unreadableKeys.delete(k)
+  },
   hasSecret: (k: string) => secretStore.has(k),
+  secretUnreadable: (k: string) => unreadableKeys.has(k),
   isSecretStorageAvailable: () => encryptionAvailable
 }))
 
@@ -58,6 +68,7 @@ const github = await import('./github-auth')
 
 beforeEach(() => {
   secretStore.clear()
+  unreadableKeys.clear()
   appStateStore.clear()
   encryptionAvailable = true
   clientId = 'Ov23liTESTCLIENTID'
@@ -378,5 +389,57 @@ describe('getGitHubToken', () => {
   it('is the read path Phases 6 and 9 use', () => {
     secretStore.set('github_token', 'gho_forlater')
     expect(github.getGitHubToken()).toBe('gho_forlater')
+  })
+})
+
+describe('a stored token this build cannot decrypt', () => {
+  // macOS binds safeStorage ciphertext to the app signature; every rebuilt dev
+  // Electron is a new signature. The credential is fine — the build changed.
+  it('reports locked, names the account, and blames the binary rather than GitHub', () => {
+    secretStore.set('github_token', 'gho_x')
+    appStateStore.set('github_account_login', 'stevevillardi')
+    unreadableKeys.add('github_token')
+
+    const status = github.getGitHubStatus()
+    expect(status).toMatchObject({
+      connected: true,
+      tokenState: 'locked',
+      login: 'stevevillardi'
+    })
+    expect(status.error).toMatch(/this build/i)
+    expect(status.error).not.toMatch(/revoked|rejected/i)
+  })
+
+  it('never deletes the stored secret', () => {
+    secretStore.set('github_token', 'gho_x')
+    unreadableKeys.add('github_token')
+
+    github.getGitHubStatus()
+    expect(secretStore.has('github_token')).toBe(true)
+  })
+
+  it('recovers to a normal status once the secret decrypts again', () => {
+    secretStore.set('github_token', 'gho_x')
+    unreadableKeys.add('github_token')
+    expect(github.getGitHubStatus().tokenState).toBe('locked')
+
+    unreadableKeys.delete('github_token')
+    expect(github.getGitHubStatus().tokenState).not.toBe('locked')
+  })
+})
+
+describe('client-id sanity guard', () => {
+  it('warns when a GitHub App id is configured', () => {
+    // GitHub App user tokens expire after 8 hours and this app cannot refresh
+    // them (no client secret to hold) — silence here would present as a token
+    // that mysteriously dies every 8 hours.
+    vi.stubEnv('MAIN_VITE_GITHUB_CLIENT_ID', 'Iv23liGITHUBAPPID')
+    const status = github.getGitHubStatus()
+    expect(status.connected).toBe(false)
+    expect(status.error).toMatch(/OAuth App/i)
+  })
+
+  it('stays quiet for an OAuth App id', () => {
+    expect(github.getGitHubStatus().error).toBeUndefined()
   })
 })

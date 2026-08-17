@@ -81,7 +81,7 @@ const githubStatusSchema = z.object({
    * and one wants to be left alone — and deciding that by regex on prose is the
    * failure this whole change is fixing one layer down.
    */
-  tokenState: z.enum(['unverified', 'good', 'rejected', 'unreachable']).optional(),
+  tokenState: z.enum(['unverified', 'good', 'rejected', 'unreachable', 'locked']).optional(),
   error: z.string().optional()
 })
 

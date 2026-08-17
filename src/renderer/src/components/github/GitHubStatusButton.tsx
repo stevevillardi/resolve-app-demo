@@ -24,7 +24,7 @@ export function GitHubStatusButton(): React.JSX.Element {
 
   const dot: Dot = !github?.connected
     ? 'absent'
-    : github.tokenState === 'rejected'
+    : github.tokenState === 'rejected' || github.tokenState === 'locked'
       ? 'attention'
       : 'ok'
 

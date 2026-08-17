@@ -33,8 +33,14 @@ vi.mock('electron', () => ({
   }
 }))
 
-const { getSecret, setSecret, deleteSecret, hasSecret, isSecretStorageAvailable } =
-  await import('./secrets')
+const {
+  getSecret,
+  setSecret,
+  deleteSecret,
+  hasSecret,
+  isSecretStorageAvailable,
+  secretUnreadable
+} = await import('./secrets')
 
 beforeEach(() => {
   userData = mkdtempSync(join(tmpdir(), 'pr-secrets-'))
@@ -128,14 +134,52 @@ describe('unavailable OS keychain', () => {
 })
 
 describe('undecryptable ciphertext', () => {
-  it('discards the file so the user is re-prompted instead of wedged', () => {
-    // Real scenario: a restored backup or copied profile carries secrets
-    // encrypted against a different keychain. Without this the app would fail
-    // every call with no way to recover from the UI.
+  // The real scenario is not exotic: on macOS, safeStorage binds ciphertext to
+  // the app's code signature, and every rebuilt dev Electron is a new ad-hoc
+  // signature — so a secret written by one build is routinely unreadable by
+  // the next AND readable again by the first. The old behavior deleted the
+  // file here, which turned that recoverable mismatch into 'my GitHub token
+  // keeps getting invalidated'.
+  it('keeps the file — the build that wrote it can still read it', () => {
     setSecret('github_token', 'gho_x')
-    writeFileSync(tokenPath(), Buffer.from('garbage from another machine'))
+    writeFileSync(tokenPath(), Buffer.from('garbage from another keychain'))
 
     expect(getSecret('github_token')).toBeNull()
-    expect(hasSecret('github_token')).toBe(false)
+    expect(hasSecret('github_token')).toBe(true)
+    expect(existsSync(tokenPath())).toBe(true)
+  })
+
+  it('reports the key as unreadable, and only that key', () => {
+    setSecret('github_token', 'gho_x')
+    setSecret('anthropic_api_key', 'sk-ant')
+    writeFileSync(tokenPath(), Buffer.from('garbage'))
+
+    getSecret('github_token')
+    expect(secretUnreadable('github_token')).toBe(true)
+    expect(secretUnreadable('anthropic_api_key')).toBe(false)
+  })
+
+  it('clears the mark when the ciphertext becomes readable again', () => {
+    // The dev-worktree round trip: build A wrote it, build B failed, build A
+    // reads it again.
+    setSecret('github_token', 'gho_x')
+    const good = readFileSync(tokenPath())
+    writeFileSync(tokenPath(), Buffer.from('garbage'))
+    getSecret('github_token')
+    expect(secretUnreadable('github_token')).toBe(true)
+
+    writeFileSync(tokenPath(), good)
+    expect(getSecret('github_token')).toBe('gho_x')
+    expect(secretUnreadable('github_token')).toBe(false)
+  })
+
+  it('clears the mark on a fresh setSecret', () => {
+    setSecret('github_token', 'gho_x')
+    writeFileSync(tokenPath(), Buffer.from('garbage'))
+    getSecret('github_token')
+
+    setSecret('github_token', 'gho_new')
+    expect(secretUnreadable('github_token')).toBe(false)
+    expect(getSecret('github_token')).toBe('gho_new')
   })
 })

@@ -14,11 +14,16 @@ let github: GitHubAuthStatus
 let onboardingFlag: boolean
 let encryptionAvailable: boolean
 const setFlagCalls: Array<[string, boolean]> = []
+// cleared per test alongside the rest in beforeEach
 
 vi.mock('./claude-auth', () => ({ getClaudeAuthStatus: async () => claude }))
 vi.mock('./codex-auth', () => ({ getCodexAuthStatus: () => codex }))
 vi.mock('./github-auth', () => ({ getGitHubStatus: () => github }))
-vi.mock('./secrets', () => ({ isSecretStorageAvailable: () => encryptionAvailable }))
+vi.mock('./secrets', () => ({
+  isSecretStorageAvailable: () => encryptionAvailable,
+  secretUnreadable: (k: string) => unreadableKeys.has(k)
+}))
+const unreadableKeys = new Set<string>()
 vi.mock('./app-state', () => ({
   getAppStateFlag: () => onboardingFlag,
   setAppStateFlag: (k: string, v: boolean) => {
@@ -30,6 +35,7 @@ vi.mock('./app-state', () => ({
 const { getAuthStatus, completeOnboarding } = await import('./auth-status')
 
 beforeEach(() => {
+  unreadableKeys.clear()
   claude = { authenticated: false, source: null }
   codex = { authenticated: false, source: null }
   github = { connected: false, configured: true }
@@ -122,5 +128,29 @@ describe('completeOnboarding', () => {
     expect(status.onboardingCompleted).toBe(true)
     expect(status.claude.authenticated).toBe(false)
     expect(status.github.connected).toBe(false)
+  })
+})
+
+describe('a stored API key this build cannot decrypt', () => {
+  it('says so instead of reporting a clean logged-out', async () => {
+    // Without the note the user re-types a key that was never lost.
+    claude = { authenticated: false, source: null }
+    unreadableKeys.add('anthropic_api_key')
+
+    const status = await getAuthStatus()
+    expect(status.claude.error).toMatch(/this build/i)
+    // The other backend is untouched.
+    expect(status.codex.error).toBeUndefined()
+  })
+
+  it('never overwrites a real probe error or an authenticated status', async () => {
+    claude = { authenticated: true, source: 'cli' }
+    codex = { authenticated: false, source: null, error: 'the check timed out' }
+    unreadableKeys.add('anthropic_api_key')
+    unreadableKeys.add('openai_api_key')
+
+    const status = await getAuthStatus()
+    expect(status.claude.error).toBeUndefined()
+    expect(status.codex.error).toBe('the check timed out')
   })
 })

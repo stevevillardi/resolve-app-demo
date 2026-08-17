@@ -3,7 +3,14 @@ import type { DeviceFlowState, GitHubAuthStatus } from '../../shared/ipc-contrac
 import { deleteAppState, getAppState, setAppState } from './app-state'
 import { gitHubClient } from './github-client'
 import { clearTokenState, gitHubTokenState, markTokenUnreachable } from './github-token-state'
-import { deleteSecret, getSecret, hasSecret, isSecretStorageAvailable, setSecret } from './secrets'
+import {
+  deleteSecret,
+  getSecret,
+  hasSecret,
+  isSecretStorageAvailable,
+  secretUnreadable,
+  setSecret
+} from './secrets'
 
 /**
  * GitHub OAuth Device Flow (blueprint §9). No local redirect server, no client
@@ -25,6 +32,22 @@ function clientId(): string | null {
     ''
   ).trim()
   return id ? id : null
+}
+
+/**
+ * A GitHub App id where an OAuth App id belongs — worth refusing to stay
+ * silent about. GitHub App user tokens expire after 8 hours, refreshing them
+ * requires a client_secret a desktop app has nowhere safe to hold, and the
+ * octokit device flow this app uses would silently drop the refresh fields —
+ * so the only symptom would be a token that mysteriously dies every 8 hours.
+ * OAuth App ids start 'Ov'; GitHub App ids start 'Iv'.
+ */
+function clientIdWarning(): string | null {
+  const id = clientId()
+  if (id !== null && /^Iv/.test(id)) {
+    return 'The configured GitHub client ID looks like a GitHub App (Iv…). Its tokens expire after 8 hours and this app cannot refresh them — use an OAuth App client ID with device flow enabled.'
+  }
+  return null
 }
 
 function scopes(): string[] {
@@ -54,7 +77,25 @@ export function getGitHubToken(): string | null {
 export function getGitHubStatus(): GitHubAuthStatus {
   const configured = clientId() !== null
   if (!hasSecret('github_token')) {
-    return { connected: false, configured }
+    const warning = clientIdWarning()
+    return { connected: false, configured, ...(warning ? { error: warning } : {}) }
+  }
+
+  // Ciphertext exists but this build's keychain access cannot open it — the
+  // routine dev case (every rebuilt Electron is a new ad-hoc signature), also
+  // a restored backup or copied profile. Distinct from 'rejected' because the
+  // credential is probably fine: the remedy is re-saving it under this build,
+  // not suspecting GitHub. getGitHubToken() has to have been *asked* for the
+  // failure to be observed, so probe it here.
+  if (getGitHubToken() === null && secretUnreadable('github_token')) {
+    return {
+      connected: true,
+      configured,
+      tokenState: 'locked',
+      login: getAppState('github_account_login') ?? undefined,
+      error:
+        "This build can't unlock the stored GitHub credential (the app binary changed). Reconnect once to re-save it."
+    }
   }
 
   const storedScopes = getAppState('github_scopes')
