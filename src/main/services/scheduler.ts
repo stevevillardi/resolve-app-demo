@@ -1,3 +1,4 @@
+import { notifyRoutineOutcome } from '../notifications'
 import { runRoutineTurn } from './messaging'
 import { openPullRequest, pullRequestState } from './pull-requests'
 import { getRoutine, listEnabledRoutines, listRoutines, recordRunOutcome } from './routines'
@@ -166,6 +167,7 @@ export function fireRoutine(routineId: string): RoutineFire {
     const summary = `Skipped — ${messageOf(error)}`
     recordRunOutcome(routineId, summary)
     onChange?.()
+    notifyRoutineOutcome(routine, { status: 'skipped', summary })
     return settled({ status: 'skipped', summary })
   }
 
@@ -180,6 +182,11 @@ export function fireRoutine(routineId: string): RoutineFire {
     // that plainly happened looking like it never did.
     recordRunOutcome(routineId, result.summary)
     onChange?.()
+    // Sent with the run's own summary, not held for the PR attempt below —
+    // GitHub is a network call with no deadline, and the same reasoning that
+    // splits recordRunOutcome applies to the toast. The PR line still lands in
+    // lastRunSummary and the group thread, one click away.
+    notifyRoutineOutcome(routine, result)
 
     const pr = await raisePullRequest(routine.contactId, result)
     if (pr) {

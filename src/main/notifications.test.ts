@@ -32,13 +32,24 @@ vi.mock('./main-window', () => ({ navigateTo: (target: NavigateTarget) => naviga
 let enabledValue: string | null = null
 vi.mock('./services/app-state', () => ({ getAppState: () => enabledValue }))
 
-const { notificationsEnabled, sendNotification } = await import('./notifications')
+// Real contact/group lookups would pull the db chain into a test about the
+// electron binding; what this file asserts is which *target* a lookup result
+// produces, so the lookups are data.
+let contact: { repoPath: string } | null = null
+let group: { id: string } | null = null
+vi.mock('./services/contacts', () => ({ getContact: () => contact }))
+vi.mock('./services/group-messages', () => ({ groupForRepo: () => group }))
+
+const { notificationsEnabled, notifyRoutineOutcome, sendNotification } =
+  await import('./notifications')
 
 const TEXT = { title: 'Refactor Buddy', body: 'Done.' }
 
 beforeEach(() => {
   supported = true
   enabledValue = null
+  contact = null
+  group = null
   shown.length = 0
   navigateTo.mockClear()
 })
@@ -92,5 +103,36 @@ describe('sendNotification', () => {
   it('attaches no click handler without a target', () => {
     sendNotification(TEXT)
     expect(shown[0].clickHandlers).toHaveLength(0)
+  })
+})
+
+describe('notifyRoutineOutcome', () => {
+  const ROUTINE = { contactId: 'contact-1', prompt: 'Check for new issues nightly.' }
+  const OK = { status: 'completed' as const, summary: 'Fixed two issues.' }
+
+  // The routine_run row and any PR line live in the group thread — that is
+  // where the click must land, not the 1:1 thread that shows neither.
+  it('targets the repo group when one exists', () => {
+    contact = { repoPath: '/repo' }
+    group = { id: 'group-1' }
+
+    notifyRoutineOutcome(ROUTINE, OK)
+
+    shown[0].clickHandlers[0]()
+    expect(navigateTo).toHaveBeenCalledWith({ kind: 'group', groupId: 'group-1' })
+  })
+
+  it('falls back to the contact thread when the repo has no group', () => {
+    contact = { repoPath: '/repo' }
+
+    notifyRoutineOutcome(ROUTINE, OK)
+
+    shown[0].clickHandlers[0]()
+    expect(navigateTo).toHaveBeenCalledWith({ kind: 'contact', contactId: 'contact-1' })
+  })
+
+  it('identifies the routine by its prompt in the body', () => {
+    notifyRoutineOutcome(ROUTINE, OK)
+    expect(shown[0].options.body).toContain('Check for new issues nightly.')
   })
 })

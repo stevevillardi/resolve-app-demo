@@ -36,6 +36,19 @@ vi.mock('./agent-events', () => ({
 vi.mock('./adapter-host', () => ({ adapterForBackend: () => harness.adapter }))
 
 /**
+ * The OS toast stubbed to a log: this file asserts *when* the scheduler
+ * notifies and with what, while notifications.test.ts owns what a notification
+ * does with it (targets, the enabled flag, the electron binding).
+ */
+const notified: { prompt: string; status: string; summary: string }[] = []
+vi.mock('../notifications', () => ({
+  notifyRoutineOutcome: (
+    routine: { prompt: string },
+    result: { status: string; summary: string }
+  ) => notified.push({ prompt: routine.prompt, ...result })
+}))
+
+/**
  * Compaction stubbed to a fixed verdict: this file asserts what the *scheduler*
  * does with a summary, not how one is produced. `compaction.test.ts` owns that,
  * including that a routine origin writes `routine_run`.
@@ -187,6 +200,7 @@ beforeEach(() => {
   prAvailable = false
   prResult = new Error('not configured')
   prAttempts.length = 0
+  notified.length = 0
   engine = new FakeCronEngine()
 
   seedSkill(db)
@@ -265,6 +279,64 @@ describe('contention with a writer already holding the repo', () => {
 
     expect(result.status).toBe('completed')
     expectRoutineRan('routine-2', 'contact-reader')
+  })
+})
+
+// --- The toast (Phase 20) ----------------------------------------------------
+
+describe('outcome notifications', () => {
+  it('notifies a completed run with its summary', async () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    await fireRoutine('routine-1').completed
+
+    expect(notified).toHaveLength(1)
+    expect(notified[0].status).toBe('completed')
+    expect(notified[0].prompt).toContain('Check for new issues')
+  })
+
+  it('notifies a failed run as a failure', async () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+    harness.script = [
+      { type: 'error', kind: 'rate_limit', message: 'Rate limited.' },
+      { type: 'done', finalText: '', usage: null }
+    ]
+
+    await fireRoutine('routine-1').completed
+
+    expect(notified).toHaveLength(1)
+    expect(notified[0].status).toBe('failed')
+  })
+
+  // The decision this phase records: a lock-refused unattended fire is
+  // precisely the silence being ended, so a skip notifies too.
+  it('notifies a lock-refused skip', async () => {
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+    acquire({
+      runId: 'other-run',
+      contactId: 'contact-writer',
+      contactName: 'Refactor Buddy',
+      workingPath: REPO,
+      mode: 'exclusive',
+      startedAt: Date.now()
+    })
+
+    const result = await fireRoutine('routine-1').completed
+
+    expect(result.status).toBe('skipped')
+    expect(notified).toHaveLength(1)
+    expect(notified[0].status).toBe('skipped')
+  })
+
+  // Fires that were never attempts write no history and make no sound — a
+  // toast for a routine that no longer exists would name nothing clickable.
+  it('stays silent for a fire that was never an attempt', async () => {
+    startScheduler(engine)
+    await fireRoutine('routine-gone').completed
+    expect(notified).toHaveLength(0)
   })
 })
 

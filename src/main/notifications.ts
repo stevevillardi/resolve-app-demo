@@ -1,6 +1,9 @@
 import { Notification } from 'electron'
 import { navigateTo } from './main-window'
+import { previewLine, routineNotification } from './notification-text'
 import { getAppState } from './services/app-state'
+import { getContact } from './services/contacts'
+import { groupForRepo } from './services/group-messages'
 import type { NavigateTarget } from '../shared/navigation'
 import type { NotificationText } from './notification-text'
 
@@ -41,4 +44,37 @@ export function sendNotification(text: NotificationText, target?: NavigateTarget
   const notification = new Notification({ title: text.title, body: text.body })
   if (target) notification.on('click', () => navigateTo(target))
   notification.show()
+}
+
+/** What the tray shows for a routine; the toast identifies it the same way. */
+const ROUTINE_NAME_MAX = 60
+
+/**
+ * A routine's outcome, every recorded status — completed, failed, *and*
+ * skipped. A lock-refused 3 a.m. fire is precisely the silence this phase
+ * exists to end; only fires that were never attempts (routine deleted, run
+ * still going) stay quiet, because they write no history either.
+ *
+ * Not gated on window attention: an unattended fire is the routine's normal
+ * case, and even with the app frontmost a background routine finishing is not
+ * something the current screen necessarily shows.
+ *
+ * The click lands in the repo's group thread, where the routine_run row and
+ * any PR line live — the contact thread is the fallback for a repo that has
+ * no group yet.
+ */
+export function notifyRoutineOutcome(
+  routine: { contactId: string; prompt: string },
+  result: { status: 'completed' | 'failed' | 'skipped'; summary: string }
+): void {
+  const contact = getContact(routine.contactId)
+  const group = contact ? groupForRepo(contact.repoPath) : null
+  const target: NavigateTarget = group
+    ? { kind: 'group', groupId: group.id }
+    : { kind: 'contact', contactId: routine.contactId }
+
+  sendNotification(
+    routineNotification(previewLine(routine.prompt, ROUTINE_NAME_MAX), result),
+    target
+  )
 }
