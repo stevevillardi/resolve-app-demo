@@ -10,6 +10,7 @@ import { OpenPRButton } from '@/components/github/OpenPRButton'
 import { ContactMenu } from './ContactMenu'
 import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
+import { UnreadSeparator } from './UnreadSeparator'
 import { MessageBubble } from './MessageBubble'
 import { WorkChips } from './WorkChips'
 import { WorkDiffDialog } from './WorkDiffDialog'
@@ -24,11 +25,13 @@ import {
   useSendMessage,
   useToolCalls
 } from '@/hooks/useMessages'
+import { useMarkRead } from '@/hooks/useUnread'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { useOpenPullRequest, usePullRequestState } from '@/hooks/usePullRequests'
 import { useRunStore } from '@/store/useRunStore'
 import { streamText } from '@/lib/stream'
 import { slashCommands } from '@/lib/slash'
+import { firstUnreadIndex } from '@/lib/unread'
 import { usageForContact } from '@/lib/usage'
 import { isSameDay, repoName } from '@/lib/format'
 
@@ -74,6 +77,30 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
   const contentRef = useRef<HTMLDivElement>(null)
   const streamed = turn ? streamText(turn.stream) : ''
+
+  // The divider is placed against the boundary as it was when this thread
+  // opened, captured once per contactId — the mark-read effect below moves
+  // the live value forward immediately, and a divider computed against that
+  // would vanish in the frame it appeared. Captured with the render-time
+  // adjust-state pattern rather than an effect, so the first paint already
+  // has it.
+  const [boundary, setBoundary] = useState<{ id: string; at: number | null } | null>(null)
+  if (contact && boundary?.id !== contactId) {
+    setBoundary({ id: contactId, at: contact.lastReadAt })
+  }
+  const unreadIndex = firstUnreadIndex(thread, boundary?.id === contactId ? boundary.at : null)
+
+  // Read on open, and on arrival while open. Both views force-scroll to the
+  // bottom, so on-screen ≡ read; there is no scroll tracking to say otherwise.
+  // Keyed on the last row's timestamp rather than the array, so a refetch
+  // that changes nothing re-marks nothing.
+  const { markContactRead } = useMarkRead()
+  const lastMessageAt = thread.length > 0 ? thread[thread.length - 1].timestamp : null
+  const contactLoaded = contact !== undefined
+  useEffect(() => {
+    if (!contactLoaded) return
+    markContactRead(contactId)
+  }, [contactId, contactLoaded, lastMessageAt, markContactRead])
 
   // Follow the reply as it arrives. Keyed on the streamed text rather than just
   // the message count, so it also tracks a bubble growing in place.
@@ -174,6 +201,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               return (
                 <Fragment key={message.id}>
                   {newDay && <DaySeparator timestamp={message.timestamp} />}
+                  {index === unreadIndex && <UnreadSeparator />}
                   <MessageBubble
                     role={message.role}
                     content={message.content}

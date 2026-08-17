@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { callProcedure, onMessagesChanged } from '@/lib/ipc-client'
 import { unreadByConversation, type UnreadCount } from '@/lib/unread'
@@ -47,8 +47,12 @@ export function useMarkRead(): {
     onSuccess: invalidate
   })
 
+  // useCallback over TanStack's stable mutate, so the mark-read effects in the
+  // thread views can list these in their deps without re-firing every render.
+  const { mutate: mutateContact } = contact
+  const { mutate: mutateGroup } = group
   return {
-    markContactRead: (id) => contact.mutate(id),
-    markGroupRead: (id) => group.mutate(id)
+    markContactRead: useCallback((id: string) => mutateContact(id), [mutateContact]),
+    markGroupRead: useCallback((id: string) => mutateGroup(id), [mutateGroup])
   }
 }
