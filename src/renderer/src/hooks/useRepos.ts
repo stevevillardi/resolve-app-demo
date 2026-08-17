@@ -22,7 +22,11 @@ export function useRepos(enabled: boolean): UseQueryResult<RepoOption[]> {
     // Cloning one changes its localPath, and so does anything the user does in
     // a terminal. Short enough to stay honest, long enough that stepping back
     // and forth in the dialog doesn't refetch.
-    staleTime: 30_000
+    staleTime: 30_000,
+    // Not worth three attempts. The failures this actually sees are a rejected
+    // token and a rate limit, and neither improves by being asked again — they
+    // just delay the message that says what to do about it by several seconds.
+    retry: false
   })
 }
 

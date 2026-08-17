@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, CloudDownload, FolderGit2, FolderOpen, Search } from 'lucide-react'
+import { AlertTriangle, Check, CloudDownload, FolderGit2, FolderOpen, Search } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ import { usePersonas } from '@/hooks/usePersonas'
 import { useCreateContact } from '@/hooks/useConversations'
 import { useChooseDirectory, useCloneRepo, useRepos } from '@/hooks/useRepos'
 import { useUiStore } from '@/store/useUiStore'
+import { ipcErrorMessage } from '@/lib/ipc-client'
 import { repoName } from '@/lib/format'
 import { NON_REPO_NOTE, repoBindingProblem } from '@/lib/repo-binding'
 import { cn } from '@/lib/utils'
@@ -299,11 +300,32 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             {source === 'github' && githubConnected && (
               <div className="scrollbar-subtle flex max-h-72 flex-col gap-1.5 overflow-y-auto">
                 {repos.isPending && <EmptyState compact loading title="Loading repositories…" />}
+                {/*
+                  Main's own words, not a paraphrase. It distinguishes a
+                  rejected token from a rate limit from a network failure and
+                  says what to do about each — "check your connection and try
+                  again" was wrong for two of the three and useless for all of
+                  them. A stored token that has been revoked still reports
+                  `connected: true`, because that only means a token exists, so
+                  this message is the only place the user finds out.
+                */}
                 {repos.isError && (
                   <EmptyState
                     compact
+                    icon={AlertTriangle}
                     title="Couldn't load repositories"
-                    description="Check your connection and try again."
+                    description={ipcErrorMessage(repos.error)}
+                    action={
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => void repos.refetch()}>
+                          Try again
+                        </Button>
+                        <Button size="sm" className="gap-2" onClick={() => setDialog('github')}>
+                          <Github />
+                          Reconnect
+                        </Button>
+                      </div>
+                    }
                   />
                 )}
                 {repos.isSuccess && repos.data.length === 0 && (
