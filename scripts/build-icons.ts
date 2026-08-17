@@ -32,6 +32,18 @@ import { resolve } from 'path'
 
 const ROOT = resolve(__dirname, '..')
 
+/**
+ * Apple's macOS icon grid: on a 1024px canvas the rounded-square artwork
+ * occupies 824px, centred, and the remaining 100px on each side stays
+ * transparent for the system's own shadow and hover growth.
+ *
+ * Skipping it is why the first cut sat noticeably larger than every neighbour in
+ * the Dock — a full-bleed 1024 squircle is ~24% wider than one drawn to the
+ * grid, and the Dock scales all icons to the same box rather than to their
+ * content.
+ */
+const MACOS_CONTENT_SCALE = 824 / 1024
+
 interface Target {
   /** SVG source, relative to the repository root. */
   from: string
@@ -39,11 +51,24 @@ interface Target {
   to: string
   /** Rendered edge length in pixels; the source is assumed square. */
   size: number
+  /**
+   * Fraction of the canvas the artwork fills, centred, the rest transparent.
+   * Defaults to 1 — full bleed, which is what a menu-bar template image and an
+   * in-app image both want, since neither is placed on an icon grid.
+   */
+  contentScale?: number
 }
 
 const TARGETS: Target[] = [
-  // electron-builder's input for every packaged platform icon.
-  { from: 'resources/icon.svg', to: 'build/icon.png', size: 1024 },
+  // electron-builder's input for every packaged platform icon. Drawn to the
+  // macOS grid: Windows 11 and most Linux shells also expect a little padding,
+  // and this is the only one of the three whose spec is exact.
+  {
+    from: 'resources/icon.svg',
+    to: 'build/icon.png',
+    size: 1024,
+    contentScale: MACOS_CONTENT_SCALE
+  },
   // The BrowserWindow `icon` on Linux, where the WM wants a real image rather
   // than a bundle resource (src/main/index.ts).
   { from: 'resources/icon.svg', to: 'resources/icon.png', size: 512 },
@@ -55,7 +80,12 @@ const TARGETS: Target[] = [
   { from: 'resources/tray-active.svg', to: 'resources/trayActiveTemplate@2x.png', size: 32 }
 ]
 
-async function render(browser: Browser, svg: string, size: number): Promise<Buffer> {
+async function render(
+  browser: Browser,
+  svg: string,
+  size: number,
+  contentScale = 1
+): Promise<Buffer> {
   const page = await browser.newPage({
     viewport: { width: size, height: size },
     deviceScaleFactor: 1
@@ -65,11 +95,18 @@ async function render(browser: Browser, svg: string, size: number): Promise<Buff
     // attributes cannot win over the size we are asking for, and so a data: URI
     // does not have to be escaped. `overflow: hidden` on the page keeps a
     // stroke that grazes the edge from adding a scrollbar and shifting layout.
+    //
+    // The inset is done by centring a smaller SVG in a full-size transparent
+    // page rather than by transforming the source, so the SVG stays the one that
+    // the renderer's SwitchboardIcon is a copy of.
+    const drawn = Math.round(size * contentScale)
     await page.setContent(
       `<!doctype html><meta charset="utf-8">
        <style>
          html, body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
-         svg { display: block; width: ${size}px; height: ${size}px; }
+         body { width: ${size}px; height: ${size}px; display: flex;
+                align-items: center; justify-content: center; }
+         svg { display: block; width: ${drawn}px; height: ${drawn}px; }
        </style>
        ${svg}`,
       { waitUntil: 'load' }
@@ -85,9 +122,14 @@ async function main(): Promise<void> {
   try {
     for (const target of TARGETS) {
       const svg = readFileSync(resolve(ROOT, target.from), 'utf8')
-      const png = await render(browser, svg, target.size)
+      const png = await render(browser, svg, target.size, target.contentScale)
       writeFileSync(resolve(ROOT, target.to), png)
-      console.log(`${target.to.padEnd(38)} ${target.size}x${target.size}  ${png.length} bytes`)
+      const inset = target.contentScale
+        ? `  artwork ${Math.round(target.size * target.contentScale)}px`
+        : ''
+      console.log(
+        `${target.to.padEnd(38)} ${target.size}x${target.size}  ${png.length} bytes${inset}`
+      )
     }
   } finally {
     await browser.close()
