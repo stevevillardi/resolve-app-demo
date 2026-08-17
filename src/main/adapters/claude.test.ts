@@ -345,6 +345,54 @@ describe('stream normalization', () => {
     })
   })
 
+  it('carries a bounded output excerpt off the tool_result content', async () => {
+    // Both real shapes: a plain string, and the array of content parts the SDK
+    // uses for richer results. Only text parts survive; an image part would be
+    // noise as characters.
+    const events = await collect([
+      {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'tu-1', is_error: false, content: 'stdout here' },
+            {
+              type: 'tool_result',
+              tool_use_id: 'tu-2',
+              is_error: false,
+              content: [
+                { type: 'text', text: 'part one' },
+                { type: 'image', source: {} },
+                { type: 'text', text: 'part two' }
+              ]
+            }
+          ]
+        }
+      }
+    ])
+
+    const ends = events.filter((e) => e.type === 'tool_end')
+    expect(ends).toContainEqual(expect.objectContaining({ toolCallId: 'tu-1', output: 'stdout here' }))
+    expect(ends).toContainEqual(
+      expect.objectContaining({ toolCallId: 'tu-2', output: 'part one\npart two' })
+    )
+  })
+
+  it('truncates an oversized tool result with a visible marker, never silently', async () => {
+    const events = await collect([
+      {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'tu-1', is_error: false, content: 'x'.repeat(9000) }
+          ]
+        }
+      }
+    ])
+    const end = events.find((e) => e.type === 'tool_end')
+    expect(end && end.type === 'tool_end' && end.output?.length).toBeLessThan(4200)
+    expect(end && end.type === 'tool_end' && end.output).toMatch(/\[truncated\]$/)
+  })
+
   it('marks a failed tool result as failed', async () => {
     const events = await collect([
       {

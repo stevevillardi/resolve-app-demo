@@ -124,7 +124,14 @@ export const agentEventSchema = z.discriminatedUnion('type', [
     toolCallId: z.string(),
     name: z.string(),
     status: z.enum(['completed', 'failed']),
-    detail: z.string().optional()
+    detail: z.string().optional(),
+    /**
+     * How the call answered — stdout tail, MCP result text, or the error a
+     * failed call reported. Bounded by the adapter to TOOL_OUTPUT_MAX before
+     * it is emitted, so neither the push channel nor the tool_calls row ever
+     * carries an unbounded blob (Phase 19).
+     */
+    output: z.string().optional()
   }),
 
   /**
@@ -144,6 +151,20 @@ export const agentEventSchema = z.discriminatedUnion('type', [
     usage: agentUsageSchema.nullable()
   })
 ])
+
+/**
+ * The one place the excerpt bounds live. `detail` is what a call was asked;
+ * `output` is how it answered. Adapters bound at emit time, messaging persists
+ * what was emitted, and the renderer can rely on both without re-clamping.
+ */
+export const TOOL_DETAIL_MAX = 500
+export const TOOL_OUTPUT_MAX = 4000
+
+/** Clamps with an explicit marker, so a cut excerpt never reads as complete. */
+export function toolExcerpt(text: string, max: number): string {
+  if (text.length <= max) return text
+  return `${text.slice(0, max)}\n… [truncated]`
+}
 
 // --- The push channel -------------------------------------------------------
 

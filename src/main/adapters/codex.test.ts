@@ -65,6 +65,7 @@ const {
   discoverCodexSkills,
   toolDetailFor,
   toolNameFor,
+  toolOutputFor,
   usageFromTurn
 } = await import('./codex')
 
@@ -156,6 +157,48 @@ describe('toolDetailFor', () => {
 
   it('is empty for items with nothing useful to show', () => {
     expect(toolDetailFor({ id: 'i', type: 'reasoning', text: 'thinking' })).toBe('')
+  })
+})
+
+describe('toolOutputFor', () => {
+  it("carries a command's aggregated output, bounded with a visible marker", () => {
+    expect(toolOutputFor(command({ aggregated_output: 'ok\n' }))).toBe('ok\n')
+    const big = toolOutputFor(command({ aggregated_output: 'y'.repeat(9000) }))
+    expect(big.length).toBeLessThan(4200)
+    expect(big).toMatch(/\[truncated\]$/)
+  })
+
+  it("prefers an MCP call's error message, then its result text parts", () => {
+    const base = {
+      id: 'i',
+      type: 'mcp_tool_call',
+      server: 'github',
+      tool: 'list_issues',
+      arguments: {},
+      status: 'completed'
+    } as const
+
+    expect(
+      toolOutputFor({ ...base, error: { message: 'HTTP 403' } } as unknown as ThreadItem)
+    ).toBe('HTTP 403')
+    expect(
+      toolOutputFor({
+        ...base,
+        result: {
+          content: [
+            { type: 'text', text: '3 open issues' },
+            { type: 'image', data: '', mimeType: 'image/png' }
+          ],
+          structured_content: null
+        }
+      } as unknown as ThreadItem)
+    ).toBe('3 open issues')
+  })
+
+  it('is empty for items that answer with nothing', () => {
+    expect(
+      toolOutputFor({ id: 'i', type: 'file_change', changes: [], status: 'completed' })
+    ).toBe('')
   })
 })
 
