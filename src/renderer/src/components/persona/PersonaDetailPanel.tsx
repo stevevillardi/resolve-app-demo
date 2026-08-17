@@ -19,6 +19,7 @@ import { ListRow } from '@/components/common/ListRow'
 import { FieldGrid, FieldGridSpan } from '@/components/common/FieldGrid'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
+import { mcpReach, mcpServerChoices, toggleMcpServer } from '@/lib/capability-view'
 import { EmptyPane } from '@/components/common/EmptyPane'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { PaneHeader } from '@/components/common/PaneHeader'
@@ -87,6 +88,7 @@ function PersonaForm({
   const [sandbox, setSandbox] = useState<SandboxLevel>(persona.sandbox)
   const [githubScope, setGithubScope] = useState<GithubScope>(persona.githubScope)
   const [skillIds, setSkillIds] = useState<string[]>(persona.skillIds)
+  const [mcpServerIds, setMcpServerIds] = useState<string[]>(persona.mcpServerIds)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const setSelectedId = useUiStore((state) => state.setSelectedPersonaId)
   const setSection = useUiStore((state) => state.setSection)
@@ -110,7 +112,11 @@ function PersonaForm({
     systemPrompt,
     sandbox,
     githubScope,
-    skillIds
+    skillIds,
+    // Named explicitly, not left to the spread above. `...persona` round-trips
+    // the stored value, so omitting it here would let the checklist change on
+    // screen while `dirty` stayed false and Save stayed disabled.
+    mcpServerIds
   }
   const dirty = JSON.stringify(edited) !== JSON.stringify(persona)
 
@@ -237,7 +243,7 @@ function PersonaForm({
 
         <Section
           title="Permissions"
-          description="Two independent axes: what this persona can touch on disk, and what it can do on GitHub."
+          description="Three independent axes: what this persona can touch on disk, what it can do on GitHub, and whether it can reach anything off this machine at all."
         >
           <FieldGrid>
             <Field label="Sandbox">
@@ -259,6 +265,44 @@ function PersonaForm({
               <ScopeChip axis="github" value={githubScope} className="self-start" />
             </Field>
           </FieldGrid>
+
+          {/*
+            The third axis. Not a SegmentedControl like the two above, because
+            this one is a set rather than a level — a persona holds some servers
+            or none, and the registry is closed (see src/shared/mcp.ts).
+
+            "Tools" rather than "Skills" in the copy, deliberately. A Skill in
+            this app is injected prose; what a server provides is an executable
+            capability the model invokes. The two share a word elsewhere in the
+            product and this screen must not blur them.
+          */}
+          <Field label="Tools">
+            <div className="flex flex-col gap-2">
+              {mcpServerChoices(mcpServerIds).map((server) => (
+                <CheckRow
+                  key={server.id}
+                  checked={server.granted}
+                  onToggle={() => setMcpServerIds((prev) => toggleMcpServer(prev, server.id))}
+                  title={server.label}
+                  description={
+                    <>
+                      {server.description}{' '}
+                      {/*
+                        Says what actually narrows it. Ticking this grants
+                        nothing the GitHub scope above does not already allow,
+                        and without this the checkbox reads as the whole
+                        decision.
+                      */}
+                      <span className="text-muted-foreground/80">
+                        Limited by this persona’s {server.governedBy}.
+                      </span>
+                    </>
+                  }
+                />
+              ))}
+            </div>
+            <ScopeChip axis="mcp" value={mcpReach(mcpServerIds)} className="self-start" />
+          </Field>
         </Section>
 
         <Section

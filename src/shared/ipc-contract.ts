@@ -154,6 +154,15 @@ const contactContextSchema = z.object({
   repoSkills: z.array(z.string()),
   injectedSkills: z.array(z.object({ name: z.string(), description: z.string() })),
   repoInstructions: z.object({ fileName: z.string(), chars: z.number() }).nullable(),
+  /**
+   * What this contact currently trusts its repository to say — the *decision*,
+   * where the three fields above are its consequences.
+   *
+   * Carried here so the panel that reports what a turn receives is also the
+   * place the grant is made. Keeping them on separate screens would mean
+   * reading the effect in one place and changing the cause in another.
+   */
+  repoTrust: repoTrustSchema,
   /** Reachable servers, already narrowed by the persona's githubScope. */
   mcpServers: z.array(z.object({ id: z.string(), url: z.string(), deniedTools: z.number() })),
   /**

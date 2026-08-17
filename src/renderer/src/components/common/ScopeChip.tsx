@@ -1,7 +1,8 @@
-import { Eye, FilePen, GitPullRequest, ShieldAlert, Unlock } from 'lucide-react'
+import { Eye, FilePen, GitPullRequest, Plug, ShieldAlert, Unlock, Unplug } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import type { McpReach } from '@/lib/capability-view'
 import type { GithubScope, SandboxLevel } from '@/types'
 
 /**
@@ -68,16 +69,62 @@ const GITHUB: Record<GithubScope, Descriptor> = {
   }
 }
 
+/**
+ * Reach, which neither other axis describes.
+ *
+ * `sandbox` covers the disk and `github` covers what may be done on GitHub. A
+ * persona holding a server can talk to something off this machine, and in v1
+ * the per-persona allowlist over a curated registry *is* that axis — see the
+ * comment on personaTemplateSchema.mcpServerIds. Derived from the allowlist
+ * rather than stored, so it cannot fall out of step with what was granted.
+ */
+const MCP: Record<McpReach, Descriptor> = {
+  none: {
+    label: 'none',
+    icon: Unplug,
+    severity: 'safe',
+    hint: 'No MCP servers. This session can only touch its own files.'
+  },
+  github: {
+    label: 'github',
+    icon: Plug,
+    severity: 'elevated',
+    // Says what it does *not* add, deliberately: holding the server grants
+    // nothing the GitHub scope beside it does not already allow.
+    hint: 'Can reach GitHub through its MCP server, never beyond its GitHub scope.'
+  }
+}
+
 const SEVERITY_CLASS: Record<Severity, string> = {
   safe: 'bg-scope-safe-bg text-scope-safe',
   elevated: 'bg-scope-elevated-bg text-scope-elevated',
   full: 'bg-scope-full-bg text-scope-full'
 }
 
+type Axis = 'sandbox' | 'github' | 'mcp'
+
+/**
+ * One entry per axis rather than a ternary.
+ *
+ * This was `axis === 'sandbox' ? SANDBOX : GITHUB` with a
+ * `?? SANDBOX.read_only` fallback, which meant a third axis would not fail —
+ * it would render as a read-only *filesystem* chip, on a screen whose entire
+ * job is saying what a persona may do. A lookup makes an unhandled axis a type
+ * error instead.
+ */
+const AXES: Record<Axis, { table: Record<string, Descriptor>; label: string; prefix: string }> = {
+  // The prefixes exist because the axes share value names — `read_only` and
+  // `full_access` appear on two of them, so without one, two chips side by side
+  // are byte-identical and tell you nothing.
+  sandbox: { table: SANDBOX, label: 'Sandbox', prefix: 'fs' },
+  github: { table: GITHUB, label: 'GitHub', prefix: 'gh' },
+  mcp: { table: MCP, label: 'Reach', prefix: 'mcp' }
+}
+
 interface ScopeChipProps {
   /** Which permission axis this chip describes. */
-  axis: 'sandbox' | 'github'
-  value: SandboxLevel | GithubScope
+  axis: Axis
+  value: SandboxLevel | GithubScope | McpReach
   /** Drops the label, leaving the icon — for dense list rows. */
   compact?: boolean
   className?: string
@@ -89,13 +136,9 @@ export function ScopeChip({
   compact = false,
   className
 }: ScopeChipProps): React.JSX.Element {
-  const table = axis === 'sandbox' ? SANDBOX : GITHUB
-  const descriptor = table[value as keyof typeof table] ?? SANDBOX.read_only
+  const { table, label: axisLabel, prefix: axisPrefix } = AXES[axis]
+  const descriptor = table[value] ?? table[Object.keys(table)[0]]
   const Icon = descriptor.icon
-  const axisLabel = axis === 'sandbox' ? 'Sandbox' : 'GitHub'
-  // Both axes share the `read_only` and `full_access` values, so without a
-  // prefix two chips side by side are byte-identical and tell you nothing.
-  const axisPrefix = axis === 'sandbox' ? 'fs' : 'gh'
 
   return (
     <Tooltip>

@@ -8,6 +8,7 @@ import { workingPathFor } from './run-lock'
 import { skillsForPersona } from './skills'
 import { siblingBranchesFor } from './worktrees'
 import type { SessionSpec } from '../adapters/types'
+import { repoTrustOf } from '../../shared/domain'
 import type { Contact, PersonaTemplate } from '../../shared/domain'
 import type { ContactContext, RepoOffers } from '../../shared/ipc-contract'
 
@@ -109,7 +110,23 @@ export function buildSessionSpec(
  *
  * A snapshot of what would be sent *now*, not a record of what was sent last
  * turn. The spec is resolved per turn, so this moves as colleagues work.
+ *
+ * See repoOffers() below for the other half: what the repository is *offering*,
+ * which is a different question and stays non-empty when this one is empty.
  */
+export function contactContext(contactId: string): ContactContext | null {
+  const contact = getContact(contactId)
+  if (!contact) return null
+
+  const persona = getPersonaTemplate(contact.personaTemplateId)
+  if (!persona) return null
+
+  const spec = buildSessionSpec(contact, persona)
+  const instructions = composeInstructions(spec)
+
+  return contextFrom(contact, persona, spec, instructions)
+}
+
 /**
  * What this contact's repository is offering, approved or not.
  *
@@ -142,16 +159,12 @@ export function repoOffers(contactId: string): RepoOffers | null {
   }
 }
 
-export function contactContext(contactId: string): ContactContext | null {
-  const contact = getContact(contactId)
-  if (!contact) return null
-
-  const persona = getPersonaTemplate(contact.personaTemplateId)
-  if (!persona) return null
-
-  const spec = buildSessionSpec(contact, persona)
-  const instructions = composeInstructions(spec)
-
+function contextFrom(
+  contact: Contact,
+  persona: PersonaTemplate,
+  spec: SessionSpec,
+  instructions: string
+): ContactContext {
   return {
     persona: {
       id: persona.id,
@@ -185,6 +198,9 @@ export function contactContext(contactId: string): ContactContext | null {
           chars: spec.repoInstructions.content.length
         }
       : null,
+    // The decision behind the three fields above. Normalised through
+    // repoTrustOf so the panel never has to know that null means "nothing".
+    repoTrust: repoTrustOf(contact.repoTrust),
     mcpServers: (spec.mcpServers ?? []).map((server) => ({
       id: server.id,
       url: server.url,
