@@ -3,6 +3,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Contact, GithubScope, PersonaTemplate, SandboxLevel } from '../../shared/domain'
+import { GITHUB_MCP_TOKEN_ENV } from '../adapters/github-mcp-tools'
 
 /**
  * The module that decides what a persona can reach beyond its own working
@@ -90,6 +91,16 @@ describe('MCP servers', () => {
     const resolved = capabilitiesFor(contact(), persona({ mcpServerIds: ['github'] }))
     expect(resolved.mcpServers.map((s) => s.id)).toEqual(['github'])
     expect(resolved.mcpServers[0].token).toBe('gho_test')
+  })
+
+  it('carries the token and the name of the variable holding it', () => {
+    // Two doors for two backends: Claude takes the value in a header, Codex
+    // takes only a variable name because its config becomes `--config` argv.
+    // Resolving both here is what keeps either adapter from having to know
+    // which server this is in order to find the right one.
+    const resolved = capabilitiesFor(contact(), persona({ mcpServerIds: ['github'] }))
+    expect(resolved.mcpServers[0].tokenEnvVar).toBe(GITHUB_MCP_TOKEN_ENV)
+    expect(resolved.mcpServers[0].tokenEnvVar).not.toContain('gho_test')
   })
 
   it('says why rather than behaving as though it looked and found nothing', () => {

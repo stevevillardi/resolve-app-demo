@@ -410,6 +410,94 @@ describe('session wiring', () => {
   })
 })
 
+describe('MCP wiring', () => {
+  const TOKEN = 'ghp_secret_value'
+  const server = {
+    id: 'github',
+    url: 'https://api.githubcopilot.com/mcp/',
+    token: TOKEN,
+    tokenEnvVar: 'PERSONA_ROUTER_GITHUB_MCP_TOKEN',
+    deniedTools: ['merge_pull_request', 'push_files'],
+    disallowedTools: ['mcp__github__merge_pull_request', 'mcp__github__push_files']
+  }
+
+  async function runWith(spec: SessionSpec): Promise<Record<string, unknown>> {
+    events = []
+    const adapter = createCodexAdapter()
+    for await (const _ of adapter.run(adapter.createSession(spec), 'go')) void _
+    return (lastClientOptions?.config as Record<string, unknown>).mcp_servers as Record<
+      string,
+      unknown
+    >
+  }
+
+  it('configures no server for a persona granted none', async () => {
+    await collect([])
+    expect(lastClientOptions?.config).not.toHaveProperty('mcp_servers')
+  })
+
+  it('points the server at the endpoint the scope earned', async () => {
+    const servers = await runWith({ ...SPEC, mcpServers: [server] })
+    expect((servers.github as Record<string, string>).url).toBe(
+      'https://api.githubcopilot.com/mcp/'
+    )
+  })
+
+  it('names the variable holding the token, never the token', async () => {
+    // This object is flattened into `--config key=value` argv, which any
+    // process on the machine can read out of `ps`. The binary refuses a
+    // literal `bearer_token` for the same reason, and backendEnv() is what
+    // puts the value where the named variable can find it.
+    const servers = await runWith({ ...SPEC, mcpServers: [server] })
+    expect((servers.github as Record<string, string>).bearer_token_env_var).toBe(
+      'PERSONA_ROUTER_GITHUB_MCP_TOKEN'
+    )
+    expect(JSON.stringify(lastClientOptions?.config)).not.toContain(TOKEN)
+  })
+
+  it('disables the same tools Claude is denied, from the same table', async () => {
+    // Bare names here, `mcp__github__*` there — one list in sandbox.ts
+    // produces both, so the two backends cannot drift apart in what they can
+    // reach on GitHub.
+    const servers = await runWith({ ...SPEC, mcpServers: [server] })
+    expect((servers.github as Record<string, string[]>).disabled_tools).toEqual([
+      'merge_pull_request',
+      'push_files'
+    ])
+  })
+
+  it('omits the deny list rather than sending an empty one at full_access', async () => {
+    const servers = await runWith({
+      ...SPEC,
+      mcpServers: [{ ...server, deniedTools: [], disallowedTools: [] }]
+    })
+    expect(servers.github).not.toHaveProperty('disabled_tools')
+  })
+
+  it('keeps the repository seals in place alongside the server', async () => {
+    // The seal and the opening are independent: granting GitHub must not
+    // quietly reopen AGENTS.md or the hooks engine.
+    await runWith({ ...SPEC, mcpServers: [server] })
+    const config = lastClientOptions?.config as Record<string, unknown>
+    expect(config.project_doc_max_bytes).toBe(0)
+    expect(config.features).toEqual({ hooks: false })
+  })
+
+  it('gives the summariser no server, even when the session has one', async () => {
+    // It runs after every single turn, and connecting to GitHub to summarise a
+    // conversation is a cost nobody asked for. Claude's summariser is sealed
+    // the same way, for the reason recorded on SUMMARY_DISALLOWED_TOOLS.
+    const adapter = createCodexAdapter()
+    const session = adapter.createSession({ ...SPEC, mcpServers: [server] })
+    await adapter.summarize(session, 'summarise', { type: 'object' })
+
+    const config = lastClientOptions?.config as Record<string, unknown>
+    expect(config).not.toHaveProperty('mcp_servers')
+    // ...and still sealed on the path that has no canUseTool to fall back on.
+    expect(config.project_doc_max_bytes).toBe(0)
+  })
+})
+
 describe('stream normalization', () => {
   it('captures the thread id as the session id', async () => {
     const collected = await collect([{ type: 'thread.started', thread_id: 'th-1' }])

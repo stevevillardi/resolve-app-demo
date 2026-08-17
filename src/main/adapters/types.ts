@@ -58,7 +58,21 @@ export interface RepoInstructionsBlock {
 export interface ResolvedServer {
   id: string
   url: string
+  /** The bearer token itself. Claude sends it as an Authorization header. */
   token: string
+  /**
+   * The environment variable the token has been placed in, for backends that
+   * take a variable name rather than the value.
+   *
+   * Codex is the one that does, and the indirection is not a style preference:
+   * its config object is flattened into `--config key=value` argv, which any
+   * process on the machine can read out of `ps`. Filled by backendEnv() in
+   * services/adapter-host.ts, the one place secrets meet a subprocess.
+   *
+   * Carried here rather than derived in the adapter so that an adapter never
+   * has to know which server this is — see the note above about deciding.
+   */
+  tokenEnvVar: string
   /** Bare names, for the in-process `canUseTool` check. */
   deniedTools: string[]
   /** The same names qualified as `mcp__<id>__*`, for `disallowedTools`. */

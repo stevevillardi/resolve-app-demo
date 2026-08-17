@@ -1,5 +1,5 @@
 import { discoverCodexSkills } from '../adapters/codex'
-import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
+import { GITHUB_MCP_SERVER_ID, GITHUB_MCP_TOKEN_ENV } from '../adapters/github-mcp-tools'
 import { githubMcpDenyList, githubMcpDisallowedTools, githubMcpEndpoint } from '../adapters/sandbox'
 import { getGitHubStatus, getGitHubToken } from './github-auth'
 import {
@@ -45,6 +45,8 @@ export interface ResolvedMcpServer {
   url: string
   /** Sent by Claude as an Authorization header; by Codex through the env. */
   token: string
+  /** Which variable the token is in, for Codex's `bearer_token_env_var`. */
+  tokenEnvVar: string
   /** Bare tool names, the second layer. See githubMcpDenyList(). */
   deniedTools: string[]
   /** The same table qualified as `mcp__github__*`, for `disallowedTools`. */
@@ -103,6 +105,7 @@ export function capabilitiesFor(contact: Contact, persona: PersonaTemplate): Res
         // GitHub before any of our own code runs.
         url: githubMcpEndpoint(persona.githubScope),
         token,
+        tokenEnvVar: GITHUB_MCP_TOKEN_ENV,
         deniedTools: githubMcpDenyList(persona.githubScope),
         disallowedTools: githubMcpDisallowedTools(persona.githubScope)
       })
