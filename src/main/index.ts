@@ -15,6 +15,7 @@ import { installEditableFieldMenu } from './context-menu'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { beginQuit, isQuitting } from './lifecycle'
+import { getMainWindow, setWindowFactory, showMainWindow } from './main-window'
 import { onRunsChangedInMain } from './services/agent-events'
 import { nodeCronEngine } from './services/cron-engine'
 import { pruneOrphanedWorktrees } from './services/worktrees'
@@ -115,6 +116,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Before anything that can call showMainWindow(): the factory is what lets a
+  // destroyed window be re-created without main-window.ts importing this file.
+  setWindowFactory(createWindow)
+
   initDb()
   // Before setupIpc, so the renderer's first skills.list can never race an
   // empty library and render the "no skills" empty state on a fresh install.
@@ -162,9 +167,7 @@ app.whenReady().then(() => {
 function installApplicationMenu(): void {
   const sendAction = (action: MenuActionId): void => {
     showMainWindow()
-    BrowserWindow.getAllWindows()
-      .find((window) => !window.isDestroyed())
-      ?.webContents.send(MENU_ACTION_CHANNEL, action)
+    getMainWindow()?.webContents.send(MENU_ACTION_CHANNEL, action)
   }
 
   const toMenuItem = (item: AppMenuItem): MenuItemConstructorOptions => {
@@ -186,23 +189,6 @@ function installApplicationMenu(): void {
 
   const template = buildAppMenuTemplate({ platform: process.platform, isDev: is.dev })
   Menu.setApplicationMenu(Menu.buildFromTemplate(template.map(toMenuItem)))
-}
-
-/**
- * Brings the window back, whether it was hidden or never created.
- *
- * The window count is no longer the test it used to be: a hidden window is
- * still a window, so `getAllWindows().length === 0` is false after a close and
- * the dock icon would do nothing at all.
- */
-function showMainWindow(): void {
-  const existing = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
-  if (!existing) {
-    createWindow()
-    return
-  }
-  existing.show()
-  existing.focus()
 }
 
 /**

@@ -1,10 +1,10 @@
-import { BrowserWindow } from 'electron'
 import {
   AGENT_EVENT_CHANNEL,
   agentStreamMessageSchema,
   type AgentEvent,
   type AgentStreamMessage
 } from '../../shared/agent'
+import { getMainWindow } from '../main-window'
 
 /**
  * The main→renderer half of the IPC layer (Phase 6).
@@ -19,21 +19,9 @@ import {
  * Electron. The adapters yield events; this decides where they go.
  */
 
-/**
- * Resolved per send, never cached.
- *
- * setupIpc() runs before createWindow() in src/main/index.ts, so there is no
- * window to capture at registration time — and on macOS the app outlives its
- * window, which `activate` then re-creates. A module-level reference would be
- * stale in both directions.
- */
-function targetWindow(): BrowserWindow | null {
-  const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed())
-  return window ?? null
-}
-
 function send(message: AgentStreamMessage): void {
-  const window = targetWindow()
+  // Resolved per send, never cached — main-window.ts owns the reasoning.
+  const window = getMainWindow()
   if (!window) return
 
   // Validated on the way out, matching registerProcedure()'s treatment of
