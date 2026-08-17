@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { installEditableFieldMenu } from './context-menu'
 import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { beginQuit, isQuitting } from './lifecycle'
@@ -48,6 +49,8 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
+
+  installEditableFieldMenu(mainWindow)
 
   // Hide rather than close, so the app stays resident and its routines keep
   // firing with no window on screen (blueprint §15E). Reopening is then instant
