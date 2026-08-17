@@ -279,6 +279,17 @@ export const ipcContract = {
     input: z.void(),
     output: authStatusSchema
   },
+  /**
+   * `auth.getStatus` with both backend probes forced. Separate procedure rather
+   * than a flag on getStatus so the cheap cached read stays the default and a
+   * forced double-probe (a Claude subprocess plus a Codex CLI spawn) is always
+   * a deliberate act: the Retry affordance on an auth card, or a window-focus
+   * recovery after a probe reported that it failed to check.
+   */
+  'auth.refresh': {
+    input: z.void(),
+    output: authStatusSchema
+  },
   'auth.setAnthropicApiKey': {
     input: apiKeyInputSchema,
     output: claudeStatusSchema

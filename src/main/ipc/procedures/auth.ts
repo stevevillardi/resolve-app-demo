@@ -5,6 +5,8 @@ import { setOpenAiApiKey } from '../../services/codex-auth'
 
 registerProcedure('auth.getStatus', () => getAuthStatus())
 
+registerProcedure('auth.refresh', () => getAuthStatus(true))
+
 registerProcedure('auth.setAnthropicApiKey', ({ apiKey }) => setAnthropicApiKey(apiKey))
 
 registerProcedure('auth.setOpenAiApiKey', ({ apiKey }) => setOpenAiApiKey(apiKey))

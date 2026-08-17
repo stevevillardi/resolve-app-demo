@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button'
 import { DeviceCodeDisplay } from '@/components/common/DeviceCodeDisplay'
 import { Github } from '@/components/github/GithubMark'
 import {
+  useAuthRecoveryOnFocus,
   useAuthStatus,
   useCodexLogin,
   useCompleteOnboarding,
   useGitHubDeviceFlow,
+  useRefreshAuth,
   useSetAnthropicApiKey,
   useSetOpenAiApiKey
 } from '@/hooks/useAuth'
@@ -34,6 +36,11 @@ export function OnboardingFlow(): React.JSX.Element {
   const anthropicKey = useSetAnthropicApiKey()
   const openAiKey = useSetOpenAiApiKey()
   const [showCodexKey, setShowCodexKey] = useState(false)
+
+  // A probe that failed at launch (a cold binary can outlive its timeout) heals
+  // itself when the user comes back to the window, or on the explicit Retry.
+  useAuthRecoveryOnFocus()
+  const { refresh, isPending: refreshing } = useRefreshAuth()
 
   const claudeStatus = status?.claude
   const codexStatus = status?.codex
@@ -81,7 +88,13 @@ export function OnboardingFlow(): React.JSX.Element {
             ) : (
               !claudeStatus.authenticated && (
                 <div className="flex flex-col gap-2">
-                  {claudeStatus.error && <ErrorNote message={claudeStatus.error} />}
+                  {claudeStatus.error && (
+                    <ProbeFailedNote
+                      message={claudeStatus.error}
+                      onRetry={refresh}
+                      isRetrying={refreshing}
+                    />
+                  )}
                   <ApiKeyField
                     label="Anthropic API key"
                     placeholder="sk-ant-…"
@@ -108,7 +121,13 @@ export function OnboardingFlow(): React.JSX.Element {
           >
             {codexStatus && !codexStatus.authenticated && (
               <div className="flex flex-col gap-3">
-                {codexStatus.error && <ErrorNote message={codexStatus.error} />}
+                {codexStatus.error && (
+                  <ProbeFailedNote
+                    message={codexStatus.error}
+                    onRetry={refresh}
+                    isRetrying={refreshing}
+                  />
+                )}
 
                 {codex.state.status === 'awaiting_authorization' ? (
                   <>
@@ -234,4 +253,30 @@ function PendingRow({ label }: { label: string }): React.JSX.Element {
 
 function ErrorNote({ message }: { message: string }): React.JSX.Element {
   return <p className="text-destructive text-sm text-pretty">{message}</p>
+}
+
+/**
+ * A status-probe failure, as opposed to being cleanly logged out. The two must
+ * not look alike: this one means "we don't know", so it carries the retry that
+ * would answer the question, not a prompt to reconnect credentials that are
+ * probably fine.
+ */
+function ProbeFailedNote({
+  message,
+  onRetry,
+  isRetrying
+}: {
+  message: string
+  onRetry: () => void
+  isRetrying: boolean
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <ErrorNote message={message} />
+      <Button variant="outline" size="sm" onClick={onRetry} disabled={isRetrying}>
+        {isRetrying && <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />}
+        Check again
+      </Button>
+    </div>
+  )
 }

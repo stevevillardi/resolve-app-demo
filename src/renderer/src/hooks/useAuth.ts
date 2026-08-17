@@ -27,6 +27,46 @@ export function useAuthStatus(): UseQueryResult<AuthStatus> {
   })
 }
 
+/**
+ * Forces a fresh probe of both backends and writes the answer into the shared
+ * cache entry. This is the deliberate, user-visible version of `auth.getStatus`
+ * — a Claude subprocess plus a Codex CLI spawn — so it hangs off an explicit
+ * Retry affordance rather than any automatic refetch.
+ */
+export function useRefreshAuth(): { refresh: () => void; isPending: boolean } {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: () => callProcedure('auth.refresh', undefined),
+    onSuccess: (status) => queryClient.setQueryData(authStatusKey, status)
+  })
+  return { refresh: () => mutation.mutate(), isPending: mutation.isPending }
+}
+
+/**
+ * Re-probes on window focus, but only while a probe has *admitted failure* —
+ * `claude.error` / `codex.error` mark "couldn't check", not "logged out".
+ *
+ * That scoping is the point: a healthy status never pays for a focus-triggered
+ * subprocess, and a clean logged-out answer is respected rather than nagged.
+ * The one state worth retrying automatically is the false negative this exists
+ * to heal — a probe that timed out against a cold binary at launch and would
+ * succeed now.
+ */
+export function useAuthRecoveryOnFocus(): void {
+  const queryClient = useQueryClient()
+  const { refresh, isPending } = useRefreshAuth()
+
+  useEffect(() => {
+    const onFocus = (): void => {
+      const status = queryClient.getQueryData<AuthStatus>(authStatusKey)
+      const detectionFailed = Boolean(status?.claude.error ?? status?.codex.error)
+      if (detectionFailed && !isPending) refresh()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [queryClient, refresh, isPending])
+}
+
 function isFlowRunning(state: DeviceFlowState | undefined): boolean {
   return state?.status === 'starting' || state?.status === 'awaiting_authorization'
 }
