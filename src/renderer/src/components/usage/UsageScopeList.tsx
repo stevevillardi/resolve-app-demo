@@ -22,7 +22,7 @@ export function UsageScopeList(): React.JSX.Element {
   const setScope = useUiStore((state) => state.setUsageScope)
 
   const { data: events = [] } = useUsageEvents()
-  const { data: contacts = [] } = useContacts()
+  const { data: contacts = [], isPending } = useContacts()
   const { data: personas = [] } = usePersonas()
 
   // Every repo any Contact is bound to, whether or not it has spent anything —
@@ -47,6 +47,10 @@ export function UsageScopeList(): React.JSX.Element {
       {text}
     </p>
   )
+
+  // "All personas" with a "—" beside it is not a neutral thing to render while
+  // the first fetch is in flight: it reads as a fleet that has spent nothing.
+  if (isPending) return <EmptyState compact loading title="Loading usage…" />
 
   return (
     <div className="flex flex-col">

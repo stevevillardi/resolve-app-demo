@@ -14,7 +14,7 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
   const setSelectedId = useUiStore((state) => state.setSelectedRoutineId)
   const needle = query.trim().toLowerCase()
 
-  const routines = useRoutines().data ?? []
+  const { data: routines = [], isPending } = useRoutines()
   const contacts = useContacts().data ?? []
   const personaTemplates = usePersonas().data ?? []
 
@@ -24,6 +24,11 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
       routine.prompt.toLowerCase().includes(needle) ||
       routine.schedule.toLowerCase().includes(needle)
   )
+
+  // Before the two nothings below: "not loaded yet" is a third state, and
+  // showing "No routines yet" during the first fetch tells the user something
+  // that is not true.
+  if (isPending) return <EmptyState compact loading title="Loading routines…" />
 
   if (visible.length === 0) {
     // Two different nothings: a filter that matched nothing, and a section

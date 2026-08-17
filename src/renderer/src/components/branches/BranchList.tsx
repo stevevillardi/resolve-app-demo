@@ -32,12 +32,16 @@ export function BranchList({ query }: BranchListProps): React.JSX.Element {
     : branches
 
   if (isLoading) {
-    return <p className="text-muted-foreground px-2 py-6 text-center text-xs">Reading branches…</p>
+    // The same shape every other list uses while it waits. This was a bare
+    // centred paragraph, which is the one loading state in the app that did not
+    // look like the others.
+    return <EmptyState compact loading title="Reading branches…" />
   }
 
   if (matching.length === 0) {
     return (
       <EmptyState
+        compact
         icon={GitBranch}
         title={needle ? 'No matching branches' : 'No open branches'}
         description={

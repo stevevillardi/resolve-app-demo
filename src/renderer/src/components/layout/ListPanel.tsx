@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/input-group'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { ConversationList } from '@/components/conversation/ConversationList'
 import { PersonaList } from '@/components/persona/PersonaList'
 import { SkillList } from '@/components/persona/SkillList'
@@ -79,7 +80,59 @@ export function ListPanel(): React.JSX.Element {
   const setSelectedSkillId = useUiStore((state) => state.setSelectedSkillId)
   const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
   const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const config = PANEL[section]
+
+  /**
+   * `/` focuses the search, `esc` clears it and gives focus back.
+   *
+   * Guarded on the event target rather than on a flag: `/` is a perfectly
+   * ordinary character to type into the composer or a system prompt, and a
+   * global binding that swallowed it would be a much worse bug than the missing
+   * shortcut. Capture phase for the same reason ⌘K uses it — a bubbling
+   * listener loses to any component that stops propagation first.
+   */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null
+      const typing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable === true
+
+      if (event.key === '/' && !typing && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault()
+        searchRef.current?.focus()
+        return
+      }
+
+      if (event.key === 'Escape' && target === searchRef.current) {
+        // Only when there is something to clear. Otherwise `esc` should keep
+        // meaning "close whatever is open", which is what everything else in
+        // the app uses it for.
+        setQuery((current) => {
+          if (current) searchRef.current?.focus()
+          return ''
+        })
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
+  // A search left behind in one section is invisible in the next but still
+  // filtering it, which reads as an empty list rather than as a filter.
+  //
+  // Adjusted during render rather than in an effect: React's own documented
+  // pattern for resetting state when something changes, and the one the
+  // set-state-in-effect rule is pointing at. An effect would render the stale
+  // filter once before clearing it.
+  const [searchedSection, setSearchedSection] = useState(section)
+  if (searchedSection !== section) {
+    setSearchedSection(section)
+    setQuery('')
+  }
 
   const { create: createPersona } = useCreatePersona()
   const { create: createSkill } = useCreateSkill()
@@ -150,6 +203,7 @@ export function ListPanel(): React.JSX.Element {
                 <Search className="text-muted-foreground size-3.5" />
               </InputGroupAddon>
               <InputGroupInput
+                ref={searchRef}
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -177,12 +231,17 @@ export function ListPanel(): React.JSX.Element {
         {/* data-slot so the screenshot sweep can address "the rows of whatever
             section is open" without knowing which component drew them. */}
         <div data-slot="list-body" className="p-2">
-          {section === 'chats' && <ConversationList query={query} />}
-          {section === 'personas' && <PersonaList query={query} />}
-          {section === 'skills' && <SkillList query={query} />}
-          {section === 'routines' && <RoutineList query={query} />}
-          {section === 'usage' && <UsageScopeList />}
-          {section === 'branches' && <BranchList query={query} />}
+          {/* Its own boundary, separate from the workspace's: a bad row must not
+              take the search field and the "+" with it, and losing the list is
+              the one failure that leaves you unable to select your way out. */}
+          <ErrorBoundary variant="pane" resetKey={section}>
+            {section === 'chats' && <ConversationList query={query} />}
+            {section === 'personas' && <PersonaList query={query} />}
+            {section === 'skills' && <SkillList query={query} />}
+            {section === 'routines' && <RoutineList query={query} />}
+            {section === 'usage' && <UsageScopeList />}
+            {section === 'branches' && <BranchList query={query} />}
+          </ErrorBoundary>
         </div>
       </ScrollArea>
     </div>

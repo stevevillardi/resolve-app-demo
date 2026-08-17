@@ -326,6 +326,19 @@ export function CommandPalette(): React.JSX.Element {
           <span className="flex items-center gap-1">
             <CommandShortcut className="ml-0 font-mono">esc</CommandShortcut> dismiss
           </span>
+          {/*
+            The app's other two shortcuts, documented in the one place a user
+            already comes looking for shortcuts. An undiscoverable binding is
+            not a feature, and there is nowhere else in the app that lists them.
+          */}
+          <span className="border-border ml-auto flex items-center gap-3 border-l pl-3">
+            <span className="flex items-center gap-1">
+              <CommandShortcut className="ml-0 font-mono">/</CommandShortcut> search list
+            </span>
+            <span className="flex items-center gap-1">
+              <CommandShortcut className="ml-0 font-mono">⌘B</CommandShortcut> rail
+            </span>
+          </span>
         </div>
       </Command>
     </CommandDialog>

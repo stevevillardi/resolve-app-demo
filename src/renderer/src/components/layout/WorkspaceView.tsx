@@ -6,13 +6,26 @@ import { RoutineEditor } from '@/components/routines/RoutineEditor'
 import { UsageDashboard } from '@/components/usage/UsageDashboard'
 import { BranchDetail } from '@/components/branches/BranchDetail'
 import { WorkspaceHome } from './WorkspaceHome'
-import { useUiStore } from '@/store/useUiStore'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
+import { useUiStore, type ConversationSelection, type Section } from '@/store/useUiStore'
 
 /** The detail half of every section's master-detail pair. */
 export function WorkspaceView(): React.JSX.Element {
   const section = useUiStore((state) => state.section)
   const selected = useUiStore((state) => state.selectedConversation)
 
+  // Keyed on the section, so a pane that throws is not a screen you are stuck
+  // on: switching away and back is a fresh attempt. Boundary here rather than
+  // inside each view so the nav rail and the list panel stay usable, which is
+  // what makes "switch away" possible in the first place.
+  return (
+    <ErrorBoundary variant="pane" resetKey={section}>
+      {view(section, selected)}
+    </ErrorBoundary>
+  )
+}
+
+function view(section: Section, selected: ConversationSelection): React.JSX.Element {
   if (section === 'personas') return <PersonaDetailPanel />
   if (section === 'skills') return <SkillLibraryView />
   if (section === 'routines') return <RoutineEditor />
