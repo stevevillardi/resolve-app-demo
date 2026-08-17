@@ -27,7 +27,7 @@ import type { PersonaBackend } from '../../shared/domain'
  * ANTHROPIC_API_KEY reads to the SDK as "a key was provided and it is invalid",
  * which produces a worse error than no key at all.
  */
-function backendEnv(needsGithubToken: boolean): NodeJS.ProcessEnv {
+function backendEnv(backend: PersonaBackend, needsGithubToken: boolean): NodeJS.ProcessEnv {
   const anthropic = getSecret('anthropic_api_key') ?? import.meta.env.MAIN_VITE_ANTHROPIC_API_KEY
   const openai = getSecret('openai_api_key') ?? import.meta.env.MAIN_VITE_OPENAI_API_KEY
   // Codex's MCP configuration has no header option — it takes
@@ -50,7 +50,12 @@ function backendEnv(needsGithubToken: boolean): NodeJS.ProcessEnv {
   // server; it makes the blast radius the set of personas a human deliberately
   // gave GitHub to, rather than all of them. See docs/plan/15 for the part that
   // cannot be fixed here.
-  const github = needsGithubToken ? getGitHubToken() : null
+  //
+  // And only for Codex (doc 15 item 6): Claude receives the token as an
+  // Authorization header on the server config and never reads this variable,
+  // so setting it in Claude's subprocess put the secret somewhere with no
+  // reader — harmless until something grows one.
+  const github = backend === 'codex' && needsGithubToken ? getGitHubToken() : null
 
   return {
     ...process.env,
@@ -70,10 +75,13 @@ function backendEnv(needsGithubToken: boolean): NodeJS.ProcessEnv {
  * resolver needs `electron` to find it, which is exactly why the adapters take
  * it as config instead of importing it.
  */
-export function adapterConfig(options: { needsGithubToken?: boolean } = {}): AdapterConfig {
+export function adapterConfig(
+  backend: PersonaBackend,
+  options: { needsGithubToken?: boolean } = {}
+): AdapterConfig {
   return {
     codexBinaryPath: resolveCodexBinary(),
-    env: backendEnv(options.needsGithubToken ?? false),
+    env: backendEnv(backend, options.needsGithubToken ?? false),
     // The field has existed since Phase 5, is plumbed all the way into the
     // Claude OS sandbox, and until now nothing ever filled it — so the one
     // directory its own doc comment names was reachable by every persona. A
@@ -91,5 +99,5 @@ export function adapterForBackend(
   backend: PersonaBackend,
   options: { needsGithubToken?: boolean } = {}
 ): AgentAdapter {
-  return adapterFor(backend, adapterConfig(options))
+  return adapterFor(backend, adapterConfig(backend, options))
 }
