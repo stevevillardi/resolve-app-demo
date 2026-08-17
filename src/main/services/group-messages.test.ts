@@ -11,6 +11,10 @@ import type { AppDatabase } from '../db'
 
 let db: AppDatabase
 vi.mock('../db', () => ({ initDb: () => db }))
+// insertGroupMessage announces itself; without this mock the import chain
+// reaches `electron`, which does not exist under vitest's node environment.
+const emitMessagesChanged = vi.fn()
+vi.mock('./agent-events', () => ({ emitMessagesChanged: (): void => emitMessagesChanged() }))
 
 const {
   contextForRepo,
@@ -59,6 +63,16 @@ describe('insertGroupMessage', () => {
 
     expect(written.id).toMatch(/[0-9a-f-]{36}/)
     expect(written.timestamp).toBe(now)
+  })
+
+  it('announces after the insert, so background writes reach the sidebar', () => {
+    // The chokepoint rule: every group writer passes through here, including
+    // compaction posting a routine_run with no renderer subscribed to any
+    // runId. If this stops announcing, previews and unread counts go stale
+    // for exactly the messages that arrive while nobody watches.
+    emitMessagesChanged.mockClear()
+    insertGroupMessage({ groupId: GROUP, type: 'agent_reply', content: 'done' })
+    expect(emitMessagesChanged).toHaveBeenCalledTimes(1)
   })
 
   it('round-trips a user_mention with no contact', () => {

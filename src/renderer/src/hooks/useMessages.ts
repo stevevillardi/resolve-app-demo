@@ -1,6 +1,12 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { callProcedure, ipcErrorMessage, onAgentEvent, onRunsChanged } from '@/lib/ipc-client'
+import {
+  callProcedure,
+  ipcErrorMessage,
+  onAgentEvent,
+  onMessagesChanged,
+  onRunsChanged
+} from '@/lib/ipc-client'
 import { useRunStore } from '@/store/useRunStore'
 import { contactsKey } from './useConversations'
 import type { PersistedMessage } from '@/types'
@@ -44,6 +50,22 @@ export function useMessages(contactId: string): UseQueryResult<PersistedMessage[
 }
 
 export function useMessagePreviews(): UseQueryResult<PersistedMessage[]> {
+  const queryClient = useQueryClient()
+
+  // Messages written by background runs — a routine, a reply landing on a
+  // thread nobody has open — reach no runId subscription, so before this push
+  // the sidebar's preview (and everything else derived from message rows) only
+  // refreshed by accident. Group previews ride the same signal: a group row is
+  // a message row.
+  useEffect(
+    () =>
+      onMessagesChanged(() => {
+        void queryClient.invalidateQueries({ queryKey: messagePreviewsKey })
+        void queryClient.invalidateQueries({ queryKey: groupMessagesRootKey })
+      }),
+    [queryClient]
+  )
+
   return useQuery({
     queryKey: messagePreviewsKey,
     queryFn: () => callProcedure('messages.previews', undefined)

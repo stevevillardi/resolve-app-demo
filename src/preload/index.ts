@@ -43,6 +43,16 @@ const api = {
       if (message.kind === 'usage-changed') callback()
     }),
 
+  onRoutinesChanged: (callback: () => void): (() => void) =>
+    subscribe((message) => {
+      if (message.kind === 'routines-changed') callback()
+    }),
+
+  onMessagesChanged: (callback: () => void): (() => void) =>
+    subscribe((message) => {
+      if (message.kind === 'messages-changed') callback()
+    }),
+
   // The application menu's app-verbs (new contact, settings, palette) — main
   // sends the id, the shell maps it onto the same store transitions the
   // buttons use. Same IpcRendererEvent-dropping rule as subscribe() above.

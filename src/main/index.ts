@@ -16,7 +16,7 @@ import { initDb } from './db'
 import { setupIpc } from './ipc'
 import { beginQuit, isQuitting } from './lifecycle'
 import { getMainWindow, setWindowFactory, showMainWindow } from './main-window'
-import { onRunsChangedInMain } from './services/agent-events'
+import { emitRoutinesChanged, onRunsChangedInMain } from './services/agent-events'
 import { nodeCronEngine } from './services/cron-engine'
 import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
@@ -133,8 +133,13 @@ app.whenReady().then(() => {
 
   // Before the tray, so its first menu has real next-run times rather than an
   // empty list it would have to be told about later — and before the window,
-  // because not depending on one is the entire point of the phase.
-  startScheduler(nodeCronEngine(), refreshTrayMenu)
+  // because not depending on one is the entire point of the phase. The callback
+  // wakes both audiences a routine has: the tray in main, the renderer's
+  // routine rows over the push channel.
+  startScheduler(nodeCronEngine(), () => {
+    refreshTrayMenu()
+    emitRoutinesChanged()
+  })
   createTray(showMainWindow)
   // The tray's "N turns running" line goes stale exactly when the run set
   // changes, which is also the only time it is worth redrawing.

@@ -30,7 +30,8 @@ vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('./agent-events', () => ({
   emitAgentEvent: () => {},
   emitRunsChanged: () => {},
-  emitUsageChanged: () => {}
+  emitUsageChanged: () => {},
+  emitMessagesChanged: () => {}
 }))
 vi.mock('./adapter-host', () => ({ adapterForBackend: () => harness.adapter }))
 

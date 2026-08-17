@@ -17,7 +17,7 @@ vi.mock('../db', () => ({ initDb: () => db }))
 
 // Reached through recordUsage, which announces every write. The real module
 // imports `electron`, which has no window under the node test project.
-vi.mock('./agent-events', () => ({ emitUsageChanged: () => {} }))
+vi.mock('./agent-events', () => ({ emitUsageChanged: () => {}, emitMessagesChanged: () => {} }))
 
 let summarizeResult: StructuredResult = { data: null, usage: null }
 let lastSummarizeCall: { prompt: string; schema: Record<string, unknown> } | null = null

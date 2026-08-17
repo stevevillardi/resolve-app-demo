@@ -28,6 +28,14 @@ export function onUsageChanged(callback: () => void): () => void {
   return window.api.onUsageChanged(callback)
 }
 
+export function onRoutinesChanged(callback: () => void): () => void {
+  return window.api.onRoutinesChanged(callback)
+}
+
+export function onMessagesChanged(callback: () => void): () => void {
+  return window.api.onMessagesChanged(callback)
+}
+
 export function onMenuAction(callback: (action: MenuActionId) => void): () => void {
   return window.api.onMenuAction(callback)
 }

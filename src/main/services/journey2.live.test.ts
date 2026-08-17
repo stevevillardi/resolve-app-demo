@@ -55,7 +55,8 @@ vi.mock('./agent-events', () => ({
     if (event.type === 'done') finished.get(runId)?.()
   },
   emitRunsChanged: () => {},
-  emitUsageChanged: () => {}
+  emitUsageChanged: () => {},
+  emitMessagesChanged: () => {}
 }))
 
 // The real adapters, with no injected config: outside Electron the Codex SDK

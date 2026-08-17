@@ -5,7 +5,7 @@ import { toMessage } from '../db/mappers'
 import { messages, toolCalls } from '../db/schema'
 import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
-import { emitAgentEvent, emitRunsChanged } from './agent-events'
+import { emitAgentEvent, emitMessagesChanged, emitRunsChanged } from './agent-events'
 import { summarizeTurn } from './compaction'
 import { clearBackendSessionId, getContact, setBackendSessionId } from './contacts'
 import { groupForRepo, insertGroupMessage } from './group-messages'
@@ -182,6 +182,10 @@ function insertMessage(
     .insert(messages)
     .values({ ...message, work: work ?? null, timestamp: new Date(message.timestamp) })
     .run()
+  // After the insert, never before — same ordering rule as recordUsage. This
+  // chokepoint is what keeps previews and unread counts honest for turns no
+  // renderer is subscribed to (a routine, a reply landing on a closed thread).
+  emitMessagesChanged()
   return message
 }
 

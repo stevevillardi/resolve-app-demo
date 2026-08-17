@@ -46,6 +46,7 @@ const harness = createTurnHarness()
 const emitted: { runId: string; event: AgentEvent }[] = []
 let runsChangedCount = 0
 let usageChangedCount = 0
+let messagesChangedCount = 0
 
 vi.mock('../db', () => ({ initDb: () => db }))
 
@@ -56,6 +57,9 @@ vi.mock('./agent-events', () => ({
   },
   emitUsageChanged: () => {
     usageChangedCount += 1
+  },
+  emitMessagesChanged: () => {
+    messagesChangedCount += 1
   }
 }))
 
@@ -111,6 +115,7 @@ beforeEach(() => {
   emitted.length = 0
   runsChangedCount = 0
   usageChangedCount = 0
+  messagesChangedCount = 0
   summarized.length = 0
 
   seedSkill(db)

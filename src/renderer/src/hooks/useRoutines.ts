@@ -1,10 +1,22 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
+import { callProcedure, ipcErrorMessage, onRoutinesChanged } from '@/lib/ipc-client'
 import type { Routine, RoutineDraft, RoutineUpdate } from '@/types'
 
 export const routinesKey = ['routines'] as const
 
 export function useRoutines(): UseQueryResult<Routine[]> {
+  const queryClient = useQueryClient()
+
+  // The push half (Phase 20). Mutations invalidate on their own, but a routine
+  // *firing* is main acting alone — before this subscription, a 3 a.m. run's
+  // outcome (and any recorded miss) sat stale until the next window focus.
+  // The prefix covers nextRuns too, since a fire moves the next fire time.
+  useEffect(
+    () => onRoutinesChanged(() => void queryClient.invalidateQueries({ queryKey: routinesKey })),
+    [queryClient]
+  )
+
   return useQuery({
     queryKey: routinesKey,
     queryFn: () => callProcedure('routines.list', undefined)

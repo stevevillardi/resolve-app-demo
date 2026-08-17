@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toGroup, toGroupMessage } from '../db/mappers'
+import { emitMessagesChanged } from './agent-events'
 import { groupMessages, groups } from '../db/schema'
 import type { Group, GroupMessage, GroupMessageDraft } from '../../shared/domain'
 
@@ -60,6 +61,10 @@ export function insertGroupMessage(draft: GroupMessageDraft): GroupMessage {
     .values({ ...row, timestamp: new Date(row.timestamp) })
     .run()
 
+  // After the insert, never before — see insertMessage, which shares the rule
+  // and the reason: this is the chokepoint every group writer passes through,
+  // including compaction posting a routine_run with no renderer watching.
+  emitMessagesChanged()
   return row
 }
 
