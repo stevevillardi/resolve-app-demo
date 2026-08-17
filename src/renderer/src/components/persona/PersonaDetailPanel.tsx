@@ -257,18 +257,34 @@ function PersonaForm({
               <SegmentedControl
                 options={SANDBOX_OPTIONS}
                 value={sandbox}
-                onChange={setSandbox}
+                onChange={(value) => {
+                  setSandbox(value)
+                  // full_access bypasses the tools that enforce a narrower
+                  // GitHub scope, so main refuses the pair — mirror that here
+                  // rather than letting Save be the first thing that says so.
+                  if (value === 'full_access') setGithubScope('full_access')
+                }}
                 aria-label="Sandbox level"
               />
               <ScopeChip axis="sandbox" value={sandbox} className="self-start" />
             </Field>
             <Field label="GitHub scope">
-              <SegmentedControl
-                options={GITHUB_SCOPE_OPTIONS}
-                value={githubScope}
-                onChange={setGithubScope}
-                aria-label="GitHub scope"
-              />
+              {sandbox === 'full_access' ? (
+                /* Not a disabled control: there is no choice to make. With a
+                   full sandbox neither the MCP tool filter nor the shell guard
+                   runs, so any narrower scope would be a label, not a limit. */
+                <p className="text-muted-foreground text-xs text-pretty">
+                  Full sandbox access implies full GitHub scope — nothing narrower is enforceable
+                  there.
+                </p>
+              ) : (
+                <SegmentedControl
+                  options={GITHUB_SCOPE_OPTIONS}
+                  value={githubScope}
+                  onChange={setGithubScope}
+                  aria-label="GitHub scope"
+                />
+              )}
               <ScopeChip axis="github" value={githubScope} className="self-start" />
             </Field>
           </FieldGrid>

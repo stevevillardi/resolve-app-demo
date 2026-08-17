@@ -248,3 +248,34 @@ describe('the foreign key behind the check', () => {
     expect(getPersonaTemplate(persona.id)).not.toBeNull()
   })
 })
+
+describe('the full_access scope rule', () => {
+  it('refuses to create full sandbox with a narrower GitHub scope', () => {
+    expect(() =>
+      createPersonaTemplate({ ...DRAFT, sandbox: 'full_access', githubScope: 'read_only' })
+    ).toThrow(/full sandbox access/i)
+    expect(() =>
+      createPersonaTemplate({ ...DRAFT, sandbox: 'full_access', githubScope: 'open_pr' })
+    ).toThrow(/full sandbox access/i)
+  })
+
+  it('accepts the paired combination, and narrower scopes below full sandbox', () => {
+    expect(
+      createPersonaTemplate({ ...DRAFT, sandbox: 'full_access', githubScope: 'full_access' })
+        .sandbox
+    ).toBe('full_access')
+    expect(
+      createPersonaTemplate({ ...DRAFT, sandbox: 'workspace_write', githubScope: 'read_only' })
+        .githubScope
+    ).toBe('read_only')
+  })
+
+  it('refuses the combination on update too', () => {
+    const persona = createPersonaTemplate(DRAFT)
+    expect(() =>
+      updatePersonaTemplate({ ...persona, sandbox: 'full_access', githubScope: 'read_only' })
+    ).toThrow(/full sandbox access/i)
+    // The refusal happened before any write.
+    expect(getPersonaTemplate(persona.id)?.sandbox).toBe('read_only')
+  })
+})

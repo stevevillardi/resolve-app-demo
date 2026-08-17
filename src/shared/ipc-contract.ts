@@ -263,6 +263,25 @@ export type PrRef = z.infer<typeof prRefSchema>
 export type PrState = z.infer<typeof prStateSchema>
 export type PrResult = z.infer<typeof prResultSchema>
 
+/**
+ * See personas.create/update below. Shared so the two write paths cannot
+ * drift; the same rule is checked again in persona-templates.ts, because a
+ * Zod boundary someone routes around is a lock on a door with two doorways.
+ */
+function requireScopePairing(
+  persona: { sandbox: string; githubScope: string },
+  ctx: z.RefinementCtx
+): void {
+  if (persona.sandbox === 'full_access' && persona.githubScope !== 'full_access') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['githubScope'],
+      message:
+        'A persona with full sandbox access cannot carry a narrower GitHub scope — full access bypasses the tools that would enforce it.'
+    })
+  }
+}
+
 export const ipcContract = {
   ping: {
     input: z.void(),
@@ -464,12 +483,19 @@ export const ipcContract = {
     input: z.object({ id: z.string() }),
     output: personaTemplateSchema.nullable()
   },
+  /**
+   * Both write shapes refuse full_access sandbox + narrower githubScope
+   * (Phase 17, doc 15 item 2): under bypassPermissions / danger-full-access
+   * neither the MCP tool filter nor the shell guard runs, so a narrower scope
+   * there was a promise nothing could keep. Inputs only — the shared output
+   * schema stays permissive so rows predating migration 0010 still read.
+   */
   'personas.create': {
-    input: personaTemplateDraftSchema,
+    input: personaTemplateDraftSchema.superRefine(requireScopePairing),
     output: personaTemplateSchema
   },
   'personas.update': {
-    input: personaTemplateSchema,
+    input: personaTemplateSchema.superRefine(requireScopePairing),
     output: personaTemplateSchema
   },
   /** Rejects while contacts are bound — the error names them. */

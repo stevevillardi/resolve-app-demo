@@ -25,13 +25,29 @@ export function getPersonaTemplate(id: string): PersonaTemplate | null {
   return row ? toPersonaTemplate(row) : null
 }
 
+/**
+ * The Phase 17 scope rule, checked here as well as at the Zod boundary: under
+ * full_access neither the MCP tool filter nor the shell guard runs, so a
+ * narrower githubScope there is a promise nothing can keep. Existing rows were
+ * normalized by migration 0010.
+ */
+function assertScopePairing(persona: { sandbox: string; githubScope: string }): void {
+  if (persona.sandbox === 'full_access' && persona.githubScope !== 'full_access') {
+    throw new Error(
+      'A persona with full sandbox access cannot carry a narrower GitHub scope — full access bypasses the tools that would enforce it.'
+    )
+  }
+}
+
 export function createPersonaTemplate(draft: PersonaTemplateDraft): PersonaTemplate {
+  assertScopePairing(draft)
   const persona: PersonaTemplate = { id: randomUUID(), ...draft }
   initDb().insert(personaTemplates).values(persona).run()
   return persona
 }
 
 export function updatePersonaTemplate(persona: PersonaTemplate): PersonaTemplate {
+  assertScopePairing(persona)
   const db = initDb()
   const existing = db
     .select()
