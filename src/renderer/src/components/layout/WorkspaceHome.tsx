@@ -170,7 +170,9 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
                   key={item.contactId}
                   active={false}
                   onSelect={() => setSelected({ kind: 'contact', id: item.contactId })}
-                  leading={<AvatarColorSwatch name={item.name} color={item.color} />}
+                  leading={
+                    <AvatarColorSwatch name={item.name} color={item.color} seed={item.personaId} />
+                  }
                   trailing={
                     <span className="text-muted-foreground shrink-0 font-mono text-micro tabular-nums">
                       {formatListTimestamp(item.timestamp, now)}

@@ -97,7 +97,14 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
         about once a session.
       */}
       <ThreadHeader
-        leading={<AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="sm" />}
+        leading={
+          <AvatarColorSwatch
+            name={persona.name}
+            color={persona.avatarColor}
+            seed={persona.id}
+            size="sm"
+          />
+        }
         title={persona.name}
         subtitle={repoName(contact.repoPath)}
         subtitleTitle={contact.repoPath}

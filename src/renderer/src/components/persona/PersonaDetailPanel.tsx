@@ -123,7 +123,14 @@ function PersonaForm({
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
       <PaneHeader
-        leading={<AvatarColorSwatch name={name || persona.name} color={avatarColor} size="sm" />}
+        leading={
+          <AvatarColorSwatch
+            name={name || persona.name}
+            color={avatarColor}
+            seed={persona.id}
+            size="sm"
+          />
+        }
         title={name || 'Untitled persona'}
         actions={
           <>

@@ -237,7 +237,13 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                 onSelect={() => setPersonaId(template.id)}
                 align="center"
                 bordered
-                leading={<AvatarColorSwatch name={template.name} color={template.avatarColor} />}
+                leading={
+                  <AvatarColorSwatch
+                    name={template.name}
+                    color={template.avatarColor}
+                    seed={template.id}
+                  />
+                }
                 trailing={
                   personaId === template.id ? <Check className="size-4 shrink-0" /> : undefined
                 }
@@ -449,7 +455,12 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
         {step === 'confirm' && persona && hasRepo && (
           <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
             <div className="flex items-center gap-2.5">
-              <AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="lg" />
+              <AvatarColorSwatch
+                name={persona.name}
+                color={persona.avatarColor}
+                seed={persona.id}
+                size="lg"
+              />
               <div className="min-w-0">
                 <p className="text-sm font-medium">{persona.name}</p>
                 <p className="text-muted-foreground truncate font-mono text-xs">{chosenLabel}</p>

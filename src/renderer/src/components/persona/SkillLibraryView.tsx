@@ -131,7 +131,12 @@ function SkillForm({
               key={persona.id}
               className="border-border flex items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1"
             >
-              <AvatarColorSwatch name={persona.name} color={persona.avatarColor} size="xs" />
+              <AvatarColorSwatch
+                name={persona.name}
+                color={persona.avatarColor}
+                seed={persona.id}
+                size="xs"
+              />
               <span className="text-xs">{persona.name}</span>
             </span>
           ))

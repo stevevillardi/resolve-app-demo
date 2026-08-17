@@ -18,6 +18,8 @@ interface MessageBubbleProps {
   backend?: PersonaBackend
   senderName?: string
   senderColor?: string
+  /** The sending persona's id — seeds the bot avatar beside group replies. */
+  senderSeed?: string
   onRetry?: () => void
   /**
    * What the agent is doing right now, while `status` is `streaming` — the
@@ -58,6 +60,7 @@ export function MessageBubble({
   backend = 'claude',
   senderName,
   senderColor,
+  senderSeed,
   onRetry,
   activity,
   toolCalls
@@ -106,6 +109,7 @@ export function MessageBubble({
           <AvatarColorSwatch
             name={senderName}
             color={senderColor ?? 'var(--muted-foreground)'}
+            seed={senderSeed}
             size="xs"
           />
           <span className="text-xs font-medium">{senderName}</span>

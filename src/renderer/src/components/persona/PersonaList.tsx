@@ -53,7 +53,13 @@ export function PersonaList({ query }: { query: string }): React.JSX.Element {
             key={persona.id}
             active={active}
             onSelect={() => setSelectedId(persona.id)}
-            leading={<AvatarColorSwatch name={persona.name} color={persona.avatarColor} />}
+            leading={
+              <AvatarColorSwatch
+                name={persona.name}
+                color={persona.avatarColor}
+                seed={persona.id}
+              />
+            }
           >
             <span className="block truncate text-row font-medium">{persona.name}</span>
             <span className="text-muted-foreground block text-xs">

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { MessagesSquare } from 'lucide-react'
 import { ConversationListItem } from './ConversationListItem'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { botttsDataUri } from '@/lib/avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { useContacts, useGroups } from '@/hooks/useConversations'
@@ -70,9 +71,19 @@ function GroupAvatarCluster({
           key={persona.id}
           // Three members: the first spans the top row, the other two split
           // the bottom — a filled tile, never an awkward gap.
-          className={cn(members.length === 3 && index === 0 && 'col-span-2')}
-          style={{ backgroundColor: persona.avatarColor }}
-        />
+          className={cn(
+            'flex items-center justify-center overflow-hidden',
+            members.length === 3 && index === 0 && 'col-span-2'
+          )}
+          style={{ backgroundColor: `color-mix(in srgb, ${persona.avatarColor} 16%, transparent)` }}
+        >
+          <img
+            src={botttsDataUri(persona.id, persona.avatarColor)}
+            alt=""
+            draggable={false}
+            className="size-full object-contain"
+          />
+        </span>
       ))}
     </span>
   )
@@ -179,6 +190,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
               <AvatarColorSwatch
                 name={persona?.name ?? contact.displayName}
                 color={persona?.avatarColor ?? 'var(--muted)'}
+                seed={persona?.id}
               />
             }
           />
