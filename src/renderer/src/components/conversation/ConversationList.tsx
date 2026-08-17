@@ -116,7 +116,7 @@ function ContactRow({
         repoPath={contact.repoPath}
         contextMenu={
           <ContextMenuContent>
-            <ContactActionItems kind="context" onOpen={setDialog} />
+            <ContactActionItems kind="context" contactId={contact.id} onOpen={setDialog} />
           </ContextMenuContent>
         }
       />

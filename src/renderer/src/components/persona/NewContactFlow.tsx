@@ -14,12 +14,13 @@ import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
+import { CheckRow } from '@/components/common/CheckRow'
 import { ListRow } from '@/components/common/ListRow'
 import { Github } from '@/components/github/GithubMark'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { useAuthStatus, useVerifyGitHubNow } from '@/hooks/useAuth'
 import { usePersonas } from '@/hooks/usePersonas'
-import { useCreateContact } from '@/hooks/useConversations'
+import { useContacts, useCreateContact, useDeleteContact } from '@/hooks/useConversations'
 import { useChooseDirectory, useCloneRepo, useRepos } from '@/hooks/useRepos'
 import { useUiStore } from '@/store/useUiStore'
 import { ipcErrorMessage } from '@/lib/ipc-client'
@@ -131,6 +132,35 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
 
   const { data: personaTemplates = [] } = usePersonas()
   const { data: authStatus } = useAuthStatus()
+  const { data: contacts = [] } = useContacts()
+  const recreateContactId = useUiStore((state) => state.recreateContactId)
+  const setRecreateContactId = useUiStore((state) => state.setRecreateContactId)
+  /** The contact being recreated, when this open is a guided recreate. */
+  const recreateFrom = recreateContactId
+    ? (contacts.find((contact) => contact.id === recreateContactId) ?? null)
+    : null
+  const { remove: removeContact } = useDeleteContact()
+  const [deleteOriginal, setDeleteOriginal] = useState(true)
+
+  /**
+   * Prefill for a recreate, adjusted during render (the ListPanel search-reset
+   * pattern) so the prefilled form never flashes empty first. `isGitRepo` is
+   * derived conservatively: only an exclusive contact can sit on a non-git
+   * folder — creation forces that — so anything else is certainly git, and
+   * assuming non-git for exclusive merely narrows the isolation options.
+   */
+  const [prefilledFrom, setPrefilledFrom] = useState<string | null>(null)
+  if (open && recreateFrom && prefilledFrom !== recreateFrom.id) {
+    setPrefilledFrom(recreateFrom.id)
+    setPersonaId(recreateFrom.personaTemplateId)
+    setSource('local')
+    setLocalRepo({
+      path: recreateFrom.repoPath,
+      name: repoName(recreateFrom.repoPath),
+      isGitRepo: recreateFrom.isolation !== 'exclusive'
+    })
+    setIsolation(recreateFrom.isolation)
+  }
   const githubConnected = Boolean(authStatus?.github.connected)
   const setDialog = useUiStore((state) => state.setDialog)
   const setSelectedConversation = useUiStore((state) => state.setSelectedConversation)
@@ -166,9 +196,12 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       setIsolation(null)
       setSource('github')
       setRepoQuery('')
+      setPrefilledFrom(null)
+      setDeleteOriginal(true)
+      setRecreateContactId(null)
     }, 200)
     return () => window.clearTimeout(timer)
-  }, [open])
+  }, [open, setRecreateContactId])
 
   const persona = personaTemplates.find((p) => p.id === personaId)
   const repo = repos.data?.find((r) => r.id === repoId)
@@ -207,6 +240,12 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
           isolation: chosenIsolation
         },
         (contact) => {
+          // The replaced contact goes only after its replacement exists, and
+          // without discarding: a dirty worktree makes main refuse, which
+          // quietly keeps the original — visible in the list, never destroyed.
+          if (recreateFrom && deleteOriginal && recreateFrom.id !== contact.id) {
+            removeContact(recreateFrom.id, false)
+          }
           // Land the user in the thread they just created rather than back on
           // whatever was selected before.
           setSelectedConversation({ kind: 'contact', id: contact.id })
@@ -478,6 +517,14 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                   ? 'Works in your checkout, holding it for the whole turn.'
                   : 'Works in your checkout, alongside everyone else.'}
             </p>
+            {recreateFrom && (
+              <CheckRow
+                checked={deleteOriginal}
+                onToggle={() => setDeleteOriginal((current) => !current)}
+                title={`Delete “${recreateFrom.displayName}” after creating`}
+                description="Its conversation goes with it. Kept automatically if its checkout has uncommitted work."
+              />
+            )}
             {!chosenPath && (
               <p className="text-muted-foreground text-xs">
                 This repo isn&apos;t on this machine yet — creating the contact will clone it first.

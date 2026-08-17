@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Layers, Loader2, Pencil, Trash2, UserRoundPen } from 'lucide-react'
+import { Layers, Loader2, Pencil, RefreshCcw, Trash2, UserRoundPen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -39,12 +39,20 @@ export type ContactDialogKind = 'context' | 'rename' | 'rebind' | 'delete'
 interface ContactActionItemsProps {
   /** Which menu family these items render into — they must match their popup. */
   kind: 'dropdown' | 'context'
+  /** The contact the recreate flow prefills from. */
+  contactId: string
   onOpen: (dialog: ContactDialogKind) => void
 }
 
-export function ContactActionItems({ kind, onOpen }: ContactActionItemsProps): React.JSX.Element {
+export function ContactActionItems({
+  kind,
+  contactId,
+  onOpen
+}: ContactActionItemsProps): React.JSX.Element {
   const Item = kind === 'dropdown' ? DropdownMenuItem : ContextMenuItem
   const Separator = kind === 'dropdown' ? DropdownMenuSeparator : ContextMenuSeparator
+  const setDialog = useUiStore((state) => state.setDialog)
+  const setRecreateContactId = useUiStore((state) => state.setRecreateContactId)
 
   return (
     <>
@@ -59,6 +67,17 @@ export function ContactActionItems({ kind, onOpen }: ContactActionItemsProps): R
       <Item onClick={() => onOpen('rebind')}>
         <UserRoundPen />
         Change persona…
+      </Item>
+      {/* Not one of the parent's dialogs: recreate routes into the
+          new-contact flow, prefilled. The flow clears the marker on close. */}
+      <Item
+        onClick={() => {
+          setRecreateContactId(contactId)
+          setDialog('newContact')
+        }}
+      >
+        <RefreshCcw />
+        Recreate…
       </Item>
       <Separator />
       <Item variant="destructive" onClick={() => onOpen('delete')}>
