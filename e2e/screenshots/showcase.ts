@@ -137,12 +137,14 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
     contactId: reviewer.id,
     schedule: '0 9 * * *',
     prompt: 'Review anything that landed on main overnight and summarise what changed.',
+    monthlyBudgetUsd: null,
     enabled: true
   })
   await invoke(window, 'routines.create', {
     contactId: billing.id,
     schedule: '0 */4 * * *',
     prompt: 'Check the open pull requests for anything that has gone stale.',
+    monthlyBudgetUsd: null,
     enabled: false
   })
 
