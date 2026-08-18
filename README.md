@@ -40,6 +40,10 @@ repository you bind will ask once where clones should land.
 
 ## Demo script — the three journeys
 
+The full follow-along version — timings, expected outputs, the provoked
+failure cases, and a recovery playbook — is
+[`docs/demo-runbook.md`](docs/demo-runbook.md). The short form:
+
 The three blueprint §16 journeys, back to back, on any repo you can take
 branches and PRs on. Each exercises a different slice of the architecture.
 
