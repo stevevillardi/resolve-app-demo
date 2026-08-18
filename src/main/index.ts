@@ -23,6 +23,7 @@ import {
 } from './services/agent-events'
 import { refreshDockBadge } from './dock-badge'
 import { nodeCronEngine } from './services/cron-engine'
+import { demoRequested, stageDemoProfile } from './services/demo-profile'
 import { sweepInterruptedToolCalls } from './services/reconcile'
 import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
@@ -111,7 +112,7 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.stevevillardi.switchboard')
 
@@ -127,6 +128,13 @@ app.whenReady().then(() => {
   setWindowFactory(createWindow)
 
   initDb()
+  // Dev only, and only when asked for (`npm run demo`): rebuild the profile
+  // as the staged showcase before anything reads it. Awaited because every
+  // step below — the sweep, the seed marker, the renderer's first queries —
+  // must see the staged rows, not rows being torn out from under them.
+  if (is.dev && demoRequested()) {
+    await stageDemoProfile()
+  }
   // Synchronous and before setupIpc(): every tool_calls row still 'running'
   // is a turn the last process took down with it (the run registry starts
   // empty), and reconciling first means the renderer's first read already

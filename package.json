@@ -22,6 +22,7 @@
     "screens": "electron-vite build && playwright test --project=screens",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
+    "demo": "SWITCHBOARD_DEMO=1 electron-vite dev",
     "build": "npm run typecheck && npm run test && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "package": "npm run build && electron-builder --mac dir",
