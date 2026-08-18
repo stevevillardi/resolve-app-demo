@@ -177,7 +177,39 @@ export const groups = sqliteTable(
     id: text('id').primaryKey(),
     repoPath: text('repo_path').notNull(),
     /** Same contract as contacts.lastReadAt — see that comment. */
-    lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' })
+    lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' }),
+    /**
+     * A name the user gave this group, overriding the repository's own (§G5).
+     *
+     * Null is not "unnamed" — it means *derive from `repo_path`*, which is what
+     * every group displayed before this column and what a group still displays
+     * until someone decides otherwise. Storing the derived name at creation
+     * instead would have frozen it: a repository moved on disk would keep the
+     * old folder's name forever, with nothing on screen to explain why.
+     *
+     * That also makes rename reversible without a second control — clearing the
+     * field is a real operation with an obvious meaning, so `groups.rename`
+     * takes `string | null` rather than needing a "reset to default" action
+     * beside it.
+     */
+    name: text('name'),
+    /**
+     * Whether this group is kept out of the conversation list (§G5).
+     *
+     * Groups are created implicitly — `ensureGroupForRepo` runs inside
+     * `createContact`, so binding a second persona to a repository silently
+     * produces a row in the sidebar. Hiding is the answer to that rather than
+     * deletion: a group cannot be deleted, because the thing it is a view *of*
+     * is the set of contacts on a repository, and that set is still there.
+     *
+     * Nullable with null meaning visible, matching `last_read_at`'s posture in
+     * this table: absence is a meaning, and an upgraded profile needs no
+     * backfill to keep behaving exactly as it did. Hiding hides the row and
+     * nothing else — the group's messages, spend and unread counts are all
+     * still recorded, so unhiding restores a complete thread rather than one
+     * that starts from the moment it came back.
+     */
+    hidden: integer('hidden', { mode: 'boolean' })
   },
   // Blueprint §4: exactly one Group per repo. Enforced here rather than only
   // in ensureGroupForRepo(), so a second writer can't race a duplicate in.

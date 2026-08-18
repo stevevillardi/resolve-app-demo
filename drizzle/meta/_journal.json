@@ -148,6 +148,13 @@
       "when": 1787024606656,
       "tag": "0020_add_usage_message",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1787025247484,
+      "tag": "0021_add_group_name_hidden",
+      "breakpoints": true
     }
   ]
 }

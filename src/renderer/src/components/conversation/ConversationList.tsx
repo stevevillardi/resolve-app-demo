@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { MessagesSquare } from 'lucide-react'
 import { ConversationListItem } from './ConversationListItem'
 import { ContactActionDialogs, ContactActionItems, type ContactDialogKind } from './ContactActions'
+import { GroupActionDialogs, GroupActionItems, type GroupDialogKind } from './GroupActions'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ContextMenuContent } from '@/components/ui/context-menu'
 import { botttsDataUri } from '@/lib/avatar'
@@ -16,10 +17,10 @@ import { useUsageEvents } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
 import { stepConversation, type ConversationRef } from '@/lib/conversation-nav'
 import { byRecency } from '@/lib/conversation-sort'
-import { previewLine, repoName } from '@/lib/format'
+import { groupName, previewLine } from '@/lib/format'
 import { usageForContact, usageForContacts } from '@/lib/usage'
 import { cn } from '@/lib/utils'
-import type { Contact, PersonaBackend, PersonaTemplate } from '@/types'
+import type { Contact, Group, PersonaBackend, PersonaTemplate } from '@/types'
 
 /**
  * Every row is real as of Phase 6 — contacts and groups came in Phase 4, and
@@ -139,6 +140,38 @@ function ContactRow({
   )
 }
 
+/**
+ * A group row plus its right-click menu and that menu's dialogs (review §G5).
+ *
+ * The same shape as `ContactRow` above and for the same reason: each row needs
+ * its own dialog state, and the items are the ones the group thread header's ⋯
+ * menu renders, so right-clicking a group offers exactly what opening it would.
+ * Group rows were the last thing in this list with no menu at all.
+ */
+function GroupRow({
+  group,
+  ...item
+}: Omit<React.ComponentProps<typeof ConversationListItem>, 'repoPath' | 'contextMenu'> & {
+  group: Group
+}): React.JSX.Element {
+  const [dialog, setDialog] = useState<GroupDialogKind | null>(null)
+
+  return (
+    <>
+      <ConversationListItem
+        {...item}
+        repoPath={group.repoPath}
+        contextMenu={
+          <ContextMenuContent>
+            <GroupActionItems kind="context" group={group} onOpen={setDialog} />
+          </ContextMenuContent>
+        }
+      />
+      <GroupActionDialogs group={group} open={dialog} onClose={() => setDialog(null)} />
+    </>
+  )
+}
+
 export function ConversationList({ query }: { query: string }): React.JSX.Element {
   const selected = useUiStore((state) => state.selectedConversation)
   const setSelected = useUiStore((state) => state.setSelectedConversation)
@@ -152,6 +185,9 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
   const { data: runs = [] } = useActiveRuns()
   const unread = useUnread()
   const needle = query.trim().toLowerCase()
+  // Revealed by the disclosure at the foot of the list, and deliberately not
+  // persisted: hiding is the setting, showing is a peek.
+  const [showHidden, setShowHidden] = useState(false)
 
   const previewFor = useMemo(
     () => (contactId: string) => previews.find((message) => message.contactId === contactId),
@@ -193,14 +229,38 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
     [contacts, needle, previews]
   )
 
+  /**
+   * Hidden groups (review §G5), for the disclosure at the foot of the list.
+   *
+   * Its own list rather than a length difference, so the count stays right
+   * while a filter is narrowing everything else.
+   */
+  const hiddenGroups = useMemo(() => groups.filter((group) => group.hidden), [groups])
+
   const visibleGroups = useMemo(
     () =>
       byRecency(
-        groups.filter((group) => !needle || group.repoPath.toLowerCase().includes(needle)),
+        groups.filter((group) => {
+          /**
+           * A search reaches hidden groups whether or not they are revealed.
+           * Hiding governs the *resting* state of the list; if someone types
+           * the name of a group they hid, answering "nothing matches" is both
+           * wrong and the thing that would make hiding feel like deletion.
+           */
+          if (group.hidden && !showHidden && !needle) return false
+          if (!needle) return true
+          // The name is matched as well as the path, now that a group can carry
+          // one of its own — searching for what is written on the row and
+          // getting nothing back was the alternative.
+          return (
+            group.repoPath.toLowerCase().includes(needle) ||
+            groupName(group).toLowerCase().includes(needle)
+          )
+        }),
         (group) => groupPreviews.find((message) => message.groupId === group.id)?.timestamp,
-        (group) => repoName(group.repoPath)
+        (group) => groupName(group)
       ),
-    [groups, needle, groupPreviews]
+    [groups, needle, groupPreviews, showHidden]
   )
 
   /**
@@ -322,10 +382,10 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
         const latest = groupPreviews.find((message) => message.groupId === group.id)
 
         return (
-          <ConversationListItem
+          <GroupRow
             key={group.id}
-            name={repoName(group.repoPath)}
-            repoPath={group.repoPath}
+            group={group}
+            name={groupName(group)}
             preview={
               memberIds.length === 0
                 ? 'No contacts yet'
@@ -351,6 +411,25 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
           />
         )
       })}
+
+      {/*
+        The way back from hiding. A count rather than a permanent "Hidden"
+        section: the row exists to be found once, not to reinstate the clutter
+        hiding was meant to remove. Absent entirely when nothing is hidden, and
+        while a filter is active — a hidden group that matches the search is
+        already shown, so the count would be describing a different list.
+      */}
+      {!needle && hiddenGroups.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowHidden((current) => !current)}
+          className="text-muted-foreground hover:text-foreground self-start px-2 py-1 text-left text-meta transition-colors"
+        >
+          {showHidden
+            ? 'Hide them again'
+            : `${hiddenGroups.length} hidden ${hiddenGroups.length === 1 ? 'group' : 'groups'}`}
+        </button>
+      )}
     </div>
   )
 }

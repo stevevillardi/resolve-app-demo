@@ -184,7 +184,17 @@ export const groupSchema = z.object({
   id: z.string(),
   repoPath: z.string(),
   /** Same contract as contactSchema.lastReadAt. */
-  lastReadAt: z.number().nullable()
+  lastReadAt: z.number().nullable(),
+  /**
+   * A name the user gave this group, or null to derive one from `repoPath`.
+   *
+   * Nullable rather than always populated, so that clearing it *is* the reset —
+   * see the column comment in db/schema.ts. Read it through `groupName()` below
+   * rather than directly, so no caller has to remember the fallback.
+   */
+  name: z.string().nullable(),
+  /** Kept out of the conversation list. Null is visible; see db/schema.ts. */
+  hidden: z.boolean().nullable()
 })
 
 export const groupMessageSchema = z.object({

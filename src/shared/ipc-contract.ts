@@ -887,6 +887,33 @@ export const ipcContract = {
     output: groupSchema
   },
 
+  /**
+   * Rename a group, or clear the override with null and fall back to the
+   * repository's own name (§G5).
+   *
+   * `.trim().min(1)` matches `contacts.update`: a name of spaces is refused
+   * here rather than stored and rendered as a blank row. Null is explicit and
+   * distinct from the empty string precisely so that "put it back" is something
+   * the contract can express without a second procedure.
+   */
+  'groups.rename': {
+    input: z.object({ id: z.string(), name: z.string().trim().min(1).nullable() }),
+    output: groupSchema
+  },
+
+  /**
+   * Keep a group out of the conversation list, or bring it back.
+   *
+   * Its own procedure rather than a widened update, following
+   * `contacts.setRepoTrust`: one narrow procedure per state change, so the Zod
+   * boundary keeps saying that renaming a group and removing it from view are
+   * different decisions.
+   */
+  'groups.setHidden': {
+    input: z.object({ id: z.string(), hidden: z.boolean() }),
+    output: groupSchema
+  },
+
   'groups.list': {
     input: z.void(),
     output: z.array(groupSchema)

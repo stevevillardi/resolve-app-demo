@@ -3,6 +3,7 @@ import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
 import { branchesKey } from './useBranches'
 import { messagePreviewsKey, runsKey, usageRootKey } from './useMessages'
 import { routinesKey } from './useRoutines'
+import { useUiStore } from '@/store/useUiStore'
 import type { Contact, ContactDraft, Group, Isolation, RepoTrust } from '@/types'
 import type { ContactContext, RepoOffers } from '../../../shared/ipc-contract'
 
@@ -382,5 +383,67 @@ export function useDeleteContact(): {
     isPending: mutation.isPending,
     error: mutation.error ? ipcErrorMessage(mutation.error) : null,
     reset: mutation.reset
+  }
+}
+
+/**
+ * Renames a group, or clears the override with null (review §G5).
+ *
+ * `null` is a real argument rather than a missing one — it is how a rename is
+ * undone — so the signature takes `string | null` and the dialog's "use the
+ * repository name" action passes it deliberately.
+ */
+export function useRenameGroup(): {
+  rename: (id: string, name: string | null, onDone?: () => void) => void
+  isPending: boolean
+  error: string | null
+  reset: () => void
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string | null }) =>
+      callProcedure('groups.rename', { id, name }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: groupsKey })
+  })
+
+  return {
+    rename: (id, name, onDone) => mutation.mutate({ id, name }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null,
+    reset: () => mutation.reset()
+  }
+}
+
+/**
+ * Hides a group from the conversation list, or brings it back.
+ *
+ * Clears the selection when the group being hidden is the one on screen —
+ * otherwise the row disappears while its thread stays open, which reads as the
+ * action having half worked. Unhiding leaves the selection alone: the user is
+ * looking at a list, not at the group.
+ */
+export function useSetGroupHidden(): {
+  setHidden: (id: string, hidden: boolean, onDone?: () => void) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: ({ id, hidden }: { id: string; hidden: boolean }) =>
+      callProcedure('groups.setHidden', { id, hidden }),
+    onSuccess: (_group, { id, hidden }) => {
+      void queryClient.invalidateQueries({ queryKey: groupsKey })
+      if (!hidden) return
+      const { selectedConversation, setSelectedConversation } = useUiStore.getState()
+      if (selectedConversation?.kind === 'group' && selectedConversation.id === id) {
+        setSelectedConversation(null)
+      }
+    }
+  })
+
+  return {
+    setHidden: (id, hidden, onDone) => mutation.mutate({ id, hidden }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
   }
 }
