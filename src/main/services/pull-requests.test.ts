@@ -30,7 +30,10 @@ let token: string | null = 'gho_test'
 
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
-vi.mock('./github-auth', () => ({ getGitHubToken: () => token }))
+vi.mock('./github-auth', () => ({
+  getGitHubToken: () => token,
+  missingTokenError: (action: string) => new Error(`Connect GitHub first to ${action}.`)
+}))
 
 const pushed: { branch: string; url: string; token?: string | null }[] = []
 vi.mock('./git', async (importOriginal) => ({

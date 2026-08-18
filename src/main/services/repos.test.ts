@@ -20,7 +20,10 @@ vi.mock('./app-state', () => ({
   getAppState: (key: string) => appState.get(key) ?? null,
   setAppState: (key: string, value: string) => void appState.set(key, value)
 }))
-vi.mock('./github-auth', () => ({ getGitHubToken: () => token }))
+vi.mock('./github-auth', () => ({
+  getGitHubToken: () => token,
+  missingTokenError: (action: string) => new Error(`Connect GitHub first to ${action}.`)
+}))
 
 const { listRepos } = await import('./repos')
 

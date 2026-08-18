@@ -11,7 +11,7 @@ import {
   originUrl,
   pushBranch
 } from './git'
-import { getGitHubToken } from './github-auth'
+import { getGitHubToken, missingTokenError } from './github-auth'
 import { gitHubClient } from './github-client'
 import { getPersonaTemplate } from './persona-templates'
 import { workingPathFor } from './run-lock'
@@ -180,7 +180,7 @@ async function resolve(contactId: string): Promise<PrContext> {
   }
 
   const token = getGitHubToken()
-  if (!token) throw new Error('Connect GitHub first to open a pull request.')
+  if (!token) throw missingTokenError('open a pull request')
 
   const workingPath = workingPathFor(contact)
   if (!(await isGitRepo(workingPath))) {
