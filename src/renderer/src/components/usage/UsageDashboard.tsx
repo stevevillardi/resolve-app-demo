@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { BarChart3, Table2 } from 'lucide-react'
+import { BarChart3, Download, Table2 } from 'lucide-react'
 import {
   ChartContainer,
   ChartLegend,
@@ -17,6 +17,8 @@ import { PaneHeader } from '@/components/common/PaneHeader'
 import { PaneBody } from '@/components/common/PaneBody'
 import { Section } from '@/components/common/Section'
 import { useContacts } from '@/hooks/useConversations'
+import { useSaveExport } from '@/hooks/useExport'
+import { exportFileName, usageToCsv } from '@/lib/export'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { repoName } from '@/lib/format'
@@ -192,6 +194,31 @@ export function UsageDashboard(): React.JSX.Element {
 
   const totals = useMemo(() => aggregateUsage(shown), [shown])
 
+  /**
+   * The honest cost data's exit door (review §G2).
+   *
+   * `shown` rather than `events`: what leaves is what the screen is showing,
+   * filters and all. The alternative — always exporting everything — makes the
+   * file impossible to reconcile against the chart it came from.
+   *
+   * Names are resolved here rather than in the serializer because this is where
+   * the contact and persona lists already are. A contact that has been deleted
+   * resolves to nothing, and the empty cell is accurate: Phase 10's rule keeps
+   * the spend and drops the name.
+   */
+  const { save, isPending: saving } = useSaveExport()
+  const exportCsv = (): void => {
+    const at = Date.now()
+    save({
+      suggestedName: exportFileName(`switchboard-usage-${scopeName}`, 'csv', at),
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+      content: usageToCsv(shown, {
+        contact: (id) => contacts.find((contact) => contact.id === id)?.displayName ?? null,
+        persona: (id) => personas.find((persona) => persona.id === id)?.name ?? null
+      })
+    })
+  }
+
   const personaRows = useMemo(
     () => groupUsage(shown, byPersona(contacts, personas), metric),
     [shown, contacts, personas, metric]
@@ -286,6 +313,22 @@ export function UsageDashboard(): React.JSX.Element {
             >
               {showTable ? <BarChart3 className="size-3.5" /> : <Table2 className="size-3.5" />}
               {showTable ? 'Charts' : 'Table'}
+            </Button>
+            {/*
+              Review §G2. Exports exactly what is on screen — the scope, the
+              range and the source filter all apply — because a button on a
+              filtered view that quietly saved everything would be the one kind
+              of export nobody could check.
+            */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={shown.length === 0 || saving}
+              onClick={exportCsv}
+            >
+              <Download className="size-3.5" />
+              CSV
             </Button>
           </>
         }

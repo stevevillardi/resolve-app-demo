@@ -1164,6 +1164,27 @@ export const ipcContract = {
   'shell.revealPath': {
     input: z.object({ path: z.string() }),
     output: z.object({ revealed: z.boolean() })
+  },
+
+  // --- Export (review §G2) --------------------------------------------------
+  /**
+   * Writes text to a file the *user* picks, and returns where it went.
+   *
+   * Note what is not here: a path. Unlike the two procedures above, this needs
+   * no allowlist, because the renderer never names a destination — it proposes
+   * a filename and main opens a save dialog. The person choosing the folder is
+   * the authorization, and an allowlist on top would only mean refusing to
+   * write where they just said to.
+   *
+   * A null path back means they cancelled, which is an ordinary answer.
+   */
+  'files.saveText': {
+    input: z.object({
+      suggestedName: z.string().min(1),
+      content: z.string(),
+      filters: z.array(z.object({ name: z.string(), extensions: z.array(z.string()) })).optional()
+    }),
+    output: z.object({ path: z.string().nullable() })
   }
 } satisfies Record<string, { input: z.ZodType; output: z.ZodType }>
 

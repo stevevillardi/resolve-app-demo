@@ -6,6 +6,7 @@ import {
   RefreshCcw,
   Check,
   Cpu,
+  Download,
   FolderTree,
   RotateCcw,
   Trash2,
@@ -40,6 +41,11 @@ import {
   useStartFreshSession
 } from '@/hooks/useConversations'
 import { revealLocalPath } from '@/hooks/useDiffs'
+import { useMessages } from '@/hooks/useMessages'
+import { useUsageEvents } from '@/hooks/useUsage'
+import { useSaveExport } from '@/hooks/useExport'
+import { exportFileName, threadToMarkdown } from '@/lib/export'
+import { usageByMessage } from '@/lib/usage'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useModels } from '@/hooks/useModels'
 import { useUiStore } from '@/store/useUiStore'
@@ -57,7 +63,7 @@ import type { Contact, Isolation, PersonaBackend } from '@/types'
  */
 
 export type ContactDialogKind =
-  'context' | 'rename' | 'rebind' | 'freshSession' | 'isolation' | 'model' | 'delete'
+  'context' | 'rename' | 'rebind' | 'freshSession' | 'isolation' | 'model' | 'export' | 'delete'
 
 interface ContactActionItemsProps {
   /** Which menu family these items render into — they must match their popup. */
@@ -131,6 +137,13 @@ export function ContactActionItems({
         Recreate…
       </Item>
       <Separator />
+      {/* Review §G2. Beside Delete on purpose: the moment anyone is most
+          likely to want a copy of a conversation is just before removing it. */}
+      <Item onClick={() => onOpen('export')}>
+        <Download />
+        Export conversation…
+      </Item>
+      <Separator />
       <Item variant="destructive" onClick={() => onOpen('delete')}>
         <Trash2 />
         Delete contact…
@@ -164,6 +177,7 @@ export function ContactActionDialogs({
       {open === 'model' && (
         <ContactModelDialog contact={contact} backend={backend} onClose={onClose} />
       )}
+      {open === 'export' && <ExportThreadDialog contact={contact} onClose={onClose} />}
       {open === 'delete' && <DeleteContactDialog contact={contact} onClose={onClose} />}
       <ContextPanel
         contactId={contact.id}
@@ -583,6 +597,69 @@ function RebindPersonaDialog({
           >
             {isPending && <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />}
             Change persona
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * Exporting a conversation (review §G2).
+ *
+ * A dialog rather than a straight-to-save-panel action, for one reason: the
+ * export carries what each turn cost, and that is the app's most sensitive
+ * data leaving it. A line saying so before the file exists is cheap; noticing
+ * afterwards is not. It also has somewhere to state the count, which is the
+ * only way to tell a thread that exported from one that was empty.
+ */
+function ExportThreadDialog({
+  contact,
+  onClose
+}: {
+  contact: Contact
+  onClose: () => void
+}): React.JSX.Element {
+  const { data: messages = [] } = useMessages(contact.id)
+  const { data: usageEvents = [] } = useUsageEvents(contact.id)
+  const personas = usePersonas().data ?? []
+  const persona = personas.find((candidate) => candidate.id === contact.personaTemplateId)
+  const { save, isPending } = useSaveExport()
+
+  const run = (): void => {
+    const at = Date.now()
+    save({
+      suggestedName: exportFileName(contact.displayName, 'md', at),
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+      content: threadToMarkdown({
+        contactName: contact.displayName,
+        personaName: persona?.name ?? contact.displayName,
+        repoPath: contact.repoPath,
+        exportedAt: at,
+        messages,
+        costs: usageByMessage(usageEvents)
+      })
+    })
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Export conversation</DialogTitle>
+          <DialogDescription>
+            {messages.length === 0
+              ? 'There are no messages yet, so the file will contain only the heading.'
+              : `Writes all ${messages.length} messages to a Markdown file, exactly as they were written, with what each turn cost underneath it. Session breaks are marked. Nothing leaves this machine — you choose where the file goes.`}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={isPending} onClick={run}>
+            {isPending ? 'Saving…' : 'Choose a location…'}
           </Button>
         </DialogFooter>
       </DialogContent>

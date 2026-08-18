@@ -1,6 +1,7 @@
 import { shell } from 'electron'
 import { registerProcedure } from '../registerProcedure'
 import { isKnownLocalPath } from '../../services/local-paths'
+import { saveTextFile } from '../../services/files'
 
 /**
  * The renderer can ask to open a verification URL in the real browser, but not
@@ -39,3 +40,13 @@ registerProcedure('shell.revealPath', async ({ path }) => {
   shell.showItemInFolder(path)
   return { revealed: true }
 })
+
+/**
+ * Export (review §G2). Deliberately in this module rather than a new one: it is
+ * the same kind of thing as the two above — a request to reach outside the
+ * profile directory — and keeping them together means the next person adding
+ * one reads the allowlist rule and the reason this one is exempt in one place.
+ */
+registerProcedure('files.saveText', async (input) => ({
+  path: await saveTextFile(input)
+}))
