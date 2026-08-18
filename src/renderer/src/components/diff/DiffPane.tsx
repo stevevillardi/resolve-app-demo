@@ -41,10 +41,22 @@ function MonacoDiff({
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<DiffEditor | null>(null)
   const monacoRef = useRef<typeof MonacoModule | null>(null)
-  // The load below is async; by the time it resolves the user may have picked
-  // another file, and the mount closure's `file` would be stale.
+  /**
+   * The load below is async; by the time it resolves the user may have picked
+   * another file, and the mount closure's `file` would be stale. The ref is
+   * what the resolution callback reads instead.
+   *
+   * Kept in step from an effect rather than assigned during render. A render
+   * has to be free of side effects — React may discard one, or run it twice —
+   * and a ref written there is a mutation that survives being thrown away.
+   * Nothing is lost by moving it: `useRef(file)` already holds the right value
+   * on mount, every later change runs this effect in the same commit, and the
+   * only reader is a promise callback that cannot resolve before either.
+   */
   const fileRef = useRef(file)
-  fileRef.current = file
+  useEffect(() => {
+    fileRef.current = file
+  }, [file])
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
