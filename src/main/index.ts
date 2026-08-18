@@ -43,8 +43,8 @@ app.setName('Switchboard')
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 780,
+    width: 1440,
+    height: 900,
     // The shell is three panes wide (nav rail + conversation list + thread).
     // Below this the list panel can no longer hold a readable row.
     minWidth: 940,
