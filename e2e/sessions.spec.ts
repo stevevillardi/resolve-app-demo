@@ -139,9 +139,18 @@ test.describe('the session boundary', () => {
   })
 
   test('shows how full the session is, marked approximate', async () => {
-    // 50k of a 200k window. The ≈ is the claim being checked: a turn reports
-    // one figure covering every request it made, so this reads high.
-    await expect(thread().getByText('≈25%')).toBeVisible()
+    /**
+     * 50k of Sonnet 5's 1M window. The ≈ is the claim being checked: a turn
+     * reports one figure covering every request it made, so this reads high.
+     *
+     * This asserted 25% until the context table was corrected — Sonnet 5 was
+     * recorded at the 200k every older Claude model has, so the meter divided
+     * by a fifth of the real window. Deliberately left seeded on a 1M model
+     * rather than moved to Haiku's genuine 200k, which makes this a second
+     * tripwire on the tier: the same seed reads 25% again the moment anyone
+     * flattens the table back.
+     */
+    await expect(thread().getByText('≈5%')).toBeVisible()
   })
 })
 
