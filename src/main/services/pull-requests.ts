@@ -235,7 +235,7 @@ function latestSummary(contactId: string, branch: string): string | null {
 const TITLE_MAX = 72
 
 function titleFor(
-  { contact }: PrContext,
+  { contact, branch }: PrContext,
   commits: string[] | null,
   summary: string | null
 ): string {
@@ -243,7 +243,10 @@ function titleFor(
   // title than anything derived: the persona wrote it about this exact change.
   if (commits?.length === 1) return truncate(commits[0], TITLE_MAX)
   if (summary) return truncate(firstSentence(summary), TITLE_MAX)
-  return truncate(`${contact.displayName}: changes on ${contact.branch ?? 'its branch'}`, TITLE_MAX)
+  // `branch` is what was actually pushed (read from the working copy's HEAD),
+  // not the row's registered name — the live Phase 11 run watched those
+  // diverge and the title name a branch the PR did not ship (F5).
+  return truncate(`${contact.displayName}: changes on ${branch}`, TITLE_MAX)
 }
 
 function openingBody(context: PrContext, commits: string[] | null, summary: string | null): string {

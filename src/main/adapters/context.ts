@@ -278,8 +278,12 @@ function renderWorkingContext(context: NonNullable<SessionSpec['workingContext']
       context.repoPath +
       '` is a different checkout of the same repository and writing to it is refused. ' +
       'Everything you commit stays on your branch, where no other session can see it ' +
-      'on disk. Never write inside `.git` — it is writable only so that git itself can ' +
-      'record your commits.'
+      'on disk. Stay on `' +
+      context.branch +
+      '` — never create, switch to, or rename branches, even when asked to put work ' +
+      '"on a branch": you are already on one, and it is the name the app tracks your ' +
+      'commits, reviews, and pull requests by. Never write inside `.git` — it is ' +
+      'writable only so that git itself can record your commits.'
   ].join('\n\n')
 }
 

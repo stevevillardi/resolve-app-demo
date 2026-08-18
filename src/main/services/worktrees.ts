@@ -4,7 +4,14 @@ import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { initDb } from '../db'
 import { contacts } from '../db/schema'
-import { changedFiles, gitWritePathsFor, headSha, worktreeAdd, worktreePrune } from './git'
+import {
+  changedFiles,
+  currentBranch,
+  gitWritePathsFor,
+  headSha,
+  worktreeAdd,
+  worktreePrune
+} from './git'
 import type { SiblingBranch } from '../adapters/types'
 import { isolationOf } from '../../shared/domain'
 import type { Contact } from '../../shared/domain'
@@ -201,6 +208,40 @@ export interface WorkRecord {
  * everyone can already see it, so §6's "filesystem state is free" still holds
  * for it and there is no branch worth naming.
  */
+/**
+ * Makes the Contact's registered branch agree with the worktree's actual HEAD.
+ *
+ * Nothing stops a session from creating and checking out its own branch inside
+ * its worktree — the Phase 11 live run watched a routine do exactly that when
+ * told to "fix it on a branch" — and every reader of `contacts.branch` then
+ * drifts from reality at once: the Branches panel lists a branch whose
+ * checkout has "moved away", summaries stamp the stale name, the PR title
+ * names a branch the PR does not ship, and the Merge button offers commits
+ * behind the ones actually pushed (F5). Same principle as recordOfWork's
+ * header: git's answer wins over the row.
+ *
+ * Called at turn end, before the summariser reads the row. Never throws — a
+ * bookkeeping reconciliation must not fail a turn that already finished — and
+ * returns the Contact as it now stands so callers can keep working with the
+ * truth.
+ */
+export async function reconcileWorktreeBranch(contact: Contact): Promise<Contact> {
+  if (isolationOf(contact.isolation) !== 'worktree') return contact
+  if (!contact.worktreePath || !existsSync(join(contact.worktreePath, '.git'))) return contact
+
+  try {
+    const actual = await currentBranch(contact.worktreePath)
+    // Detached HEAD (null) is not a branch to adopt; leave the row alone.
+    if (!actual || actual === contact.branch) return contact
+
+    initDb().update(contacts).set({ branch: actual }).where(eq(contacts.id, contact.id)).run()
+    return { ...contact, branch: actual }
+  } catch (error) {
+    console.warn('[worktrees] could not reconcile branch for', contact.id, error)
+    return contact
+  }
+}
+
 export async function recordOfWork(contact: Contact): Promise<WorkRecord | null> {
   const { repoPath, worktreePath, branch } = contact
   if (isolationOf(contact.isolation) !== 'worktree') return null
