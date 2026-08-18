@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  altKey,
   firstSteps,
   guideConcepts,
   modifierKey,
@@ -126,14 +127,21 @@ describe('shortcutHints', () => {
     expect(modifierKey('linux')).toBe('Ctrl+')
   })
 
+  it('writes the alt key the way the platform does', () => {
+    expect(altKey('darwin')).toBe('⌥')
+    expect(altKey('win32')).toBe('Alt+')
+    expect(altKey('linux')).toBe('Alt+')
+  })
+
   // appInfo.get is a query, so the first frame renders without an answer.
   it('assumes macOS while the platform is still unknown', () => {
     expect(modifierKey(undefined)).toBe('⌘')
+    expect(altKey(undefined)).toBe('⌥')
   })
 
   it('lists every binding the app claims, once each', () => {
     const keys = shortcutHints('darwin').map((hint) => hint.keys)
-    expect(keys).toEqual(['⌘K', '⌘N', '⌘B', '⌘,', '/'])
+    expect(keys).toEqual(['⌘K', '⌘N', '⌥↑ ⌥↓', '⌘L', '⌘B', '⌘,', '/'])
     expect(new Set(keys).size).toBe(keys.length)
   })
 
@@ -151,10 +159,17 @@ describe('shortcutHints', () => {
 
   // The rewrite is a substring replace, so a key whose *name* contained the
   // prefix would be mangled. None do, and this is what says so out loud.
+  //
+  // ⌥↑/⌥↓ is here for a second reason: it is the one hint carrying a modifier
+  // the *menu* never sees, so nothing in `MENU_ACCELERATORS` would catch it
+  // being left as a macOS glyph on Windows. That is precisely how it was first
+  // written.
   it('rewrites only the modifier, never the key', () => {
     expect(shortcutHints('win32').map((hint) => hint.keys)).toEqual([
       'Ctrl+K',
       'Ctrl+N',
+      'Alt+↑ Alt+↓',
+      'Ctrl+L',
       'Ctrl+B',
       'Ctrl+,',
       '/'

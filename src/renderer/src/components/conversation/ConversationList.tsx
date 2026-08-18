@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MessagesSquare } from 'lucide-react'
 import { ConversationListItem } from './ConversationListItem'
 import { ContactActionDialogs, ContactActionItems, type ContactDialogKind } from './ContactActions'
@@ -14,6 +14,7 @@ import { useGroupMessagePreviews } from '@/hooks/useGroupMessages'
 import { useUnread } from '@/hooks/useUnread'
 import { useUsageEvents } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
+import { stepConversation, type ConversationRef } from '@/lib/conversation-nav'
 import { byRecency } from '@/lib/conversation-sort'
 import { previewLine, repoName } from '@/lib/format'
 import { usageForContact, usageForContacts } from '@/lib/usage'
@@ -201,6 +202,50 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
       ),
     [groups, needle, groupPreviews]
   )
+
+  /**
+   * ⌥↑ / ⌥↓ walk the rows above, in the order they are rendered.
+   *
+   * Bound here rather than in `AppShell` because this is where that order
+   * exists. Recomputing it up there from the same queries would be a second
+   * ordering to keep in step with this one, and the symptom of drift would be a
+   * shortcut that skips a row the user is looking straight at — the shape of
+   * bug Phase 22 fixed in the composer's lock check.
+   *
+   * ⌥ rather than ⌘: on macOS ⌘↑/⌘↓ move the caret to the start and end of a
+   * text field, and the composer holds focus for most of the time anyone
+   * spends reading a thread. Taking a standard editing key away from a text box
+   * to save a modifier is a bad trade. ⌥↑/⌥↓ are Slack's channel keys and are
+   * effectively free in a short chat composer.
+   *
+   * Not bound while a modal is open: the palette drives its own list with the
+   * arrow keys, and a background listener would move the selection underneath
+   * the user while they are choosing something else.
+   */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+      if (useUiStore.getState().dialog !== null) return
+
+      event.preventDefault()
+      const order: ConversationRef[] = [
+        ...visibleContacts.map((contact) => ({ kind: 'contact' as const, id: contact.id })),
+        ...visibleGroups.map((group) => ({ kind: 'group' as const, id: group.id }))
+      ]
+      // Selection read through the store rather than from the closure, so this
+      // effect re-binds when the order changes and not on every navigation.
+      const next = stepConversation(
+        order,
+        useUiStore.getState().selectedConversation,
+        event.key === 'ArrowDown' ? 1 : -1
+      )
+      if (next) setSelected(next)
+    }
+
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [visibleContacts, visibleGroups, setSelected])
 
   if (isPending) {
     return <EmptyState compact loading title="Loading conversations…" />
