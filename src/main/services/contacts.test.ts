@@ -21,6 +21,7 @@ vi.mock('electron', () => ({
 
 const {
   createContact,
+  deleteContact,
   getContact,
   listContacts,
   rebindContactPersona,
@@ -464,5 +465,64 @@ describe('rebindPersona', () => {
   it('rejects an unknown contact', () => {
     seedOtherPersona()
     expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/No such contact/)
+  })
+})
+
+/**
+ * The other direction of the run lock: a turn is in flight, and something
+ * outside the turn loop wants to change the ground under it. The lock cannot
+ * see these, because none of them takes it.
+ */
+describe('deleteContact under a running turn', () => {
+  it('refuses, and the contact is still there afterwards', async () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    const release = acquire({
+      runId: 'run-1',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(deleteContact(contact.id)).rejects.toThrow(/working right now/)
+    // The point of the guard is the write that does not happen: the row is
+    // what its own turn is about to insert a reply against.
+    expect(getContact(contact.id)).not.toBeNull()
+
+    release?.()
+    await expect(deleteContact(contact.id)).resolves.toBe(true)
+    expect(getContact(contact.id)).toBeNull()
+  })
+
+  // A turn on somebody else is not this contact's problem — the guard is per
+  // contact, not a global freeze.
+  it('allows the delete while a different contact is working', async () => {
+    const target = createContact(draft('~/code/app', 'Reviewer · app'))
+    const busy = createContact(draft('~/code/other', 'Writer · other'))
+    acquire({
+      runId: 'run-2',
+      contactId: busy.id,
+      contactName: busy.displayName,
+      workingPath: '~/code/other',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(deleteContact(target.id)).resolves.toBe(true)
+  })
+
+  it('names the contact that is in the way', async () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    acquire({
+      runId: 'run-3',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(deleteContact(contact.id)).rejects.toThrow(/Reviewer · app is working/)
   })
 })

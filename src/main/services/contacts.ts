@@ -6,7 +6,7 @@ import { toContact } from '../db/mappers'
 import { contacts, personaTemplates } from '../db/schema'
 import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
-import { activeRuns } from './run-lock'
+import { assertNoActiveRun } from './run-lock'
 import { plannedWorktree } from './worktrees'
 import { defaultIsolation } from '../../shared/domain'
 import type { Contact, ContactDraft, RepoTrust } from '../../shared/domain'
@@ -100,10 +100,18 @@ export function createContact(draft: ContactDraft): Contact {
  * exist nowhere else, and silently discarding them on a delete that was only
  * meant to tidy up a Contact is not a recoverable mistake. `discardUncommitted`
  * is how the caller says it asked.
+ *
+ * Refused while this Contact is mid-turn, and this is the sharpest of the three
+ * guards: the worktree removal below would pull the directory out from under a
+ * live session, and the row deletion would land just before that turn's `finish`
+ * inserts a reply against it — a foreign-key failure raised inside a `finally`,
+ * which is about the worst place in the turn loop to raise anything.
  */
 export async function deleteContact(id: string, discardUncommitted = false): Promise<boolean> {
   const contact = getContact(id)
   if (!contact) return false
+
+  assertNoActiveRun([id], 'deleting it')
 
   if (contact.worktreePath && existsSync(contact.worktreePath)) {
     await worktreeRemove(contact.repoPath, contact.worktreePath, discardUncommitted)
@@ -248,11 +256,7 @@ export function rebindContactPersona(id: string, personaTemplateId: string): Con
   const contact = getContact(id)
   if (!contact) throw new Error(`No such contact: ${id}`)
 
-  if (activeRuns().some((run) => run.contactId === id)) {
-    throw new Error(
-      'This contact is working right now. Wait for the turn to finish, or stop it first.'
-    )
-  }
+  assertNoActiveRun([id], 'changing its persona')
 
   const persona = db
     .select()

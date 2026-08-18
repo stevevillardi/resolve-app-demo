@@ -23,6 +23,7 @@ const {
   listPersonaTemplates,
   updatePersonaTemplate
 } = await import('./persona-templates')
+const { acquire, resetRunLocks } = await import('./run-lock')
 
 const DRAFT: PersonaTemplateDraft = {
   name: 'Code Reviewer',
@@ -53,6 +54,7 @@ function bindContact(personaId: string, displayName: string): void {
 
 beforeEach(() => {
   db = createTestDb()
+  resetRunLocks()
 })
 
 describe('create and read', () => {
@@ -174,6 +176,55 @@ describe('update', () => {
 
   it('throws for a persona that no longer exists', () => {
     expect(() => updatePersonaTemplate({ id: 'missing', ...DRAFT })).toThrow(/No such persona/)
+  })
+
+  // The clear above and a finishing turn's own setBackendSessionId write the
+  // same column, and the turn writes last — so without this the switch is
+  // silently undone and the contact keeps a key for an SDK that has never
+  // heard of it. The exact stranding the clear exists to prevent.
+  it('refuses a backend change while a bound contact is mid-turn', () => {
+    const persona = createPersonaTemplate(DRAFT)
+    bindContact(persona.id, 'alpha')
+    db.update(contacts).set({ backendSessionId: 'claude-session-1' }).run()
+    const release = acquire({
+      runId: 'run-1',
+      contactId: 'c-alpha',
+      contactName: 'alpha',
+      workingPath: '~/code/alpha',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    expect(() => updatePersonaTemplate({ ...persona, backend: 'codex', model: null })).toThrow(
+      /alpha is working right now/
+    )
+    // Nothing written: not the persona, and not the resume key.
+    expect(getPersonaTemplate(persona.id)?.backend).toBe('claude')
+    expect(db.select().from(contacts).all()[0].backendSessionId).toBe('claude-session-1')
+
+    release?.()
+    updatePersonaTemplate({ ...persona, backend: 'codex', model: null })
+    expect(getPersonaTemplate(persona.id)?.backend).toBe('codex')
+  })
+
+  // Narrow on purpose. Everything but the backend is read when a turn starts,
+  // so editing it under a running turn simply applies from the next one —
+  // freezing the whole editor whenever anything is working would be a worse
+  // trade than the race it prevents.
+  it('allows every other edit while a bound contact is mid-turn', () => {
+    const persona = createPersonaTemplate(DRAFT)
+    bindContact(persona.id, 'alpha')
+    acquire({
+      runId: 'run-2',
+      contactId: 'c-alpha',
+      contactName: 'alpha',
+      workingPath: '~/code/alpha',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    updatePersonaTemplate({ ...persona, name: 'Renamed', sandbox: 'workspace_write' })
+    expect(getPersonaTemplate(persona.id)?.name).toBe('Renamed')
   })
 })
 

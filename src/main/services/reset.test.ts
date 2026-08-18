@@ -42,6 +42,7 @@ vi.mock('./git', () => ({
 }))
 
 const { clearAppData } = await import('./reset')
+const { acquire, resetRunLocks } = await import('./run-lock')
 
 function seedContact(id: string, branch: string | null): void {
   db.insert(contacts)
@@ -58,6 +59,7 @@ function seedContact(id: string, branch: string | null): void {
 
 beforeEach(() => {
   db = createTestDb()
+  resetRunLocks()
   userData = mkdtempSync(join(tmpdir(), 'reset-test-'))
   closeDbCalls = 0
   deleteBranchCalls.length = 0
@@ -144,5 +146,32 @@ describe('clearAppData', () => {
 
     expect(db.select().from(contacts).all()).toEqual([])
     expect(deleteBranchCalls).toHaveLength(2)
+  })
+
+  // Checked up front rather than left to deleteContact's own per-contact guard,
+  // so a reset either happens or does not. Failing partway would already have
+  // removed worktrees and force-deleted branches — a worse state than either
+  // end of the operation.
+  it('refuses while anything is running, before deleting anything', async () => {
+    seedContact('c1', 'persona/one')
+    seedContact('c2', 'persona/two')
+    const release = acquire({
+      runId: 'run-1',
+      contactId: 'c2',
+      contactName: 'c2 · app',
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(clearAppData()).rejects.toThrow(/working right now/)
+    // Not one contact gone, not one branch deleted, database still open.
+    expect(db.select().from(contacts).all()).toHaveLength(2)
+    expect(deleteBranchCalls).toHaveLength(0)
+    expect(closeDbCalls).toBe(0)
+
+    release?.()
+    await clearAppData()
+    expect(db.select().from(contacts).all()).toEqual([])
   })
 })

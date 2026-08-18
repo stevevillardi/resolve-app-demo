@@ -100,6 +100,37 @@ export function activeRuns(): RunHolder[] {
   return [...holders.values()].flat()
 }
 
+/**
+ * Refuses a write that would land underneath a turn already in flight.
+ *
+ * The lock above governs *runs*: two turns in one working tree. This governs
+ * the other direction — a turn is running, and something outside the turn loop
+ * wants to change the ground it stands on. Deleting a Contact removes the
+ * worktree a live session is writing into and then deletes the row its reply is
+ * about to be inserted against; changing a persona's backend clears resume keys
+ * that a turn finishing a moment later writes straight back; resetting the app
+ * deletes the database file out from under all of it. Each is a race the run
+ * lock cannot see, because none of them takes the lock.
+ *
+ * `contactIds` null means "anything at all", which is the reset case.
+ *
+ * Names who, rather than saying "a contact": the caller is often acting on a
+ * persona or on the whole app, where the useful half of the refusal is which
+ * conversation to go and look at.
+ */
+export function assertNoActiveRun(contactIds: string[] | null, action: string): void {
+  const running = contactIds
+    ? activeRuns().filter((run) => contactIds.includes(run.contactId))
+    : activeRuns()
+  if (running.length === 0) return
+
+  const names = [...new Set(running.map((run) => run.contactName))]
+  const subject = names.length === 1 ? `${names[0]} is` : `${names.join(', ')} are`
+  throw new Error(
+    `${subject} working right now, so ${action} would land mid-turn. Wait for it to finish, or stop it first.`
+  )
+}
+
 /** Test-only. Nothing in the app releases a lock it did not take. */
 export function resetRunLocks(): void {
   holders.clear()

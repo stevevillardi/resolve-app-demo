@@ -3,6 +3,7 @@ import { asc, eq } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toPersonaTemplate } from '../db/mappers'
 import { contacts, personaTemplates } from '../db/schema'
+import { assertNoActiveRun } from './run-lock'
 import type { PersonaTemplate, PersonaTemplateDraft } from '../../shared/domain'
 
 /**
@@ -56,6 +57,17 @@ export function updatePersonaTemplate(persona: PersonaTemplate): PersonaTemplate
     .get()
   if (!existing) throw new Error(`No such persona: ${persona.id}`)
 
+  // Only the backend switch is refused, because only the backend switch races.
+  // The clear below and a finishing turn's own `setBackendSessionId` write the
+  // same column, and the turn writes last — so a backend changed mid-turn
+  // leaves that contact holding a resume key for an SDK that has never heard of
+  // it, which is the precise stranding this clear exists to prevent. Every
+  // other field is read when a turn *starts*, so changing one under a running
+  // turn simply applies from the next one, which is what a user would expect.
+  if (existing.backend !== persona.backend) {
+    assertNoActiveRun(boundContactIds(persona.id), 'changing which backend it runs on')
+  }
+
   db.transaction((tx) => {
     tx.update(personaTemplates)
       .set({
@@ -91,6 +103,16 @@ export function updatePersonaTemplate(persona: PersonaTemplate): PersonaTemplate
   })
 
   return persona
+}
+
+/** The Contacts a change to this persona would reach. */
+function boundContactIds(personaTemplateId: string): string[] {
+  return initDb()
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(eq(contacts.personaTemplateId, personaTemplateId))
+    .all()
+    .map((row) => row.id)
 }
 
 /**
