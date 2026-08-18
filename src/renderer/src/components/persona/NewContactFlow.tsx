@@ -16,11 +16,12 @@ import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { CheckRow } from '@/components/common/CheckRow'
 import { ListRow } from '@/components/common/ListRow'
+import { ISOLATION_OPTIONS } from '@/lib/isolation'
 import { Github } from '@/components/github/GithubMark'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { useAuthStatus, useVerifyGitHubNow } from '@/hooks/useAuth'
 import { usePersonas } from '@/hooks/usePersonas'
-import { useContacts, useCreateContact, useDeleteContact } from '@/hooks/useConversations'
+import { useContacts, useCreateContact, useRecreateContact } from '@/hooks/useConversations'
 import { useChooseDirectory, useCloneRepo, useRepos } from '@/hooks/useRepos'
 import { useUiStore } from '@/store/useUiStore'
 import { ipcErrorMessage } from '@/lib/ipc-client'
@@ -29,7 +30,7 @@ import { NON_REPO_NOTE, repoBindingProblem } from '@/lib/repo-binding'
 import { filterRepos, isPossiblyTruncated, REPO_PAGE_SIZE } from '@/lib/repo-filter'
 import { cn } from '@/lib/utils'
 import { defaultIsolation } from '../../../../shared/domain'
-import type { Isolation } from '@/types'
+import type { Contact, Isolation } from '@/types'
 import type { BoundRepo, RepoOption } from '../../../../shared/ipc-contract'
 
 interface NewContactFlowProps {
@@ -65,42 +66,6 @@ const STEP_COPY: Record<Step, { title: string; description: string }> = {
   },
   confirm: { title: 'Confirm', description: 'Check the scope before creating the contact.' }
 }
-
-/**
- * The three modes, in the order they are worth considering.
- *
- * Written out here rather than derived, because each one's cost is the thing
- * that decides it and none of those costs are inferable from the name.
- */
-const ISOLATION_OPTIONS: {
-  value: Isolation
-  label: string
-  description: string
-  /** Needs a git repo to be possible at all. */
-  needsGit: boolean
-}[] = [
-  {
-    value: 'worktree',
-    label: 'Its own checkout',
-    description:
-      'Works on its own branch in a separate directory, so it never waits for another persona and never touches your files. It starts from the last commit — your uncommitted work and node_modules are not there.',
-    needsGit: true
-  },
-  {
-    value: 'shared',
-    label: 'Your checkout',
-    description:
-      'Works directly in the repo, seeing your uncommitted changes and everything already installed. Writers take turns here: one runs at a time.',
-    needsGit: false
-  },
-  {
-    value: 'exclusive',
-    label: 'Your checkout, alone',
-    description:
-      'The same directory, but held for the whole turn so nothing else can read it mid-write. For work that needs the repo to itself.',
-    needsGit: false
-  }
-]
 
 function StepDots({ current }: { current: Step }): React.JSX.Element {
   const index = STEPS.indexOf(current)
@@ -139,8 +104,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const recreateFrom = recreateContactId
     ? (contacts.find((contact) => contact.id === recreateContactId) ?? null)
     : null
-  const { remove: removeContact } = useDeleteContact()
-  const [deleteOriginal, setDeleteOriginal] = useState(true)
+  const { recreate, error: recreateError } = useRecreateContact()
+  // Keeping the thread is the point of the flow now, so it is the default.
+  const [bringHistory, setBringHistory] = useState(true)
 
   /**
    * Prefill for a recreate, adjusted during render (the ListPanel search-reset
@@ -197,7 +163,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       setSource('github')
       setRepoQuery('')
       setPrefilledFrom(null)
-      setDeleteOriginal(true)
+      setBringHistory(true)
       setRecreateContactId(null)
     }, 200)
     return () => window.clearTimeout(timer)
@@ -230,28 +196,30 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const handleCreate = (): void => {
     if (!persona) return
 
-    const bind = (path: string): void =>
-      create(
-        {
-          personaTemplateId: persona.id,
-          repoPath: path,
-          // Blueprint §4's example shape — "Code Reviewer · my-app".
-          displayName: `${persona.name} · ${repoName(path)}`,
-          isolation: chosenIsolation
-        },
-        (contact) => {
-          // The replaced contact goes only after its replacement exists, and
-          // without discarding: a dirty worktree makes main refuse, which
-          // quietly keeps the original — visible in the list, never destroyed.
-          if (recreateFrom && deleteOriginal && recreateFrom.id !== contact.id) {
-            removeContact(recreateFrom.id, false)
-          }
-          // Land the user in the thread they just created rather than back on
-          // whatever was selected before.
-          setSelectedConversation({ kind: 'contact', id: contact.id })
-          onOpenChange(false)
-        }
-      )
+    const bind = (path: string): void => {
+      const draft = {
+        personaTemplateId: persona.id,
+        repoPath: path,
+        // Blueprint §4's example shape — "Code Reviewer · my-app".
+        displayName: `${persona.name} · ${repoName(path)}`,
+        isolation: chosenIsolation
+      }
+      // Land the user in the thread they just made rather than back on
+      // whatever was selected before.
+      const landOn = (contact: Contact): void => {
+        setSelectedConversation({ kind: 'contact', id: contact.id })
+        onOpenChange(false)
+      }
+
+      // One call, not create-then-delete: main re-points the old contact's
+      // messages at the new one in between, and a failure partway used to
+      // leave either two contacts or a deleted conversation. A dirty worktree
+      // still refuses, which keeps the original intact rather than half-moved.
+      if (recreateFrom) {
+        return recreate({ fromId: recreateFrom.id, draft, bringHistory }, landOn)
+      }
+      create(draft, landOn)
+    }
 
     if (chosenPath) return bind(chosenPath)
     if (source === 'github' && repo) {
@@ -519,10 +487,10 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             </p>
             {recreateFrom && (
               <CheckRow
-                checked={deleteOriginal}
-                onToggle={() => setDeleteOriginal((current) => !current)}
-                title={`Delete “${recreateFrom.displayName}” after creating`}
-                description="Its conversation goes with it. Kept automatically if its checkout has uncommitted work."
+                checked={bringHistory}
+                onToggle={() => setBringHistory((current) => !current)}
+                title={`Bring the conversation from “${recreateFrom.displayName}”`}
+                description="Every message moves across. The new contact's session has not seen any of it, so a session divider marks where its memory starts. Untick to start empty."
               />
             )}
             {!chosenPath && (
@@ -530,8 +498,10 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                 This repo isn&apos;t on this machine yet — creating the contact will clone it first.
               </p>
             )}
-            {(cloneError ?? createError) && (
-              <p className="text-destructive text-xs">{cloneError ?? createError}</p>
+            {(cloneError ?? createError ?? recreateError) && (
+              <p className="text-destructive text-xs">
+                {cloneError ?? createError ?? recreateError}
+              </p>
             )}
           </div>
         )}

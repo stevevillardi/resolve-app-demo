@@ -1,0 +1,12 @@
+-- Deliberately no backfill. Null means "this app was not recording sessions
+-- yet", which is true, and the renderer treats a null as inheriting rather than
+-- as a boundary — so an upgraded profile draws no dividers at all and the first
+-- one it ever draws is real. Backfilling from contacts.backend_session_id would
+-- claim the entire history belongs to the live session, which is only true back
+-- to the last clear and is unknowable from these rows.
+--
+-- ADD COLUMN rather than anything that rebuilds `messages`: 0017's FTS triggers
+-- belong to that table and would go with it, and messages_fts is
+-- external-content keyed by rowid, so a rebuild would silently desynchronise
+-- search with no error anywhere.
+ALTER TABLE `messages` ADD `session_id` text;

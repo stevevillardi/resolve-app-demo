@@ -4,6 +4,7 @@ import { join } from 'path'
 import { closeDb, DB_FILE_NAME } from '../db'
 import { deleteContact, listContacts } from './contacts'
 import { deleteBranch } from './git'
+import { assertNoActiveRun } from './run-lock'
 
 /**
  * Wipes the app back to a fresh install (Phase 18, the Settings dev reset).
@@ -25,8 +26,15 @@ import { deleteBranch } from './git'
  *
  * The relaunch half lives in the IPC procedure, not here: this function is
  * the testable part, and tests have no app to relaunch.
+ *
+ * Refused outright while anything is running — checked here rather than left to
+ * the per-contact guard in deleteContact, so a reset either happens or does not.
+ * Failing partway through would have already removed some worktrees and deleted
+ * some branches, which is a worse state than either end of the operation.
  */
 export async function clearAppData(): Promise<void> {
+  assertNoActiveRun(null, 'resetting the app')
+
   for (const contact of listContacts()) {
     const { repoPath, branch } = contact
     await deleteContact(contact.id, true)

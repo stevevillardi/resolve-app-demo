@@ -1,16 +1,19 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { MessageSquare } from 'lucide-react'
+import { blockingRun, lockModeFor, lockRefusal, workingPathFor } from '../../../../shared/locking'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { UsageBadge } from '@/components/usage/UsageBadge'
+import { ContextMeter } from '@/components/usage/ContextMeter'
 import { OpenPRButton } from '@/components/github/OpenPRButton'
 import { ContactMenu } from './ContactMenu'
 import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
 import { UnreadSeparator } from './UnreadSeparator'
+import { SessionSeparator } from './SessionSeparator'
 import { MessageBubble } from './MessageBubble'
 import { WorkChips } from './WorkChips'
 import { WorkDiffDialog } from './WorkDiffDialog'
@@ -36,7 +39,8 @@ import { streamText } from '@/lib/stream'
 import { slashCommands } from '@/lib/slash'
 import { hasUnansweredTail } from '@/lib/turn-tail'
 import { firstUnreadIndex } from '@/lib/unread'
-import { usageForContact } from '@/lib/usage'
+import { awaitingFreshSession, sessionBoundaries } from '@/lib/session'
+import { contextTokens, usageForContact } from '@/lib/usage'
 import { isSameDay, repoName } from '@/lib/format'
 
 interface ThreadViewProps {
@@ -79,11 +83,28 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
   const usage = useMemo(() => usageForContact(usageEvents, contactId), [usageEvents, contactId])
 
-  // A turn on *another* contact bound to the same repo is what blocks this one
-  // (blueprint §15D), so the check is by working path, not by contact.
-  const blocker = runs.find(
-    (run) => run.contactId !== contactId && run.workingPath === contact?.repoPath
+  // The session's own figures, from rows this view already has — no new query.
+  // Read off `contact.backendSessionId` rather than contacts.context, which
+  // stats the filesystem and is deliberately only fetched on demand.
+  const context = useMemo(
+    () =>
+      contextTokens(usageEvents, contact?.backendSessionId ?? null, persona?.backend ?? 'claude'),
+    [usageEvents, contact?.backendSessionId, persona?.backend]
   )
+
+  // What main would say if this send were made right now, decided by the rule
+  // main itself uses (src/shared/locking.ts) rather than by a second reading of
+  // it. Both of this contact's own facts matter: a `read_only` persona is
+  // refused by nobody, and an isolated one is locked on its worktree rather
+  // than on the repo — the composer used to ignore both.
+  const blocker =
+    contact && persona
+      ? blockingRun(
+          runs.filter((run) => run.contactId !== contactId),
+          workingPathFor(contact),
+          lockModeFor(persona, contact.isolation)
+        )
+      : null
 
   const contentRef = useRef<HTMLDivElement>(null)
   const streamed = turn ? streamText(turn.stream) : ''
@@ -99,6 +120,11 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
     setBoundary({ id: contactId, at: contact.lastReadAt })
   }
   const unreadIndex = firstUnreadIndex(thread, boundary?.id === contactId ? boundary.at : null)
+
+  // Where the backend session changed under the conversation. Unlike the unread
+  // boundary this needs no captured-at-open value: it is a property of the rows
+  // themselves, so it cannot move while the thread is on screen.
+  const boundaries = useMemo(() => sessionBoundaries(thread), [thread])
 
   // Read on open, and on arrival while open. Both views force-scroll to the
   // bottom, so on-screen ≡ read; there is no scroll tracking to say otherwise.
@@ -144,7 +170,12 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   )
 
   return (
-    <div className="bg-background flex h-full min-h-0 flex-col">
+    // `@container/pane` declared here rather than inherited: this view does not
+    // use PaneBody, which is where every other pane gets it, so a `@…/pane:`
+    // class in the header would silently never fire. That is the same defect
+    // Phase 16 found across the whole renderer — a responsive class measuring a
+    // container nobody declared.
+    <div className="@container/pane bg-background flex h-full min-h-0 flex-col">
       {/*
         The repo's name, not its path. The full path is often 60+ characters —
         a macOS temp checkout is over 80 — and it was taking the entire header
@@ -167,6 +198,12 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
         actions={
           <>
             <BackendBadge backend={persona.backend} />
+            {/*
+              Beside the spend, and deliberately: one answers what this has
+              cost, the other how much room is left, and the second is the one
+              that changes what you do next.
+            */}
+            <ContextMeter tokens={context} />
             <UsageBadge summary={usage} />
             <OpenPRButton
               githubScope={persona.githubScope}
@@ -225,6 +262,11 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               return (
                 <Fragment key={message.id}>
                   {newDay && <DaySeparator timestamp={message.timestamp} />}
+                  {/*
+                    Above the unread line when both land on one row: the session
+                    boundary is the older fact, and the two read in that order.
+                  */}
+                  {boundaries.has(index) && <SessionSeparator />}
                   {index === unreadIndex && <UnreadSeparator />}
                   <MessageBubble
                     role={message.role}
@@ -283,6 +325,16 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               onRetry={doRetry}
             />
           )}
+
+          {/*
+            The same line before the fact. A cleared resume key IS the durable
+            trace of a fresh session, so this appears the moment it is asked for
+            rather than only after a turn has been paid for to prove it — and it
+            sits at the tail, which is exactly where the boundary will be drawn.
+          */}
+          {awaitingFreshSession(contact.backendSessionId, thread.length) && (
+            <SessionSeparator pending />
+          )}
         </div>
       </ScrollArea>
 
@@ -314,9 +366,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
           sendError ??
           retryError ??
           prError ??
-          (blocker
-            ? `${blocker.contactName} is working in this repo. Wait for it to finish, or stop it from that conversation.`
-            : undefined)
+          (blocker ? lockRefusal(blocker.contactName) : undefined)
         }
         hint={
           // Scope lives beside the send button rather than buried in the

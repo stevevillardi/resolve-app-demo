@@ -155,10 +155,20 @@ export const contactSchema = z.object({
    * front rather than at first use.
    */
   worktreePath: z.string().nullable(),
-  /** The branch that worktree is on. Null whenever worktreePath is. */
+  /**
+   * The branch that worktree is on — and it outlives the worktree. A Contact
+   * that stops being isolated keeps its branch, so its committed work stays
+   * attributed to it in the Branches panel. See the column comment in
+   * src/main/db/schema.ts.
+   */
   branch: z.string().nullable(),
   /** Null reads as `shared` — that is what every pre-0007 row means. */
   isolation: isolationSchema.nullable(),
+  /**
+   * A model for this Contact alone. Null means "whatever the persona says",
+   * which is the normal case — see the column comment in src/main/db/schema.ts.
+   */
+  model: z.string().nullable(),
   /**
    * The unread boundary: message rows after this are unread. Null reads as
    * "everything read" — defensive only, since 0016 backfills and creation
@@ -242,7 +252,14 @@ export const messageSchema = z.object({
   role: messageRoleSchema,
   content: z.string(),
   timestamp: z.number(),
-  work: turnWorkSchema.optional()
+  work: turnWorkSchema.optional(),
+  /**
+   * The backend session that answered this message (Phase 22). Absent on rows
+   * written before 0018 and on turns that died before the backend named a
+   * session — which the thread reads as "carry on from the row above", never as
+   * a boundary. See the column comment in src/main/db/schema.ts.
+   */
+  sessionId: z.string().optional()
 })
 
 export const routineSchema = z.object({
@@ -333,6 +350,10 @@ export const contactDraftSchema = contactSchema
     worktreePath: true,
     branch: true,
     isolation: true,
+    // Not offered at bind time either: the persona's model is the default worth
+    // starting from, and overriding it is a later, per-Contact decision made
+    // with the thread in front of you.
+    model: true,
     // Not offered at bind time at all. Trusting a repository's instructions or
     // its skills means reading what they say first, and the bind flow has not
     // shown them — approval lives in the thread header, where the text is on

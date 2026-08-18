@@ -5,6 +5,7 @@ import {
   githubScopeSchema,
   groupMessageSchema,
   groupSchema,
+  isolationSchema,
   messageSchema,
   personaBackendSchema,
   personaTemplateDraftSchema,
@@ -682,11 +683,80 @@ export const ipcContract = {
    * message history all stay. Refused while a turn is running — rebinding
    * under a live stream would change who is speaking mid-sentence.
    *
-   * repoPath and isolation remain immutable; their remedy is still
-   * delete-and-recreate, now guided by the prefilled NewContactFlow.
+   * repoPath remains immutable; its remedy is still delete-and-recreate, now
+   * guided by the prefilled NewContactFlow. Isolation joined the mutable side
+   * in Phase 22 — see `contacts.setIsolation`.
    */
   'contacts.rebindPersona': {
     input: z.object({ id: z.string(), personaTemplateId: z.string() }),
+    output: contactSchema
+  },
+  /**
+   * Drops the resume key on purpose (Phase 22), so the next turn starts the
+   * backend over while the conversation on screen stays exactly as it is.
+   *
+   * Its own procedure rather than a flag on anything above, because it is the
+   * one act whose entire point is what it does *not* change. Every turn is
+   * billed for the whole conversation the session can see, and until now the
+   * only way to reset that was the side effect of rebindPersona — the lever
+   * over session cost reachable only by pretending to want something else.
+   */
+  'contacts.startFreshSession': {
+    input: z.object({ id: z.string() }),
+    output: contactSchema
+  },
+  /**
+   * Moves a Contact between the repo itself and its own checkout (Phase 22).
+   *
+   * Its own procedure rather than a widened `contacts.update`, for the reason
+   * `setRepoTrust` gives below: a rename and a relocation are different
+   * decisions, and one permissive update is how the second becomes a side
+   * effect of the first.
+   *
+   * `discardUncommitted` only matters when leaving a worktree that has
+   * uncommitted changes — main refuses without it, and that refusal is a
+   * decision to put in front of a human rather than an error to render red.
+   * The same two-step `contacts.delete` uses.
+   */
+  /**
+   * Replaces a Contact and brings its conversation with it (Phase 22).
+   *
+   * One procedure rather than the renderer's old create-then-delete pair,
+   * because the two halves have to be one decision: the old contact's rows are
+   * re-pointed at the new one between them, and a failure partway used to mean
+   * either two contacts or a deleted thread.
+   *
+   * `bringHistory: false` is the old behaviour — the thread goes with the
+   * contact — kept because a genuinely fresh start is a reasonable thing to
+   * want and should not require deleting twice.
+   */
+  'contacts.recreate': {
+    input: z.object({
+      fromId: z.string(),
+      draft: contactDraftSchema,
+      bringHistory: z.boolean(),
+      discardUncommitted: z.boolean().optional()
+    }),
+    output: contactSchema
+  },
+  /**
+   * A model for this Contact alone, or null to follow its persona again
+   * (Phase 22).
+   *
+   * Nullable rather than optional: "go back to the persona's" is a choice the
+   * user makes, not an absent value, and an optional field could not express
+   * it.
+   */
+  'contacts.setModel': {
+    input: z.object({ id: z.string(), model: z.string().nullable() }),
+    output: contactSchema
+  },
+  'contacts.setIsolation': {
+    input: z.object({
+      id: z.string(),
+      isolation: isolationSchema,
+      discardUncommitted: z.boolean().optional()
+    }),
     output: contactSchema
   },
   /**

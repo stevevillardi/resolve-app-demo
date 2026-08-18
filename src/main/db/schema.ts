@@ -100,7 +100,19 @@ export const contacts = sqliteTable(
      * key stable from the very first turn.
      */
     worktreePath: text('worktree_path'),
-    /** The branch its worktree is on. Null whenever worktree_path is. */
+    /**
+     * The branch its worktree is on.
+     *
+     * Outlives `worktree_path`, which it did not before Phase 22: de-isolating
+     * a Contact removes the checkout and keeps the branch, because
+     * `git worktree remove` leaves the commits and the Branches panel
+     * attributes a branch to a Contact by matching this column. Nulling it
+     * would turn that Contact's own committed work into an orphan branch with
+     * no owner. Every reader gates on `worktree_path` or on
+     * `isolationOf(...) === 'worktree'` first, so a branch with no checkout is
+     * inert until the Contact is isolated again — at which point it is
+     * deliberately the same branch.
+     */
     branch: text('branch'),
     /**
      * Where the session runs, chosen per Contact at bind time (§4) — the same
@@ -115,6 +127,24 @@ export const contacts = sqliteTable(
      * rather than a DB CHECK, so a fourth mode later needs no migration.
      */
     isolation: text('isolation', { enum: ['shared', 'worktree', 'exclusive'] }),
+    /**
+     * A model just for this Contact, overriding its persona's (Phase 22).
+     *
+     * Null means "whatever the persona says", which is every row written before
+     * this column and most rows after it. The persona is still where a model is
+     * normally chosen; this exists because a persona is reusable across
+     * repositories and a model choice often is not — the same reviewer may be
+     * worth an expensive model on the codebase that pays for it and a cheap one
+     * everywhere else, and editing the persona to say so changes it for every
+     * Contact bound to it.
+     *
+     * Not validated against the backend here. `models.ts` is a menu of
+     * plausible choices rather than a promise (availability depends on the
+     * account), so an unavailable model surfaces as a 400 in the thread like
+     * any other backend error, and a CHECK constraint would only turn a
+     * legible failure into an illegible one.
+     */
+    model: text('model'),
     /**
      * What this Contact may take from the repository it is bound to:
      * `{ instructions: boolean, skills: string[] }`.
@@ -211,7 +241,27 @@ export const messages = sqliteTable(
      * that changed nothing, so a chip row only ever appears when there is work
      * to show. JSON because the five fields are written and read together.
      */
-    work: text('work', { mode: 'json' }).$type<TurnWork>()
+    work: text('work', { mode: 'json' }).$type<TurnWork>(),
+    /**
+     * The backend session that answered this message (Phase 22) — what makes a
+     * session boundary drawable in the thread.
+     *
+     * Stamped at turn end for *both* rows of the turn, never at insert. The id
+     * does not exist yet when the user's row is written on the first turn of a
+     * session; and on the dead-resume heal path an insert-time value would
+     * label the question with a key that turned out to be dead and the answer
+     * with the live one, drawing a boundary between a question and its own
+     * reply. "The session that answered it" is true on every path, the heal
+     * included — which is also what makes the heal visible for the first time.
+     *
+     * Null means not recorded: every row written before 0018, and any turn that
+     * died before `session_started`. Deliberately never backfilled — claiming
+     * the whole history belongs to the live session is only true back to the
+     * last clear and is unknowable from the rows. The renderer treats null as
+     * inheriting rather than as a boundary, so an upgrade draws no dividers and
+     * the first one it ever draws is a real one.
+     */
+    sessionId: text('session_id')
   },
   (table) => [index('messages_contact_timestamp_idx').on(table.contactId, table.timestamp)]
 )

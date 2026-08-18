@@ -22,7 +22,8 @@ import {
   toggleSkillTrust
 } from '@/lib/capability-view'
 import { formatRelative, repoName } from '@/lib/format'
-import { contextTokens, formatTokens } from '@/lib/usage'
+import { contextFill, contextTokens, formatTokens } from '@/lib/usage'
+import { CONTEXT_WINDOWS_LAST_VERIFIED } from '../../../../shared/context-windows'
 import { cn } from '@/lib/utils'
 import type { RepoOffers } from '../../../../shared/ipc-contract'
 import type { PersonaBackend, RepoTrust } from '@/types'
@@ -62,6 +63,9 @@ export function ContextPanel({
   const [showText, setShowText] = useState(false)
 
   const tokens = contextTokens(events, context?.sessionId ?? null, backend)
+  // Same two helpers the thread header's meter uses, so the panel and the
+  // header cannot end up disagreeing about how full the session is.
+  const fill = tokens ? contextFill(tokens) : null
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -252,25 +256,45 @@ export function ContextPanel({
 
                 {tokens ? (
                   <>
+                    {/*
+                      Two figures, because they are two claims. The prompt stops
+                      growing when the conversation does; the bill keeps
+                      climbing for as long as you keep talking, because every
+                      turn re-sends the history. Showing only the second under
+                      the label "prompt size" is what this panel used to do,
+                      and on Codex it over-read threefold by turn three.
+                    */}
                     <span className="flex items-baseline gap-2">
                       <span className="text-foreground font-mono tabular-nums">
-                        {formatTokens(tokens.promptTokens)}
+                        {formatTokens(tokens.lastPromptTokens)}
                       </span>
-                      <Muted>tokens, as billed</Muted>
+                      <Muted>
+                        tokens in the last request
+                        {fill
+                          ? ` — about ${Math.round(fill.fraction * 100)}% of this model’s window`
+                          : ''}
+                      </Muted>
+                    </span>
+                    <span className="flex items-baseline gap-2">
+                      <span className="font-mono tabular-nums">
+                        {formatTokens(tokens.billedInputTokens)}
+                      </span>
+                      <Muted>input tokens billed across {tokens.turns} turns on this session</Muted>
                     </span>
                     {/*
-                      Which arithmetic produced that, spelled out. The two
+                      Which arithmetic produced those, spelled out. The two
                       backends record incompatible things — Claude re-sends the
                       whole conversation each turn, Codex reports increments —
-                      so the same rows mean different totals, and a bare number
-                      would be two different claims wearing one label.
+                      so the same rows mean different things, and a bare number
+                      would be two claims wearing one label.
                     */}
                     <Muted>
                       {tokens.reading === 'last-turn'
-                        ? 'Claude re-sends the whole conversation each turn, so this is the last turn’s prompt.'
-                        : 'Codex reports increments, so this is every turn on this session added together.'}{' '}
-                      No percentage: this app does not know this model’s context window, and a guess
-                      would look like a measurement.
+                        ? 'Claude re-sends the whole conversation each turn, so the first figure is the last turn’s prompt.'
+                        : 'Codex reports increments, so the first figure is the last turn’s own increment.'}{' '}
+                      {fill
+                        ? `Approximate: one turn reports a single figure covering every request it made, so a turn that ran several tools reads high. Window ${formatTokens(fill.window)}, ${fill.windowSource === 'published' ? 'as published' : 'inferred from the model family'} on ${CONTEXT_WINDOWS_LAST_VERIFIED}.`
+                        : 'No percentage: this app has no context-window figure for this model, and a guess would look like a measurement.'}
                     </Muted>
                   </>
                 ) : (

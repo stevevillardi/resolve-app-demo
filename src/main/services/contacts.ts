@@ -3,13 +3,13 @@ import { asc, eq } from 'drizzle-orm'
 import { existsSync } from 'fs'
 import { initDb } from '../db'
 import { toContact } from '../db/mappers'
-import { contacts, personaTemplates } from '../db/schema'
+import { contacts, messages, personaTemplates, routines, toolCalls } from '../db/schema'
 import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
-import { activeRuns } from './run-lock'
+import { assertNoActiveRun } from './run-lock'
 import { plannedWorktree } from './worktrees'
-import { defaultIsolation } from '../../shared/domain'
-import type { Contact, ContactDraft, RepoTrust } from '../../shared/domain'
+import { defaultIsolation, isolationOf } from '../../shared/domain'
+import type { Contact, ContactDraft, Isolation, RepoTrust } from '../../shared/domain'
 
 /**
  * Contact records (blueprint §4): one persona template bound to one repo.
@@ -69,6 +69,9 @@ export function createContact(draft: ContactDraft): Contact {
       id,
       backendSessionId: null,
       isolation,
+      // The persona's model is the starting point; an override is a later,
+      // per-Contact decision (see contacts.setModel).
+      model: null,
       worktreePath: planned?.path ?? null,
       branch: planned?.branch ?? null,
       // A new Contact trusts nothing its repository says. Granting that is a
@@ -100,10 +103,18 @@ export function createContact(draft: ContactDraft): Contact {
  * exist nowhere else, and silently discarding them on a delete that was only
  * meant to tidy up a Contact is not a recoverable mistake. `discardUncommitted`
  * is how the caller says it asked.
+ *
+ * Refused while this Contact is mid-turn, and this is the sharpest of the three
+ * guards: the worktree removal below would pull the directory out from under a
+ * live session, and the row deletion would land just before that turn's `finish`
+ * inserts a reply against it — a foreign-key failure raised inside a `finally`,
+ * which is about the worst place in the turn loop to raise anything.
  */
 export async function deleteContact(id: string, discardUncommitted = false): Promise<boolean> {
   const contact = getContact(id)
   if (!contact) return false
+
+  assertNoActiveRun([id], 'deleting it')
 
   if (contact.worktreePath && existsSync(contact.worktreePath)) {
     await worktreeRemove(contact.repoPath, contact.worktreePath, discardUncommitted)
@@ -124,21 +135,22 @@ export async function deleteContact(id: string, discardUncommitted = false): Pro
  * Renames a Contact. Deliberately nothing else.
  *
  * `displayName` is the only column here a human ever wants to change after the
- * fact, and it is also the only one nothing derives from. The three obvious
- * candidates for a general `updateContact` are all load-bearing:
+ * fact *and* that nothing derives from. Of the rest:
  *
  * - `repoPath` is the Group key (§4's one Group per repo), the run-lock key via
  *   workingPathFor(), and the directory the backend session was opened against.
- * - `worktreePath` and `branch` are derived from the repo and persona at bind
- *   time and are pointed at by a real checkout on disk.
+ *   Still immutable; its remedy is still delete-and-recreate.
  * - `personaTemplateId` decides the backend, so changing it would strand
- *   `backendSessionId` on an SDK that has never heard of it.
+ *   `backendSessionId` on an SDK that has never heard of it — which is why it
+ *   has its own procedure, `rebindContactPersona`, that clears the key.
+ * - `isolation`, and with it `worktreePath`/`branch`, was on this list until
+ *   Phase 22 and is now `setContactIsolation` below. The argument that put it
+ *   here — a real checkout on disk points at it — turned out to be weaker than
+ *   it sounded, because the checkout is created lazily on the first writing
+ *   turn rather than at bind time.
  *
- * Changing any of them would silently orphan a live worktree and a live
- * session. A Contact bound to the wrong thing is deleted and made again, which
- * is what deleteContact's worktree cleanup exists for. Keeping the input at
- * `{ id, displayName }` puts that constraint at the Zod boundary rather than in
- * a service-level check somebody can forget to write.
+ * Keeping this input at `{ id, displayName }` puts the remaining constraints at
+ * the Zod boundary rather than in a service check somebody can forget to write.
  */
 export function renameContact(id: string, displayName: string): Contact {
   const trimmed = displayName.trim()
@@ -155,6 +167,193 @@ export function renameContact(id: string, displayName: string): Contact {
   // Re-read rather than patching the caller's copy: listContacts orders by
   // display_name, so the row's place in the list has just moved and the caller
   // should be looking at what is actually stored.
+  return getContact(id) as Contact
+}
+
+/**
+ * Points this Contact at a different model from its persona's (Phase 22).
+ *
+ * A persona is reusable across repositories; a model choice frequently is not.
+ * The same reviewer can be worth an expensive model on the codebase that pays
+ * for it and a cheap one everywhere else, and until now saying so meant editing
+ * the persona — which silently changed it for every Contact bound to that
+ * persona, including ones on repositories the user was not thinking about.
+ *
+ * `null` puts it back to following the persona, which is the default and the
+ * common case. No run guard: the model is read when a turn *starts*, so
+ * changing it under one simply applies from the next — the same reasoning that
+ * keeps `updatePersonaTemplate` narrow.
+ *
+ * Not validated against the backend's menu. `models.ts` says outright that it
+ * is a list of plausible choices rather than a promise, since availability
+ * depends on the account; an unusable model surfaces as a normal error in the
+ * thread, which is more legible than a refusal here pretending to know better.
+ */
+export function setContactModel(id: string, model: string | null): Contact {
+  const result = initDb().update(contacts).set({ model }).where(eq(contacts.id, id)).run()
+  if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+
+  return getContact(id) as Contact
+}
+
+/**
+ * Replaces a Contact with a new one, and moves the conversation across
+ * (Phase 22).
+ *
+ * The review's complaint was that leaving costs your history: `messages` is
+ * `ON DELETE CASCADE`, so recreating a contact to change the one thing that is
+ * still immutable — its repo — deleted the whole thread on the way out. A month
+ * of work traded for a path.
+ *
+ * Fixed by adoption rather than by orphaning. Making `messages.contact_id`
+ * nullable was the obvious route and is the wrong one: SQLite cannot alter a
+ * foreign key, so the table is rebuilt — which drops 0017's FTS triggers,
+ * because triggers belong to their table, and renumbers the rowids the
+ * external-content index is keyed by. Search would stop agreeing with the
+ * database and nothing would error. And an orphaned message has no thread to
+ * live in: `search.messages` returns a bare contactId that the renderer
+ * resolves to a name, so a ⌘K hit on one would have no name and nowhere to go.
+ * Storage with no reader is worse than deletion, because it looks like a
+ * feature.
+ *
+ * Re-pointing the rows needs no migration and no FK change, and it composes
+ * with the rest of this phase: the adopted history lands above a session
+ * divider, which is the correct reading — the new contact's backend has never
+ * seen any of it.
+ *
+ * `usage_events` are deliberately left alone. Phase 10 made spend outlive its
+ * contact precisely so a total covering last month cannot shrink when somebody
+ * tidies up this month; re-pointing it at the replacement would move money that
+ * the old contact really did spend.
+ *
+ * Routines move with the thread but are **disabled** on the way. A 3am job
+ * written against one repository firing unattended against another is the kind
+ * of surprise this app exists not to produce, and deleting them silently is no
+ * better — so they survive, visibly switched off, for a human to re-arm.
+ */
+export async function recreateContact(
+  fromId: string,
+  draft: ContactDraft,
+  bringHistory: boolean,
+  discardUncommitted = false
+): Promise<Contact> {
+  const original = getContact(fromId)
+  if (!original) throw new Error(`No such contact: ${fromId}`)
+
+  assertNoActiveRun([fromId], 'replacing it')
+
+  // Before anything is written: the worktree is the only part that can refuse,
+  // and refusing after the replacement exists would leave two contacts behind.
+  if (original.worktreePath && existsSync(original.worktreePath)) {
+    await worktreeRemove(original.repoPath, original.worktreePath, discardUncommitted)
+  }
+
+  const replacement = createContact(draft)
+
+  initDb().transaction((tx) => {
+    if (bringHistory) {
+      tx.update(messages)
+        .set({ contactId: replacement.id })
+        .where(eq(messages.contactId, fromId))
+        .run()
+      // The calls belong with the replies they produced, so they travel too —
+      // otherwise the adopted thread renders tool rows that resolve to nothing.
+      tx.update(toolCalls)
+        .set({ contactId: replacement.id })
+        .where(eq(toolCalls.contactId, fromId))
+        .run()
+      tx.update(routines)
+        .set({ contactId: replacement.id, enabled: false })
+        .where(eq(routines.contactId, fromId))
+        .run()
+    }
+    tx.delete(contacts).where(eq(contacts.id, fromId)).run()
+  })
+
+  return replacement
+}
+
+/**
+ * Moves a Contact between working in the repo and working in its own checkout
+ * (Phase 22).
+ *
+ * This was documented as immutable in four places, and the argument was that a
+ * real checkout on disk points at these columns. `ensureWorktree` is why that
+ * turned out to be weaker than it sounded: the directory is created on the
+ * first *writing turn*, not at bind time, so the row is the only durable thing
+ * and the disk follows it.
+ *
+ * **shared/exclusive → worktree** writes the planned path and branch and stops.
+ * `plannedWorktree` is deterministic from (repo, persona, contact id), so a
+ * Contact that has been isolated before gets its own path and branch back, and
+ * `worktreeAdd` reuses an existing branch rather than failing — so a round trip
+ * lands back on the same work rather than stranding it. Uncommitted work in the
+ * main tree stays in the main tree: the new branch is cut from HEAD, and
+ * anything half-finished is left where the user can still see it.
+ *
+ * **worktree → shared/exclusive** has to remove a real directory, so it takes
+ * `deleteContact`'s posture rather than inventing a second one: refused when
+ * the worktree is dirty unless the caller explicitly discards. `branch` is kept
+ * on purpose even though `worktreePath` goes — `git worktree remove` leaves the
+ * branch and its commits, and the Branches panel attributes a branch to a
+ * Contact by matching this column, so nulling it would turn the Contact's own
+ * committed work into an orphan the moment it de-isolated. That makes `branch`
+ * outlive `worktreePath`, which the schema comment used to say was impossible;
+ * both comments are updated.
+ *
+ * Both directions clear the resume key. The session was opened against a
+ * working directory that no longer applies, which is the same reasoning
+ * `rebindContactPersona` uses — and since Phase 22 the thread draws a divider
+ * where that happens, so the consequence is visible rather than mysterious.
+ */
+export async function setContactIsolation(
+  id: string,
+  isolation: Isolation,
+  discardUncommitted = false
+): Promise<Contact> {
+  const contact = getContact(id)
+  if (!contact) throw new Error(`No such contact: ${id}`)
+  if (isolationOf(contact.isolation) === isolation) return contact
+
+  // Load-bearing rather than defensive: the run lock is keyed on
+  // workingPathFor(contact), so moving it under a holder would leave that
+  // holder's release looking for a slot that no longer exists.
+  assertNoActiveRun([id], 'changing where it works')
+
+  if (isolation === 'worktree') {
+    const persona = initDb()
+      .select()
+      .from(personaTemplates)
+      .where(eq(personaTemplates.id, contact.personaTemplateId))
+      .get()
+    if (!persona) throw new Error(`No such persona: ${contact.personaTemplateId}`)
+
+    const planned = plannedWorktree(contact.repoPath, persona.name, contact.id)
+    initDb()
+      .update(contacts)
+      .set({
+        isolation,
+        worktreePath: planned.path,
+        branch: planned.branch,
+        backendSessionId: null
+      })
+      .where(eq(contacts.id, id))
+      .run()
+
+    return getContact(id) as Contact
+  }
+
+  // Leaving a worktree. The directory goes; the branch does not.
+  if (contact.worktreePath && existsSync(contact.worktreePath)) {
+    await worktreeRemove(contact.repoPath, contact.worktreePath, discardUncommitted)
+  }
+
+  initDb()
+    .update(contacts)
+    .set({ isolation, worktreePath: null, backendSessionId: null })
+    .where(eq(contacts.id, id))
+    .run()
+
   return getContact(id) as Contact
 }
 
@@ -248,11 +447,7 @@ export function rebindContactPersona(id: string, personaTemplateId: string): Con
   const contact = getContact(id)
   if (!contact) throw new Error(`No such contact: ${id}`)
 
-  if (activeRuns().some((run) => run.contactId === id)) {
-    throw new Error(
-      'This contact is working right now. Wait for the turn to finish, or stop it first.'
-    )
-  }
+  assertNoActiveRun([id], 'changing its persona')
 
   const persona = db
     .select()
@@ -282,4 +477,34 @@ export function rebindContactPersona(id: string, personaTemplateId: string): Con
  */
 export function clearBackendSessionId(id: string): void {
   initDb().update(contacts).set({ backendSessionId: null }).where(eq(contacts.id, id)).run()
+}
+
+/**
+ * The user asking for the same thing on purpose (Phase 22).
+ *
+ * Until now a fresh session was only ever a side effect — of a dead key
+ * healing, or of changing persona — which left the one lever over session cost
+ * reachable only by pretending to want something else. Every turn is billed for
+ * the whole conversation it can see (this repo measured a Codex thread going
+ * 12k → 25k → 39k input tokens across three one-word turns), and this is the
+ * remedy for that, so it has to be askable directly.
+ *
+ * Exactly one column changes. The thread, the worktree, the branch, the spend
+ * and the persona all stay — the visible conversation is ours and is not what
+ * the backend is forgetting. Idempotent, because a contact with no session has
+ * already got what this offers.
+ *
+ * Refused mid-turn for the same reason the backend switch is: a turn finishing
+ * a moment later writes its own session id back over the clear, so the request
+ * would appear to succeed and silently not happen.
+ */
+export function startFreshSession(id: string): Contact {
+  const contact = getContact(id)
+  if (!contact) throw new Error(`No such contact: ${id}`)
+  if (!contact.backendSessionId) return contact
+
+  assertNoActiveRun([id], 'starting a fresh session')
+  clearBackendSessionId(id)
+
+  return getContact(id) as Contact
 }

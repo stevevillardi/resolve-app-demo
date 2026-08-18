@@ -1,6 +1,7 @@
+import { existsSync } from 'fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { groups, personaTemplates } from '../db/schema'
+import { groups, messages, personaTemplates, routines, usageEvents } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
@@ -21,13 +22,17 @@ vi.mock('electron', () => ({
 
 const {
   createContact,
+  deleteContact,
   getContact,
   listContacts,
   rebindContactPersona,
+  recreateContact,
   renameContact,
   markContactRead,
   setBackendSessionId,
-  setRepoTrust
+  setContactIsolation,
+  setRepoTrust,
+  startFreshSession
 } = await import('./contacts')
 const { ensureGroupForRepo, listGroups, markGroupRead } = await import('./groups')
 const { acquire, resetRunLocks } = await import('./run-lock')
@@ -464,5 +469,370 @@ describe('rebindPersona', () => {
   it('rejects an unknown contact', () => {
     seedOtherPersona()
     expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/No such contact/)
+  })
+})
+
+describe('recreateContact', () => {
+  /**
+   * The review's complaint, which was true: `messages` is ON DELETE CASCADE, so
+   * recreating a contact to change the one immutable thing left — its repo —
+   * traded a month of conversation for a path.
+   */
+  function seedThread(contactId: string, ids: string[]): void {
+    for (const id of ids) {
+      db.insert(messages)
+        .values({
+          id,
+          contactId,
+          role: 'user',
+          content: `said ${id}`,
+          timestamp: new Date(1_786_800_000_000)
+        })
+        .run()
+    }
+  }
+
+  it('moves the whole conversation to the replacement', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    seedThread(original.id, ['m1', 'm2', 'm3'])
+
+    const replacement = await recreateContact(
+      original.id,
+      draft('~/code/moved', 'Reviewer · moved'),
+      true
+    )
+
+    expect(replacement.id).not.toBe(original.id)
+    expect(replacement.repoPath).toBe('~/code/moved')
+    const moved = db.select().from(messages).all()
+    expect(moved).toHaveLength(3)
+    expect(moved.every((row) => row.contactId === replacement.id)).toBe(true)
+  })
+
+  it('replaces the original rather than leaving two behind', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    await recreateContact(original.id, draft('~/code/moved', 'Reviewer · moved'), true)
+
+    expect(getContact(original.id)).toBeNull()
+    expect(listContacts()).toHaveLength(1)
+  })
+
+  // The old behaviour, kept: a genuinely fresh start is a reasonable want, and
+  // should not require deleting the contact twice to get.
+  it('leaves the history behind when asked to', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    seedThread(original.id, ['m1', 'm2'])
+
+    await recreateContact(original.id, draft('~/code/moved', 'Reviewer · moved'), false)
+
+    // Cascaded away with the contact, which is what not bringing it means.
+    expect(db.select().from(messages).all()).toHaveLength(0)
+  })
+
+  // A 3am job written against one repository firing unattended against another
+  // is the surprise this app exists not to produce. Deleting them silently is
+  // no better, so they survive switched off for a human to re-arm.
+  it('brings routines across disabled', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    db.insert(routines)
+      .values({
+        id: 'r1',
+        contactId: original.id,
+        schedule: '0 9 * * *',
+        prompt: 'check the overnight commits',
+        enabled: true
+      })
+      .run()
+
+    const replacement = await recreateContact(
+      original.id,
+      draft('~/code/moved', 'Reviewer · moved'),
+      true
+    )
+
+    const moved = db.select().from(routines).all()
+    expect(moved).toHaveLength(1)
+    expect(moved[0].contactId).toBe(replacement.id)
+    expect(moved[0].enabled).toBe(false)
+  })
+
+  // Phase 10 made spend outlive its contact so a total covering last month
+  // cannot shrink when somebody tidies up this month. Re-pointing it would move
+  // money the old contact really did spend.
+  it('leaves spend attributed to the contact that spent it', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    db.insert(usageEvents)
+      .values({
+        id: 'u1',
+        contactId: original.id,
+        personaTemplateId: PERSONA_ID,
+        repoPath: '~/code/app',
+        timestamp: new Date(1_786_800_000_000),
+        source: 'message',
+        inputTokens: 100,
+        outputTokens: 10
+      })
+      .run()
+
+    const replacement = await recreateContact(
+      original.id,
+      draft('~/code/moved', 'Reviewer · moved'),
+      true
+    )
+
+    const spend = db.select().from(usageEvents).all()
+    expect(spend).toHaveLength(1)
+    expect(spend[0].contactId).not.toBe(replacement.id)
+    // Orphaned rather than moved, and still carrying what it was spent on.
+    expect(spend[0].repoPath).toBe('~/code/app')
+  })
+
+  it('refuses while the original is mid-turn, and changes nothing', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    seedThread(original.id, ['m1'])
+    const release = acquire({
+      runId: 'run-1',
+      contactId: original.id,
+      contactName: original.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(
+      recreateContact(original.id, draft('~/code/moved', 'Reviewer · moved'), true)
+    ).rejects.toThrow(/working right now/)
+
+    // No replacement created, and the thread still where it was.
+    expect(listContacts()).toHaveLength(1)
+    expect(db.select().from(messages).all()[0].contactId).toBe(original.id)
+
+    release?.()
+  })
+
+  it('rejects an unknown original', async () => {
+    await expect(
+      recreateContact('contact-invented', draft('~/code/moved', 'X'), true)
+    ).rejects.toThrow(/No such contact/)
+  })
+})
+
+describe('setContactIsolation', () => {
+  /**
+   * The claim this reverses: isolation was documented as immutable in four
+   * places because "a real checkout on disk points at it". ensureWorktree makes
+   * that false — the checkout is created on the first writing turn, not at bind
+   * time — so the row is the durable thing and the disk follows it.
+   */
+  it('plans a worktree when a shared contact becomes isolated', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    expect(contact.worktreePath).toBeNull()
+
+    const isolated = await setContactIsolation(contact.id, 'worktree')
+
+    expect(isolated.isolation).toBe('worktree')
+    expect(isolated.worktreePath).toContain('worktrees')
+    expect(isolated.branch).toMatch(/^persona\//)
+  })
+
+  // Nothing is created on disk here, and that is the point: ensureWorktree
+  // materialises it on the next writing turn, exactly as it does for a contact
+  // that was isolated at bind time.
+  it('creates nothing on disk — the next turn does that', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    const isolated = await setContactIsolation(contact.id, 'worktree')
+    expect(existsSync(isolated.worktreePath as string)).toBe(false)
+  })
+
+  it('keeps the branch when a contact stops being isolated', async () => {
+    const contact = createContact({
+      ...draft('~/code/app', 'Reviewer · app'),
+      isolation: 'worktree'
+    })
+    const branch = contact.branch
+
+    const shared = await setContactIsolation(contact.id, 'shared')
+
+    expect(shared.isolation).toBe('shared')
+    expect(shared.worktreePath).toBeNull()
+    // git worktree remove leaves the commits, and the Branches panel matches a
+    // branch to its Contact by this column — nulling it would orphan that
+    // Contact's own committed work the moment it de-isolated.
+    expect(shared.branch).toBe(branch)
+  })
+
+  // plannedWorktree is deterministic from (repo, persona, contact id) and
+  // worktreeAdd reuses an existing branch, so a round trip lands back on the
+  // same work rather than stranding it on a branch nobody points at.
+  it('returns to the same branch on a round trip', async () => {
+    const contact = createContact({
+      ...draft('~/code/app', 'Reviewer · app'),
+      isolation: 'worktree'
+    })
+    const original = { path: contact.worktreePath, branch: contact.branch }
+
+    await setContactIsolation(contact.id, 'shared')
+    const again = await setContactIsolation(contact.id, 'worktree')
+
+    expect(again.worktreePath).toBe(original.path)
+    expect(again.branch).toBe(original.branch)
+  })
+
+  // The session was opened against a working directory that no longer applies.
+  // Same reasoning as rebindContactPersona — and since Phase 22 the thread
+  // draws a divider where it happens, so the consequence is visible.
+  it('clears the resume key in both directions', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    setBackendSessionId(contact.id, 'session-abc')
+    expect((await setContactIsolation(contact.id, 'worktree')).backendSessionId).toBeNull()
+
+    setBackendSessionId(contact.id, 'session-def')
+    expect((await setContactIsolation(contact.id, 'shared')).backendSessionId).toBeNull()
+  })
+
+  it('is a no-op when the isolation already matches', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    setBackendSessionId(contact.id, 'session-abc')
+
+    // Not even the session is cleared: nothing moved, so nothing was invalidated.
+    expect((await setContactIsolation(contact.id, 'shared')).backendSessionId).toBe('session-abc')
+  })
+
+  // Load-bearing rather than defensive: the run lock is keyed on
+  // workingPathFor(contact), so moving that under a holder leaves its release
+  // looking for a slot that no longer exists.
+  it('refuses while that contact is mid-turn, and moves nothing', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    const release = acquire({
+      runId: 'run-1',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(setContactIsolation(contact.id, 'worktree')).rejects.toThrow(/working right now/)
+    expect(getContact(contact.id)?.worktreePath).toBeNull()
+    expect(getContact(contact.id)?.isolation).toBe('shared')
+
+    release?.()
+    expect((await setContactIsolation(contact.id, 'worktree')).isolation).toBe('worktree')
+  })
+
+  it('rejects an unknown contact', async () => {
+    await expect(setContactIsolation('contact-invented', 'worktree')).rejects.toThrow(
+      /No such contact/
+    )
+  })
+})
+
+describe('startFreshSession', () => {
+  it('drops the resume key and keeps everything else', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setBackendSessionId(contact.id, 'session-abc123')
+
+    const after = startFreshSession(contact.id)
+
+    expect(after.backendSessionId).toBeNull()
+    // The point of the action is what it does NOT change: the conversation is
+    // ours, and only the backend's memory of it is being dropped.
+    expect(after).toEqual({ ...getContact(contact.id), backendSessionId: null })
+    expect(after.repoPath).toBe(contact.repoPath)
+    expect(after.personaTemplateId).toBe(contact.personaTemplateId)
+    expect(after.worktreePath).toBe(contact.worktreePath)
+    expect(after.branch).toBe(contact.branch)
+  })
+
+  // A contact that has never run a turn already has what this offers, so
+  // asking again is not an error — the menu item is disabled there anyway.
+  it('is a no-op on a contact with no session', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    expect(startFreshSession(contact.id).backendSessionId).toBeNull()
+  })
+
+  // Same race as the persona backend switch: a turn finishing a moment later
+  // writes its own session id back over the clear, so without this the request
+  // would report success and silently not happen.
+  it('refuses while that contact is mid-turn, and clears nothing', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setBackendSessionId(contact.id, 'session-abc123')
+    const release = acquire({
+      runId: 'run-1',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    expect(() => startFreshSession(contact.id)).toThrow(/working right now/)
+    expect(getContact(contact.id)?.backendSessionId).toBe('session-abc123')
+
+    release?.()
+    expect(startFreshSession(contact.id).backendSessionId).toBeNull()
+  })
+
+  it('rejects an unknown contact', () => {
+    expect(() => startFreshSession('contact-invented')).toThrow(/No such contact/)
+  })
+})
+
+/**
+ * The other direction of the run lock: a turn is in flight, and something
+ * outside the turn loop wants to change the ground under it. The lock cannot
+ * see these, because none of them takes it.
+ */
+describe('deleteContact under a running turn', () => {
+  it('refuses, and the contact is still there afterwards', async () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    const release = acquire({
+      runId: 'run-1',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(deleteContact(contact.id)).rejects.toThrow(/working right now/)
+    // The point of the guard is the write that does not happen: the row is
+    // what its own turn is about to insert a reply against.
+    expect(getContact(contact.id)).not.toBeNull()
+
+    release?.()
+    await expect(deleteContact(contact.id)).resolves.toBe(true)
+    expect(getContact(contact.id)).toBeNull()
+  })
+
+  // A turn on somebody else is not this contact's problem — the guard is per
+  // contact, not a global freeze.
+  it('allows the delete while a different contact is working', async () => {
+    const target = createContact(draft('~/code/app', 'Reviewer · app'))
+    const busy = createContact(draft('~/code/other', 'Writer · other'))
+    acquire({
+      runId: 'run-2',
+      contactId: busy.id,
+      contactName: busy.displayName,
+      workingPath: '~/code/other',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(deleteContact(target.id)).resolves.toBe(true)
+  })
+
+  it('names the contact that is in the way', async () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    acquire({
+      runId: 'run-3',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(deleteContact(contact.id)).rejects.toThrow(/Reviewer · app is working/)
   })
 })

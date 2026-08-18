@@ -1,5 +1,5 @@
-import { isolationOf } from '../../shared/domain'
-import type { Contact, Isolation, PersonaTemplate } from '../../shared/domain'
+import { blockingRun } from '../../shared/locking'
+import type { LockMode } from '../../shared/locking'
 
 /**
  * Who may run where, at the same time (blueprint §15D).
@@ -21,9 +21,13 @@ import type { Contact, Isolation, PersonaTemplate } from '../../shared/domain'
  * In-memory and single-process, as §15D says: sufficient for a single-user
  * local app. Module-level mutable state matches the existing style in
  * github-auth.ts and codex-auth.ts.
+ *
+ * The *decision* — who refuses whom — lives in `src/shared/locking.ts`, because
+ * the composer has to predict this answer before sending and the renderer cannot
+ * import this file. What stays here is the state: who currently holds what.
  */
 
-export type LockMode = 'shared' | 'exclusive'
+export { workingPathFor, lockModeFor, lockRefusal, type LockMode } from '../../shared/locking'
 
 export interface RunHolder {
   runId: string
@@ -48,68 +52,15 @@ export type Release = () => void
 const holders = new Map<string, RunHolder[]>()
 
 /**
- * Where a Contact's session actually runs, which is what gets locked.
- *
- * A `worktree` Contact has its own checkout, so this returns a path nobody else
- * uses — which is the whole mechanism by which two writing personas on one repo
- * stop contending. They are not sharing a lock more politely; they are no longer
- * working in the same directory.
- *
- * `worktreePath` is set when the Contact is created, before the directory
- * exists, precisely so this stays a pure function of the row. See the
- * worktree_path comment in src/main/db/schema.ts.
- */
-export function workingPathFor(contact: Contact): string {
-  return contact.worktreePath ?? contact.repoPath
-}
-
-/**
- * `read_only` personas share; anything that can write is exclusive.
- *
- * Isolation decides *where* a session runs, not whether it locks — the two are
- * separate axes and conflating them is easy to do. A `workspace_write` Contact
- * left in the main tree still has to take the lock, or the phase would have
- * quietly unlocked every writer that opted out of worktrees. The one exception
- * is `exclusive`, which exists to demand the main tree to itself, and so locks
- * even for a reader.
- *
- * Worth knowing how strong the read-only half is, because it differs by
- * backend and this function cannot tell you: Codex's `--sandbox read-only` is
- * enforced by the OS, and Claude's is too wherever the SDK has a sandbox
- * implementation, with our allowlist behind it. `AgentCapabilities.sandboxEnforcement`
- * reports which of the two a given turn got.
- */
-export function lockModeFor(persona: PersonaTemplate, isolation: Isolation | null): LockMode {
-  if (isolationOf(isolation) === 'exclusive') return 'exclusive'
-  return persona.sandbox === 'read_only' ? 'shared' : 'exclusive'
-}
-
-/**
  * The holder that would refuse `mode` on `workingPath`, or null if nothing
- * would.
- *
- * **Only writer-vs-writer serializes** — `00-progress.md` and
- * `07-group-coordination.md` both say so in those words. A shared run is never
- * refused, and an exclusive run is refused only by another exclusive holder. A
- * `read_only` persona cannot mutate the tree, so it is neither a hazard to
- * others nor entitled to protection from them.
- *
- * The symmetry is the point. A reader may start while a writer holds, and a
- * writer may start while a reader holds; either way the reader can observe a
- * tree mid-write. That is a stale read rather than corruption, and it is the
- * price of the concurrency this exists to allow — a long `read_only` review
- * blocking every writer on the repo would be exactly the serialization the
- * write lock was narrowed to avoid.
+ * would — this module's state, decided by the shared rule.
  *
  * Shared holders are still *recorded*, because listActiveRuns() and the fleet
  * indicator have to be able to name everyone running. They just never refuse
- * anyone.
+ * anyone. See `blockingRun` in src/shared/locking.ts for why.
  */
 export function blockingHolder(workingPath: string, mode: LockMode): RunHolder | null {
-  if (mode === 'shared') return null
-
-  const current = holders.get(workingPath) ?? []
-  return current.find((holder) => holder.mode === 'exclusive') ?? null
+  return blockingRun(holders.get(workingPath) ?? [], workingPath, mode)
 }
 
 /**
@@ -147,6 +98,37 @@ export function holdersOf(workingPath: string): RunHolder[] {
 
 export function activeRuns(): RunHolder[] {
   return [...holders.values()].flat()
+}
+
+/**
+ * Refuses a write that would land underneath a turn already in flight.
+ *
+ * The lock above governs *runs*: two turns in one working tree. This governs
+ * the other direction — a turn is running, and something outside the turn loop
+ * wants to change the ground it stands on. Deleting a Contact removes the
+ * worktree a live session is writing into and then deletes the row its reply is
+ * about to be inserted against; changing a persona's backend clears resume keys
+ * that a turn finishing a moment later writes straight back; resetting the app
+ * deletes the database file out from under all of it. Each is a race the run
+ * lock cannot see, because none of them takes the lock.
+ *
+ * `contactIds` null means "anything at all", which is the reset case.
+ *
+ * Names who, rather than saying "a contact": the caller is often acting on a
+ * persona or on the whole app, where the useful half of the refusal is which
+ * conversation to go and look at.
+ */
+export function assertNoActiveRun(contactIds: string[] | null, action: string): void {
+  const running = contactIds
+    ? activeRuns().filter((run) => contactIds.includes(run.contactId))
+    : activeRuns()
+  if (running.length === 0) return
+
+  const names = [...new Set(running.map((run) => run.contactName))]
+  const subject = names.length === 1 ? `${names[0]} is` : `${names.join(', ')} are`
+  throw new Error(
+    `${subject} working right now, so ${action} would land mid-turn. Wait for it to finish, or stop it first.`
+  )
 }
 
 /** Test-only. Nothing in the app releases a lock it did not take. */

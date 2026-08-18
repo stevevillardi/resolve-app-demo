@@ -44,6 +44,7 @@ export function ContactMenu({
             kind="dropdown"
             contactId={contact.id}
             workingPath={contact.worktreePath ?? contact.repoPath}
+            hasSession={contact.backendSessionId !== null}
             onOpen={setDialog}
           />
         </DropdownMenuContent>

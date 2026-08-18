@@ -227,4 +227,96 @@ describe('migrating a populated database', () => {
     ).toThrow()
     expect(upgraded.get(`SELECT count(*) AS n FROM contacts` as never)).toEqual({ n: 0 })
   })
+
+  /**
+   * The tripwire for anything that rebuilds `messages`.
+   *
+   * `messages_fts` is external-content FTS5 keyed by rowid, and its sync
+   * triggers belong to the messages table — so a migration that does
+   * create/copy/drop/rename (which is how SQLite alters a foreign key, and how
+   * drizzle-kit writes one) takes the triggers with it and renumbers the rowids
+   * underneath the index. Nothing errors. Search simply stops agreeing with the
+   * table, and it surfaces months later as "⌘K can't find a message I can see".
+   *
+   * Asserted by searching rather than by reading the schema, because the
+   * failure this guards against is precisely one that leaves the schema looking
+   * correct.
+   */
+  it('leaves message search working across a later migration', () => {
+    const path = scratchDbPath()
+    const before = createDb(path, migrationsThrough('0017_add_message_fts'))
+    before.run(
+      `INSERT INTO persona_templates (id, name, avatar_color, backend, system_prompt, skill_ids, sandbox, github_scope)
+       VALUES ('p1', 'Code Reviewer', '#2a78d6', 'claude', 'Review.', '[]', 'read_only', 'read_only')` as never
+    )
+    before.run(
+      `INSERT INTO contacts (id, persona_template_id, repo_path, display_name)
+       VALUES ('c1', 'p1', '/Users/dev/my-app', 'Code Reviewer · my-app')` as never
+    )
+    before.run(
+      `INSERT INTO messages (id, contact_id, role, content, timestamp)
+       VALUES ('m1', 'c1', 'assistant', 'I cached the token read in auth.ts', 1786800000000)` as never
+    )
+
+    const upgraded = createDb(path, DRIZZLE)
+
+    // Still found: the index survived and still points at the row.
+    expect(
+      upgraded.get(
+        `SELECT count(*) AS n FROM messages_fts WHERE messages_fts MATCH 'auth'` as never
+      )
+    ).toEqual({ n: 1 })
+
+    // And the triggers survived: a row written after the upgrade indexes.
+    upgraded.run(
+      `INSERT INTO messages (id, contact_id, role, content, timestamp, session_id)
+       VALUES ('m2', 'c1', 'user', 'what about the refresh flow', 1786800001000, 'session-abc')` as never
+    )
+    expect(
+      upgraded.get(
+        `SELECT count(*) AS n FROM messages_fts WHERE messages_fts MATCH 'refresh'` as never
+      )
+    ).toEqual({ n: 1 })
+
+    // Stamping a session is an UPDATE on `messages`, and 0017's update trigger
+    // fires `AFTER UPDATE OF content` — so the stamp must move no index rows.
+    // Were that ever widened, every stamped turn would double in search results.
+    upgraded.run(`UPDATE messages SET session_id = 'session-abc' WHERE id = 'm1'` as never)
+    expect(
+      upgraded.get(
+        `SELECT count(*) AS n FROM messages_fts WHERE messages_fts MATCH 'auth'` as never
+      )
+    ).toEqual({ n: 1 })
+  })
+
+  it('adds session_id to existing messages as null, so no boundary is invented', () => {
+    // The no-backfill decision, asserted. A profile upgrading with a year of
+    // history must draw zero session dividers: the renderer reads null as
+    // inheriting, so the first divider it ever draws is a real one.
+    const path = scratchDbPath()
+    const before = createDb(path, migrationsThrough('0017_add_message_fts'))
+    before.run(
+      `INSERT INTO persona_templates (id, name, avatar_color, backend, system_prompt, skill_ids, sandbox, github_scope)
+       VALUES ('p1', 'Reviewer', '#2a78d6', 'claude', 'Review.', '[]', 'read_only', 'read_only')` as never
+    )
+    before.run(
+      `INSERT INTO contacts (id, persona_template_id, repo_path, display_name, backend_session_id)
+       VALUES ('c1', 'p1', '/Users/dev/my-app', 'Reviewer · my-app', 'session-live')` as never
+    )
+    for (const id of ['m1', 'm2', 'm3']) {
+      before.run(
+        `INSERT INTO messages (id, contact_id, role, content, timestamp)
+         VALUES ('${id}', 'c1', 'user', 'old talk', 1786800000000)` as never
+      )
+    }
+
+    const upgraded = createDb(path, DRIZZLE)
+
+    // Specifically NOT backfilled from the contact's live resume key, which
+    // would claim a year of history belongs to a session that may have started
+    // this morning.
+    expect(
+      upgraded.get(`SELECT count(*) AS n FROM messages WHERE session_id IS NULL` as never)
+    ).toEqual({ n: 3 })
+  })
 })

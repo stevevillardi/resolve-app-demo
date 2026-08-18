@@ -3,7 +3,7 @@ import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
 import { branchesKey } from './useBranches'
 import { messagePreviewsKey, runsKey, usageRootKey } from './useMessages'
 import { routinesKey } from './useRoutines'
-import type { Contact, ContactDraft, Group, RepoTrust } from '@/types'
+import type { Contact, ContactDraft, Group, Isolation, RepoTrust } from '@/types'
 import type { ContactContext, RepoOffers } from '../../../shared/ipc-contract'
 
 /**
@@ -195,6 +195,143 @@ export function useRebindPersona(): {
   return {
     rebind: (id, personaTemplateId, onDone) =>
       mutation.mutate({ id, personaTemplateId }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
+ * Drops the backend's memory of the thread, and keeps the thread (Phase 22).
+ *
+ * Only `contactsKey` is invalidated, and that is the whole shape of the
+ * feature: nothing about the messages, the routines or the spend has changed —
+ * one column on one contact has. The thread still repaints, because
+ * `backendSessionId` is what `awaitingFreshSession` reads.
+ */
+export function useStartFreshSession(): {
+  startFresh: (id: string, onDone?: () => void) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: ({ id }: { id: string }) => callProcedure('contacts.startFreshSession', { id }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+    }
+  })
+
+  return {
+    startFresh: (id, onDone) => mutation.mutate({ id }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
+ * Replaces a contact and brings its conversation across (Phase 22).
+ *
+ * One mutation where the flow used to call create and then delete: the rows are
+ * re-pointed between them, so a failure partway used to leave either two
+ * contacts or a deleted thread.
+ */
+export function useRecreateContact(): {
+  recreate: (
+    input: {
+      fromId: string
+      draft: ContactDraft
+      bringHistory: boolean
+      discardUncommitted?: boolean
+    },
+    onDone?: (contact: Contact) => void
+  ) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (input: {
+      fromId: string
+      draft: ContactDraft
+      bringHistory: boolean
+      discardUncommitted?: boolean
+    }) => callProcedure('contacts.recreate', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+      void queryClient.invalidateQueries({ queryKey: groupsKey })
+      void queryClient.invalidateQueries({ queryKey: routinesKey })
+      void queryClient.invalidateQueries({ queryKey: branchesKey })
+      // The thread itself moved to a different contact id, so every cached
+      // message list and preview is now filed under the wrong one.
+      void queryClient.invalidateQueries({ queryKey: messagePreviewsKey })
+      void queryClient.invalidateQueries({ queryKey: ['messages'] })
+    }
+  })
+
+  return {
+    recreate: (input, onDone) => mutation.mutate(input, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
+ * Points a contact at its own model, or back at its persona's (Phase 22).
+ *
+ * Only the contact list is invalidated: nothing about the thread or the spend
+ * has changed, and the model applies from the next turn.
+ */
+export function useSetContactModel(): {
+  setModel: (id: string, model: string | null, onDone?: () => void) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (input: { id: string; model: string | null }) =>
+      callProcedure('contacts.setModel', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+    }
+  })
+
+  return {
+    setModel: (id, model, onDone) => mutation.mutate({ id, model }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
+ * Moves a contact between your checkout and its own (Phase 22).
+ *
+ * Invalidates contacts and branches: de-isolating removes a checkout while
+ * keeping the branch, so the Branches panel's view of what exists on disk has
+ * genuinely changed.
+ */
+export function useSetIsolation(): {
+  setIsolation: (
+    id: string,
+    isolation: Isolation,
+    discardUncommitted: boolean,
+    onDone?: () => void
+  ) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (input: { id: string; isolation: Isolation; discardUncommitted: boolean }) =>
+      callProcedure('contacts.setIsolation', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+      void queryClient.invalidateQueries({ queryKey: branchesKey })
+    }
+  })
+
+  return {
+    setIsolation: (id, isolation, discardUncommitted, onDone) =>
+      mutation.mutate({ id, isolation, discardUncommitted }, { onSuccess: onDone }),
     isPending: mutation.isPending,
     error: mutation.error ? ipcErrorMessage(mutation.error) : null
   }

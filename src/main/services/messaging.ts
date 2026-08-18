@@ -17,6 +17,7 @@ import {
   activeRuns,
   blockingHolder,
   lockModeFor,
+  lockRefusal,
   workingPathFor,
   type Release
 } from './run-lock'
@@ -77,6 +78,12 @@ interface Run {
    * Null for a 1:1 message, and for a routine whose repo has no Group yet.
    */
   groupId: string | null
+  /**
+   * The row this turn is answering, carried so `finish` can stamp it with the
+   * session that answered it — see the session_id column in schema.ts for why
+   * that cannot happen at insert time.
+   */
+  userMessageId: string
   /** Settles the caller's `completed` promise. Never throws — see StartedTurn. */
   settle: (outcome: TurnOutcome) => void
 }
@@ -337,15 +344,9 @@ function startTurn(
   })
 
   if (!release) {
-    // "Here" rather than "in this repo": since Phase 12 a refusal means the two
-    // share a working directory, which is now a narrower thing than sharing a
-    // repo — two Contacts in their own worktrees never reach this at all.
-    const holder = blockingHolder(workingPath, mode)
-    throw new Error(
-      holder
-        ? `${holder.contactName} is already working here. Wait for it to finish, or stop it from that conversation.`
-        : 'This working copy is busy.'
-    )
+    // One wording, shared with the composer's own prediction of this refusal —
+    // see lockRefusal() for why it says "here" rather than "in this repo".
+    throw new Error(lockRefusal(blockingHolder(workingPath, mode)?.contactName ?? null))
   }
 
   // Everything from here to the point the turn is running has to hand the lock
@@ -382,7 +383,15 @@ function startTurn(
     const completed = new Promise<TurnOutcome>((resolve) => {
       settle = resolve
     })
-    runs.set(runId, { controller, release, contactId, origin, groupId, settle: settle! })
+    runs.set(runId, {
+      controller,
+      release,
+      contactId,
+      origin,
+      groupId,
+      userMessageId: userMessage.id,
+      settle: settle!
+    })
 
     // Built by session-spec.ts rather than inline, so the "what's in my
     // context" panel resolves the same thing this turn is about to send —
@@ -600,13 +609,21 @@ function finish(
   toolRowIds: string[] = [],
   work: TurnWork | null = null
 ): void {
-  const { contactId, origin, groupId } = run
+  const { contactId, origin, groupId, userMessageId } = run
   try {
+    // Both rows of the turn, stamped with the session that actually answered —
+    // which is knowable only here. See the session_id column in schema.ts: the
+    // id does not exist when the question is written on a session's first turn,
+    // and the dead-resume heal would otherwise split a question from its own
+    // reply. Collected first, written once below.
+    const stamped: string[] = [userMessageId]
+
     // An aborted turn usually has no final text, but it may have produced
     // billable tokens all the same — so the two are recorded independently
     // rather than one gating the other.
     if (finalText.trim()) {
       const reply = insertMessage(contactId, 'assistant', finalText, work)
+      stamped.push(reply.id)
 
       // Stamp the turn's tool rows with the message it ended in, so history
       // can render the calls with the reply they produced. A turn that dies
@@ -653,6 +670,14 @@ function finish(
     // Read after the run, never before: the adapters fill this in mid-stream at
     // `session_started`, and it is what makes the next turn a resume.
     if (session.sessionId) {
+      // One UPDATE for the turn's own rows. `AFTER UPDATE OF content` is what
+      // 0017's FTS trigger watches, so writing this column touches no index.
+      initDb()
+        .update(messages)
+        .set({ sessionId: session.sessionId })
+        .where(inArray(messages.id, stamped))
+        .run()
+
       const contact = getContact(contactId)
       if (contact && contact.backendSessionId !== session.sessionId) {
         setBackendSessionId(contactId, session.sessionId)
