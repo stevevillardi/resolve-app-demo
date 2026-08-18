@@ -1,4 +1,13 @@
-import { Eye, FilePen, GitPullRequest, Plug, ShieldAlert, Unlock, Unplug } from 'lucide-react'
+import {
+  Eye,
+  FilePen,
+  FileQuestion,
+  GitPullRequest,
+  Plug,
+  ShieldAlert,
+  Unlock,
+  Unplug
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -33,6 +42,15 @@ const SANDBOX: Record<SandboxLevel, Descriptor> = {
     icon: Eye,
     severity: 'safe',
     hint: 'Can read the repo. Cannot write any file.'
+  },
+  ask_writes: {
+    label: 'ask_writes',
+    icon: FileQuestion,
+    // Elevated, not safe: writes do land — a human's click away, but they
+    // land. The chip reports blast radius, and this level's is "whatever you
+    // approve", which is more than nothing.
+    severity: 'elevated',
+    hint: 'Reads freely. Every write pauses for your approval in the thread, and an unanswered ask is refused.'
   },
   workspace_write: {
     label: 'workspace_write',

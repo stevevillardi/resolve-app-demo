@@ -14,6 +14,7 @@ import { Field } from '@/components/common/Field'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { useCreatePersona } from '@/hooks/usePersonas'
 import { useModels } from '@/hooks/useModels'
+import { askBeforeWritesSupported } from '../../../../shared/domain'
 import type { GithubScope, PersonaBackend, PersonaTemplate, SandboxLevel } from '@/types'
 
 /**
@@ -42,6 +43,7 @@ const BACKEND_OPTIONS: { value: PersonaBackend; label: string }[] = [
 // there are described identically.
 const SANDBOX_OPTIONS: { value: SandboxLevel; label: string }[] = [
   { value: 'read_only', label: 'Read only' },
+  { value: 'ask_writes', label: 'Ask to write' },
   { value: 'workspace_write', label: 'Write' },
   { value: 'full_access', label: 'Full' }
 ]
@@ -90,6 +92,15 @@ export function QuickPersonaDialog({
     setSandbox(next)
     if (next === 'full_access') setGithubScope('full_access')
   }
+
+  // Same unrepresentability rule for the ask posture: Codex cannot pause a
+  // turn for an answer (askBeforeWritesSupported), so on that backend the
+  // option is not offered rather than offered and refused — and switching to
+  // Codex with it selected falls back to read_only, the nearest posture that
+  // keeps the "nothing writes without me" promise.
+  const sandboxOptions = askBeforeWritesSupported(backend)
+    ? SANDBOX_OPTIONS
+    : SANDBOX_OPTIONS.filter((option) => option.value !== 'ask_writes')
 
   const scopeOptions =
     sandbox === 'full_access'
@@ -158,6 +169,9 @@ export function QuickPersonaDialog({
                 // The model lists do not overlap, so a model chosen for one
                 // backend is not a valid choice for the other.
                 setModel(null)
+                if (!askBeforeWritesSupported(next) && sandbox === 'ask_writes') {
+                  setSandbox('read_only')
+                }
               }}
               aria-label="Backend"
               className="self-start"
@@ -190,7 +204,7 @@ export function QuickPersonaDialog({
             hint="A contact bound to this persona works only inside its own repository."
           >
             <SegmentedControl
-              options={SANDBOX_OPTIONS}
+              options={sandboxOptions}
               value={sandbox}
               onChange={chooseSandbox}
               aria-label="Sandbox"

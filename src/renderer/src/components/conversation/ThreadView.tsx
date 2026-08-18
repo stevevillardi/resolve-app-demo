@@ -16,6 +16,7 @@ import { DaySeparator } from './DaySeparator'
 import { UnreadSeparator } from './UnreadSeparator'
 import { SessionSeparator } from './SessionSeparator'
 import { MessageBubble } from './MessageBubble'
+import { ApprovalPrompt } from './ApprovalPrompt'
 import { WorkChips } from './WorkChips'
 import { WorkDiffDialog } from './WorkDiffDialog'
 import { Composer } from './Composer'
@@ -111,6 +112,11 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
         )
       : null
 
+  // This contact's held write, if its turn is paused on one (Phase 24). Off
+  // the runs query rather than the stream store, so it shows for a routine's
+  // turn too and survives a reload — see ApprovalPrompt.
+  const approvalRun = runs.find((run) => run.contactId === contactId && run.approval)
+
   const contentRef = useRef<HTMLDivElement>(null)
   const streamed = turn ? streamText(turn.stream) : ''
 
@@ -152,7 +158,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   useEffect(() => {
     const viewport = contentRef.current?.closest('[data-slot="scroll-area-viewport"]')
     if (viewport) viewport.scrollTop = viewport.scrollHeight
-  }, [thread.length, streamed])
+  }, [thread.length, streamed, approvalRun?.approval?.id])
 
   if (!contact || !persona) {
     return <EmptyState icon={MessageSquare} title="Conversation not found" />
@@ -325,6 +331,12 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               backend={persona.backend}
               onRetry={doRetry}
             />
+          )}
+
+          {/* Below the live bubble: the ask is the turn's newest utterance,
+              and the thread reads downward. */}
+          {approvalRun?.approval && (
+            <ApprovalPrompt runId={approvalRun.runId} approval={approvalRun.approval} />
           )}
 
           {/* The same notice, degraded to what survives a reload: no error

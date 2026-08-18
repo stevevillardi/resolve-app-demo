@@ -176,6 +176,30 @@ export function useRetryTurn(): {
   }
 }
 
+/**
+ * Answers a pending ask (Phase 24). Refetches `runs.list` on settle either
+ * way: a resolved ask removes the card, and a stale click (`resolved: false`)
+ * means the list already changed under us — the refetch is the correction in
+ * both cases, so there is no error state to render.
+ */
+export function useResolveApproval(): {
+  resolve: (runId: string, approvalId: string, approved: boolean) => void
+  isPending: boolean
+} {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: (input: { runId: string; approvalId: string; approved: boolean }) =>
+      callProcedure('runs.resolveApproval', input),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: runsKey })
+  })
+
+  return {
+    resolve: (runId, approvalId, approved) => mutation.mutate({ runId, approvalId, approved }),
+    isPending: mutation.isPending
+  }
+}
+
 export function useCancelRun(): { cancel: (runId: string) => void } {
   const mutation = useMutation({
     mutationFn: (runId: string) => callProcedure('messages.cancel', { runId })
