@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm'
 import { existsSync } from 'fs'
 import { initDb } from '../db'
 import { toContact } from '../db/mappers'
-import { contacts, personaTemplates } from '../db/schema'
+import { contacts, messages, personaTemplates, routines, toolCalls } from '../db/schema'
 import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
 import { assertNoActiveRun } from './run-lock'
@@ -165,6 +165,83 @@ export function renameContact(id: string, displayName: string): Contact {
   // display_name, so the row's place in the list has just moved and the caller
   // should be looking at what is actually stored.
   return getContact(id) as Contact
+}
+
+/**
+ * Replaces a Contact with a new one, and moves the conversation across
+ * (Phase 22).
+ *
+ * The review's complaint was that leaving costs your history: `messages` is
+ * `ON DELETE CASCADE`, so recreating a contact to change the one thing that is
+ * still immutable — its repo — deleted the whole thread on the way out. A month
+ * of work traded for a path.
+ *
+ * Fixed by adoption rather than by orphaning. Making `messages.contact_id`
+ * nullable was the obvious route and is the wrong one: SQLite cannot alter a
+ * foreign key, so the table is rebuilt — which drops 0017's FTS triggers,
+ * because triggers belong to their table, and renumbers the rowids the
+ * external-content index is keyed by. Search would stop agreeing with the
+ * database and nothing would error. And an orphaned message has no thread to
+ * live in: `search.messages` returns a bare contactId that the renderer
+ * resolves to a name, so a ⌘K hit on one would have no name and nowhere to go.
+ * Storage with no reader is worse than deletion, because it looks like a
+ * feature.
+ *
+ * Re-pointing the rows needs no migration and no FK change, and it composes
+ * with the rest of this phase: the adopted history lands above a session
+ * divider, which is the correct reading — the new contact's backend has never
+ * seen any of it.
+ *
+ * `usage_events` are deliberately left alone. Phase 10 made spend outlive its
+ * contact precisely so a total covering last month cannot shrink when somebody
+ * tidies up this month; re-pointing it at the replacement would move money that
+ * the old contact really did spend.
+ *
+ * Routines move with the thread but are **disabled** on the way. A 3am job
+ * written against one repository firing unattended against another is the kind
+ * of surprise this app exists not to produce, and deleting them silently is no
+ * better — so they survive, visibly switched off, for a human to re-arm.
+ */
+export async function recreateContact(
+  fromId: string,
+  draft: ContactDraft,
+  bringHistory: boolean,
+  discardUncommitted = false
+): Promise<Contact> {
+  const original = getContact(fromId)
+  if (!original) throw new Error(`No such contact: ${fromId}`)
+
+  assertNoActiveRun([fromId], 'replacing it')
+
+  // Before anything is written: the worktree is the only part that can refuse,
+  // and refusing after the replacement exists would leave two contacts behind.
+  if (original.worktreePath && existsSync(original.worktreePath)) {
+    await worktreeRemove(original.repoPath, original.worktreePath, discardUncommitted)
+  }
+
+  const replacement = createContact(draft)
+
+  initDb().transaction((tx) => {
+    if (bringHistory) {
+      tx.update(messages)
+        .set({ contactId: replacement.id })
+        .where(eq(messages.contactId, fromId))
+        .run()
+      // The calls belong with the replies they produced, so they travel too —
+      // otherwise the adopted thread renders tool rows that resolve to nothing.
+      tx.update(toolCalls)
+        .set({ contactId: replacement.id })
+        .where(eq(toolCalls.contactId, fromId))
+        .run()
+      tx.update(routines)
+        .set({ contactId: replacement.id, enabled: false })
+        .where(eq(routines.contactId, fromId))
+        .run()
+    }
+    tx.delete(contacts).where(eq(contacts.id, fromId)).run()
+  })
+
+  return replacement
 }
 
 /**

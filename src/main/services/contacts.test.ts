@@ -1,7 +1,7 @@
 import { existsSync } from 'fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { groups, personaTemplates } from '../db/schema'
+import { groups, messages, personaTemplates, routines, usageEvents } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
@@ -26,6 +26,7 @@ const {
   getContact,
   listContacts,
   rebindContactPersona,
+  recreateContact,
   renameContact,
   markContactRead,
   setBackendSessionId,
@@ -468,6 +469,151 @@ describe('rebindPersona', () => {
   it('rejects an unknown contact', () => {
     seedOtherPersona()
     expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/No such contact/)
+  })
+})
+
+describe('recreateContact', () => {
+  /**
+   * The review's complaint, which was true: `messages` is ON DELETE CASCADE, so
+   * recreating a contact to change the one immutable thing left — its repo —
+   * traded a month of conversation for a path.
+   */
+  function seedThread(contactId: string, ids: string[]): void {
+    for (const id of ids) {
+      db.insert(messages)
+        .values({
+          id,
+          contactId,
+          role: 'user',
+          content: `said ${id}`,
+          timestamp: new Date(1_786_800_000_000)
+        })
+        .run()
+    }
+  }
+
+  it('moves the whole conversation to the replacement', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    seedThread(original.id, ['m1', 'm2', 'm3'])
+
+    const replacement = await recreateContact(
+      original.id,
+      draft('~/code/moved', 'Reviewer · moved'),
+      true
+    )
+
+    expect(replacement.id).not.toBe(original.id)
+    expect(replacement.repoPath).toBe('~/code/moved')
+    const moved = db.select().from(messages).all()
+    expect(moved).toHaveLength(3)
+    expect(moved.every((row) => row.contactId === replacement.id)).toBe(true)
+  })
+
+  it('replaces the original rather than leaving two behind', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    await recreateContact(original.id, draft('~/code/moved', 'Reviewer · moved'), true)
+
+    expect(getContact(original.id)).toBeNull()
+    expect(listContacts()).toHaveLength(1)
+  })
+
+  // The old behaviour, kept: a genuinely fresh start is a reasonable want, and
+  // should not require deleting the contact twice to get.
+  it('leaves the history behind when asked to', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    seedThread(original.id, ['m1', 'm2'])
+
+    await recreateContact(original.id, draft('~/code/moved', 'Reviewer · moved'), false)
+
+    // Cascaded away with the contact, which is what not bringing it means.
+    expect(db.select().from(messages).all()).toHaveLength(0)
+  })
+
+  // A 3am job written against one repository firing unattended against another
+  // is the surprise this app exists not to produce. Deleting them silently is
+  // no better, so they survive switched off for a human to re-arm.
+  it('brings routines across disabled', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    db.insert(routines)
+      .values({
+        id: 'r1',
+        contactId: original.id,
+        schedule: '0 9 * * *',
+        prompt: 'check the overnight commits',
+        enabled: true
+      })
+      .run()
+
+    const replacement = await recreateContact(
+      original.id,
+      draft('~/code/moved', 'Reviewer · moved'),
+      true
+    )
+
+    const moved = db.select().from(routines).all()
+    expect(moved).toHaveLength(1)
+    expect(moved[0].contactId).toBe(replacement.id)
+    expect(moved[0].enabled).toBe(false)
+  })
+
+  // Phase 10 made spend outlive its contact so a total covering last month
+  // cannot shrink when somebody tidies up this month. Re-pointing it would move
+  // money the old contact really did spend.
+  it('leaves spend attributed to the contact that spent it', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    db.insert(usageEvents)
+      .values({
+        id: 'u1',
+        contactId: original.id,
+        personaTemplateId: PERSONA_ID,
+        repoPath: '~/code/app',
+        timestamp: new Date(1_786_800_000_000),
+        source: 'message',
+        inputTokens: 100,
+        outputTokens: 10
+      })
+      .run()
+
+    const replacement = await recreateContact(
+      original.id,
+      draft('~/code/moved', 'Reviewer · moved'),
+      true
+    )
+
+    const spend = db.select().from(usageEvents).all()
+    expect(spend).toHaveLength(1)
+    expect(spend[0].contactId).not.toBe(replacement.id)
+    // Orphaned rather than moved, and still carrying what it was spent on.
+    expect(spend[0].repoPath).toBe('~/code/app')
+  })
+
+  it('refuses while the original is mid-turn, and changes nothing', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    seedThread(original.id, ['m1'])
+    const release = acquire({
+      runId: 'run-1',
+      contactId: original.id,
+      contactName: original.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(
+      recreateContact(original.id, draft('~/code/moved', 'Reviewer · moved'), true)
+    ).rejects.toThrow(/working right now/)
+
+    // No replacement created, and the thread still where it was.
+    expect(listContacts()).toHaveLength(1)
+    expect(db.select().from(messages).all()[0].contactId).toBe(original.id)
+
+    release?.()
+  })
+
+  it('rejects an unknown original', async () => {
+    await expect(
+      recreateContact('contact-invented', draft('~/code/moved', 'X'), true)
+    ).rejects.toThrow(/No such contact/)
   })
 })
 

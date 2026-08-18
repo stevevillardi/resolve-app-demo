@@ -718,6 +718,27 @@ export const ipcContract = {
    * decision to put in front of a human rather than an error to render red.
    * The same two-step `contacts.delete` uses.
    */
+  /**
+   * Replaces a Contact and brings its conversation with it (Phase 22).
+   *
+   * One procedure rather than the renderer's old create-then-delete pair,
+   * because the two halves have to be one decision: the old contact's rows are
+   * re-pointed at the new one between them, and a failure partway used to mean
+   * either two contacts or a deleted thread.
+   *
+   * `bringHistory: false` is the old behaviour — the thread goes with the
+   * contact — kept because a genuinely fresh start is a reasonable thing to
+   * want and should not require deleting twice.
+   */
+  'contacts.recreate': {
+    input: z.object({
+      fromId: z.string(),
+      draft: contactDraftSchema,
+      bringHistory: z.boolean(),
+      discardUncommitted: z.boolean().optional()
+    }),
+    output: contactSchema
+  },
   'contacts.setIsolation': {
     input: z.object({
       id: z.string(),

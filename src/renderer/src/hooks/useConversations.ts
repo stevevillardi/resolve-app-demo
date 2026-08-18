@@ -229,6 +229,53 @@ export function useStartFreshSession(): {
 }
 
 /**
+ * Replaces a contact and brings its conversation across (Phase 22).
+ *
+ * One mutation where the flow used to call create and then delete: the rows are
+ * re-pointed between them, so a failure partway used to leave either two
+ * contacts or a deleted thread.
+ */
+export function useRecreateContact(): {
+  recreate: (
+    input: {
+      fromId: string
+      draft: ContactDraft
+      bringHistory: boolean
+      discardUncommitted?: boolean
+    },
+    onDone?: (contact: Contact) => void
+  ) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (input: {
+      fromId: string
+      draft: ContactDraft
+      bringHistory: boolean
+      discardUncommitted?: boolean
+    }) => callProcedure('contacts.recreate', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+      void queryClient.invalidateQueries({ queryKey: groupsKey })
+      void queryClient.invalidateQueries({ queryKey: routinesKey })
+      void queryClient.invalidateQueries({ queryKey: branchesKey })
+      // The thread itself moved to a different contact id, so every cached
+      // message list and preview is now filed under the wrong one.
+      void queryClient.invalidateQueries({ queryKey: messagePreviewsKey })
+      void queryClient.invalidateQueries({ queryKey: ['messages'] })
+    }
+  })
+
+  return {
+    recreate: (input, onDone) => mutation.mutate(input, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
  * Moves a contact between your checkout and its own (Phase 22).
  *
  * Invalidates contacts and branches: de-isolating removes a checkout while
