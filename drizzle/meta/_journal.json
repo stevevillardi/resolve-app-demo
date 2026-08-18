@@ -127,6 +127,13 @@
       "when": 1787009538597,
       "tag": "0017_add_message_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1787015138193,
+      "tag": "0018_add_message_session",
+      "breakpoints": true
     }
   ]
 }

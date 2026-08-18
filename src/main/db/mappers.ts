@@ -124,7 +124,8 @@ export function toMessage(row: MessageRow): PersistedMessage {
     role: row.role,
     content: row.content,
     timestamp: row.timestamp.getTime(),
-    ...optional('work', row.work)
+    ...optional('work', row.work),
+    ...optional('sessionId', row.sessionId)
   }
 }
 

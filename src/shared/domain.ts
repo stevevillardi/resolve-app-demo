@@ -242,7 +242,14 @@ export const messageSchema = z.object({
   role: messageRoleSchema,
   content: z.string(),
   timestamp: z.number(),
-  work: turnWorkSchema.optional()
+  work: turnWorkSchema.optional(),
+  /**
+   * The backend session that answered this message (Phase 22). Absent on rows
+   * written before 0018 and on turns that died before the backend named a
+   * session — which the thread reads as "carry on from the row above", never as
+   * a boundary. See the column comment in src/main/db/schema.ts.
+   */
+  sessionId: z.string().optional()
 })
 
 export const routineSchema = z.object({

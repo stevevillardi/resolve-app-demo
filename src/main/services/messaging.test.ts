@@ -337,6 +337,33 @@ describe('session resumption', () => {
     expect(db.select().from(contacts).all()[0].backendSessionId).toBeNull()
   })
 
+  // Phase 22. The claim is "the session that *answered* it", which is why this
+  // is written at the end of the turn rather than as each row goes in, and why
+  // the question is stamped as well as the reply.
+  it('stamps both rows of the turn with the session that answered', async () => {
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    const thread = listMessages('contact-a')
+    expect(thread.map((message) => message.role)).toEqual(['user', 'assistant'])
+    expect(thread.map((message) => message.sessionId)).toEqual(['session-abc', 'session-abc'])
+  })
+
+  // A turn that dies before `session_started` has nothing true to record, so it
+  // records nothing. The thread reads a null as "carry on from the row above",
+  // never as a boundary, which is what stops a crash inventing one.
+  it('leaves both rows unstamped when the backend names no session', async () => {
+    harness.sessionIdToReport = null
+    harness.script = [{ type: 'done', finalText: 'ok', usage: null }]
+
+    sendMessage('contact-a', 'go')
+    await settle()
+
+    for (const message of listMessages('contact-a')) {
+      expect(message.sessionId).toBeUndefined()
+    }
+  })
+
   // The self-heal path: a stored resume key the backend refuses (the persona's
   // model/backend changed, or the vendor expired the thread) must not surface
   // as a raw vendor error — the transcript is ours, so a fresh session loses
@@ -367,6 +394,22 @@ describe('session resumption', () => {
       expect(listMessages('contact-a').at(-1)?.content).toBe('Looks good.')
       // The healed turn's fresh key replaces the dead one.
       expect(db.select().from(contacts).all()[0].backendSessionId).toBe('session-abc')
+    })
+
+    // The case that decides where the stamp goes. Stamping at insert time would
+    // label the question with the key that turned out to be dead and the reply
+    // with the live one — a session boundary drawn between a question and its
+    // own answer. Stamping at the end makes the heal legible rather than
+    // nonsensical, and it is the only path where the two could ever differ.
+    it('stamps the healed session on both rows, never the dead one', async () => {
+      seedStaleSession()
+      harness.scriptQueue = [deadResume, defaultScript()]
+
+      sendMessage('contact-a', 'go')
+      await settle()
+
+      const thread = listMessages('contact-a')
+      expect(thread.map((message) => message.sessionId)).toEqual(['session-abc', 'session-abc'])
     })
 
     it('does not forward the healed attempt error to the renderer', async () => {

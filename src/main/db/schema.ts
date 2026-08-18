@@ -211,7 +211,27 @@ export const messages = sqliteTable(
      * that changed nothing, so a chip row only ever appears when there is work
      * to show. JSON because the five fields are written and read together.
      */
-    work: text('work', { mode: 'json' }).$type<TurnWork>()
+    work: text('work', { mode: 'json' }).$type<TurnWork>(),
+    /**
+     * The backend session that answered this message (Phase 22) — what makes a
+     * session boundary drawable in the thread.
+     *
+     * Stamped at turn end for *both* rows of the turn, never at insert. The id
+     * does not exist yet when the user's row is written on the first turn of a
+     * session; and on the dead-resume heal path an insert-time value would
+     * label the question with a key that turned out to be dead and the answer
+     * with the live one, drawing a boundary between a question and its own
+     * reply. "The session that answered it" is true on every path, the heal
+     * included — which is also what makes the heal visible for the first time.
+     *
+     * Null means not recorded: every row written before 0018, and any turn that
+     * died before `session_started`. Deliberately never backfilled — claiming
+     * the whole history belongs to the live session is only true back to the
+     * last clear and is unknowable from the rows. The renderer treats null as
+     * inheriting rather than as a boundary, so an upgrade draws no dividers and
+     * the first one it ever draws is a real one.
+     */
+    sessionId: text('session_id')
   },
   (table) => [index('messages_contact_timestamp_idx').on(table.contactId, table.timestamp)]
 )
