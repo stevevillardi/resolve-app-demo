@@ -14,7 +14,19 @@ import { z } from 'zod'
 // --- Enumerations -----------------------------------------------------------
 
 export const personaBackendSchema = z.enum(['claude', 'codex'])
-export const sandboxLevelSchema = z.enum(['read_only', 'workspace_write', 'full_access'])
+/**
+ * Blueprint §4's disk axis, plus the Phase 24 posture between reading and
+ * writing: `ask_writes` reads as freely as `read_only`, and every write is
+ * held for a human's approve/deny in the thread instead of being refused
+ * outright. Supersedes §15B's "sandbox-at-creation is the approval" for the
+ * personas that opt in — see the decision entry in docs/plan/00-progress.md.
+ */
+export const sandboxLevelSchema = z.enum([
+  'read_only',
+  'ask_writes',
+  'workspace_write',
+  'full_access'
+])
 export const githubScopeSchema = z.enum(['read_only', 'open_pr', 'full_access'])
 export const messageRoleSchema = z.enum(['user', 'assistant'])
 export const groupMessageTypeSchema = z.enum([
@@ -105,6 +117,21 @@ export const isolationSchema = z.enum(['shared', 'worktree', 'exclusive'])
  */
 export function defaultIsolation(sandbox: SandboxLevel): Isolation {
   return sandbox === 'read_only' ? 'shared' : 'worktree'
+}
+
+/**
+ * Whether a backend can hold a turn open while a human answers an approval.
+ *
+ * Claude can: `canUseTool` is an async callback the SDK awaits, so the ask is
+ * just a promise that resolves when the user clicks. Codex cannot: `codex
+ * exec` is one-shot — its JSONL stream has no approval-request event and no
+ * channel to answer one, and `approval_policy` only reaches the CLI as
+ * `--config`, which in exec mode has nobody to ask. Shared between the persona
+ * editor (which hides the posture) and the service (which refuses it), so the
+ * two cannot disagree about which backends get the option.
+ */
+export function askBeforeWritesSupported(backend: PersonaBackend): boolean {
+  return backend === 'claude'
 }
 
 /** Null reads as `shared` — that is what every pre-0007 row means. */

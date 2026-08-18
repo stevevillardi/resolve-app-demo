@@ -222,6 +222,59 @@ describe('evaluateToolUse at workspace_write', () => {
   })
 })
 
+describe('evaluateToolUse at ask_writes', () => {
+  it('allows the read_only allowlist without asking', () => {
+    for (const command of ['git diff', 'ls -la', 'rg TODO src']) {
+      const decision = evaluateToolUse('ask_writes', 'Bash', { command }, REPO)
+      expect(decision.allowed, command).toBe(true)
+      expect(decision.ask, command).toBeUndefined()
+    }
+  })
+
+  it('holds every other command for approval rather than denying it', () => {
+    for (const command of ['npm test', 'touch x', 'git commit -m x', 'sed -i s/a/b/ f']) {
+      const decision = evaluateToolUse('ask_writes', 'Bash', { command }, REPO)
+      expect(decision.allowed, command).toBe(false)
+      expect(decision.ask, command).toBe(true)
+      // The reason doubles as the prompt's description of the act, so it has
+      // to name the command a human is being asked to judge.
+      expect(decision.reason, command).toContain(command)
+    }
+  })
+
+  it('holds writes inside the repo for approval', () => {
+    const decision = evaluateToolUse('ask_writes', 'Write', { file_path: `${REPO}/a.ts` }, REPO)
+    expect(decision.allowed).toBe(false)
+    expect(decision.ask).toBe(true)
+    expect(decision.reason).toContain(`${REPO}/a.ts`)
+  })
+
+  it('still denies writes outside the repo outright — approval widens when, never where', () => {
+    const decision = evaluateToolUse('ask_writes', 'Write', { file_path: '/etc/hosts' }, REPO)
+    expect(decision.allowed).toBe(false)
+    expect(decision.ask).toBeUndefined()
+    expect(decision.reason).toContain('/etc/hosts')
+  })
+
+  it('still refuses the sandbox-disable flag outright, even on an allowlisted command', () => {
+    const decision = evaluateToolUse(
+      'ask_writes',
+      'Bash',
+      { command: 'git diff', dangerouslyDisableSandbox: true },
+      REPO
+    )
+    expect(decision.allowed).toBe(false)
+    expect(decision.ask).toBeUndefined()
+  })
+
+  it('allows reading tools without asking', () => {
+    for (const tool of ['Read', 'Grep', 'Glob']) {
+      const decision = evaluateToolUse('ask_writes', tool, {}, REPO)
+      expect(decision.allowed, tool).toBe(true)
+    }
+  })
+})
+
 describe('evaluateToolUse at full_access', () => {
   it('allows everything, including outside the repo', () => {
     expect(evaluateToolUse('full_access', 'Write', { file_path: '/etc/hosts' }, REPO).allowed).toBe(
@@ -240,12 +293,33 @@ describe('backend translation', () => {
     expect(codexSandboxMode('full_access')).toBe('danger-full-access')
   })
 
+  it('fails ask_writes closed on Codex, which cannot deliver an answer', () => {
+    // Persona validation refuses the pairing before a row can exist; if one
+    // arrives anyway, the posture's promise — nothing writes without an
+    // approval — survives, rather than silently widening to workspace-write.
+    expect(codexSandboxMode('ask_writes')).toBe('read-only')
+  })
+
   it('strips write tools from the Claude context at read_only only', () => {
     expect(claudeSandboxOptions('read_only', REPO).disallowedTools).toEqual(
       expect.arrayContaining(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
     )
     expect(claudeSandboxOptions('workspace_write', REPO).disallowedTools).toEqual([])
     expect(claudeSandboxOptions('full_access', REPO).disallowedTools).toEqual([])
+    // ask_writes keeps them in context: "you may ask" is the point.
+    expect(claudeSandboxOptions('ask_writes', REPO).disallowedTools).toEqual([])
+  })
+
+  it('gives ask_writes the write grants of workspace_write with the permission mode of read_only', () => {
+    // `default` is what keeps canUseTool in the path for every write —
+    // acceptEdits would auto-approve the file tools — and the OS sandbox must
+    // already allow the write so a human's yes is sufficient.
+    const options = claudeSandboxOptions('ask_writes', REPO, [], ['/tmp/extra'])
+    expect(options.permissionMode).toBe('default')
+    expect(options.allowDangerouslySkipPermissions).toBeUndefined()
+    if (osSandboxSupported()) {
+      expect(options.sandbox?.filesystem?.allowWrite).toEqual([REPO, '/tmp/extra'])
+    }
   })
 
   it('only asks to skip permissions at full_access', () => {

@@ -43,12 +43,25 @@ export interface SandboxDecision {
   allowed: boolean
   /** Present when denied — surfaced to the model and to the error bubble. */
   reason?: string
+  /**
+   * Denied *unless a human approves* (Phase 24, review §E1). Only ever set at
+   * `ask_writes`, and only on actions that level exists to mediate: a write
+   * inside the repo boundary. Everything that is denied at `workspace_write`
+   * — a write outside the repo, the sandbox-disable flag — stays a plain deny
+   * here too, because approval widens *when* a write may happen, never *where*.
+   */
+  ask?: true
 }
 
 const ALLOWED: SandboxDecision = { allowed: true }
 
 function deny(reason: string): SandboxDecision {
   return { allowed: false, reason }
+}
+
+/** Held for a human. `reason` doubles as the prompt's description of the act. */
+function ask(reason: string): SandboxDecision {
+  return { allowed: false, ask: true, reason }
 }
 
 /** Tools that modify files. Denied outright at `read_only`. */
@@ -271,6 +284,14 @@ export function evaluateToolUse(
             `This persona is read-only, so it can only run inspection commands. Refused: ${command}`
           )
     }
+    // ask_writes reuses read_only's classifier as the line between "runs
+    // freely" and "waits for a human": the allowlist is exactly the set of
+    // commands already trusted to change nothing, so everything outside it is
+    // the set a human said they wanted to see. A false positive here costs one
+    // click; at read_only it costs the whole command.
+    if (level === 'ask_writes') {
+      return isReadOnlyCommand(command) ? ALLOWED : ask(command)
+    }
     // workspace_write: the command runs with the cwd inside the repo, and
     // constraining it further would mean parsing shell, which the comment on
     // SHELL_CONTROL explains we are not doing. The repo boundary for writes is
@@ -288,6 +309,9 @@ export function evaluateToolUse(
     if (target && !isInsideRepo(repoPath, target)) {
       return deny(`This persona can only write inside its repo. Refused: ${target}`)
     }
+    // After the boundary check, deliberately: an approval can say yes to a
+    // write, never to where it lands.
+    if (level === 'ask_writes') return ask(target ?? toolName)
     return ALLOWED
   }
 
@@ -502,6 +526,14 @@ export function codexSandboxMode(
   switch (level) {
     case 'read_only':
       return 'read-only'
+    // Codex cannot hold a turn open for a human's answer (see
+    // askBeforeWritesSupported in shared/domain.ts), and persona validation
+    // refuses the pairing before a row can exist. If one arrives here anyway,
+    // fail toward the posture's promise — nothing writes without an approval
+    // that this backend has no way to collect — rather than silently widening
+    // to workspace-write.
+    case 'ask_writes':
+      return 'read-only'
     case 'workspace_write':
       return 'workspace-write'
     case 'full_access':
@@ -610,6 +642,18 @@ export function claudeSandboxOptions(
         permissionMode: 'default',
         disallowedTools: [...WRITE_TOOLS],
         ...osSandbox([])
+      }
+    // The write grants of workspace_write with the permission mode of
+    // read_only. `default` is what keeps canUseTool in the path for every
+    // write — `acceptEdits` would auto-approve the file tools, which is the
+    // one thing this level exists not to do — and the OS sandbox must already
+    // allow the write so that a human's yes is sufficient. The write tools
+    // stay in context: unlike read_only, "you may ask" is the point.
+    case 'ask_writes':
+      return {
+        permissionMode: 'default',
+        disallowedTools: [],
+        ...osSandbox([repoPath, ...writablePaths])
       }
     case 'workspace_write':
       return {
