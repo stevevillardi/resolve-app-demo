@@ -128,6 +128,24 @@ export const contacts = sqliteTable(
      */
     isolation: text('isolation', { enum: ['shared', 'worktree', 'exclusive'] }),
     /**
+     * A model just for this Contact, overriding its persona's (Phase 22).
+     *
+     * Null means "whatever the persona says", which is every row written before
+     * this column and most rows after it. The persona is still where a model is
+     * normally chosen; this exists because a persona is reusable across
+     * repositories and a model choice often is not — the same reviewer may be
+     * worth an expensive model on the codebase that pays for it and a cheap one
+     * everywhere else, and editing the persona to say so changes it for every
+     * Contact bound to it.
+     *
+     * Not validated against the backend here. `models.ts` is a menu of
+     * plausible choices rather than a promise (availability depends on the
+     * account), so an unavailable model surfaces as a 400 in the thread like
+     * any other backend error, and a CHECK constraint would only turn a
+     * legible failure into an illegible one.
+     */
+    model: text('model'),
+    /**
      * What this Contact may take from the repository it is bound to:
      * `{ instructions: boolean, skills: string[] }`.
      *

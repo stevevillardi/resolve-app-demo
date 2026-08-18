@@ -181,6 +181,26 @@ describe('buildSessionSpec', () => {
       'claude-opus-5'
     )
   })
+
+  // Phase 22. A persona is reusable across repositories and a model choice
+  // often is not, so the Contact's own wins — and null on the Contact means
+  // "follow the persona", which is the default and the common case.
+  it('lets the contact override its persona model', () => {
+    const persona = { ...getPersonaTemplate(PERSONA_ID)!, model: 'claude-sonnet-5' }
+    const contact = getContact(CONTACT_ID)!
+
+    expect(buildSessionSpec(contact, persona).model).toBe('claude-sonnet-5')
+    expect(buildSessionSpec({ ...contact, model: 'claude-opus-5' }, persona).model).toBe(
+      'claude-opus-5'
+    )
+  })
+
+  it('lets a contact set a model where its persona has none', () => {
+    const persona = getPersonaTemplate(PERSONA_ID)!
+    const contact = { ...getContact(CONTACT_ID)!, model: 'claude-haiku-4-5' }
+
+    expect(buildSessionSpec(contact, persona).model).toBe('claude-haiku-4-5')
+  })
 })
 
 /**

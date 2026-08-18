@@ -86,6 +86,7 @@ export function toContact(row: ContactRow): Contact {
     worktreePath: row.worktreePath,
     branch: row.branch,
     isolation: row.isolation,
+    model: row.model,
     // Null on purpose, and read through repoTrustOf(): the difference between
     // "trusts nothing" and "was never asked" is worth keeping, because the UI
     // shows a first-time prompt for one and a settled state for the other.

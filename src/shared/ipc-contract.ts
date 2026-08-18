@@ -739,6 +739,18 @@ export const ipcContract = {
     }),
     output: contactSchema
   },
+  /**
+   * A model for this Contact alone, or null to follow its persona again
+   * (Phase 22).
+   *
+   * Nullable rather than optional: "go back to the persona's" is a choice the
+   * user makes, not an absent value, and an optional field could not express
+   * it.
+   */
+  'contacts.setModel': {
+    input: z.object({ id: z.string(), model: z.string().nullable() }),
+    output: contactSchema
+  },
   'contacts.setIsolation': {
     input: z.object({
       id: z.string(),

@@ -276,6 +276,33 @@ export function useRecreateContact(): {
 }
 
 /**
+ * Points a contact at its own model, or back at its persona's (Phase 22).
+ *
+ * Only the contact list is invalidated: nothing about the thread or the spend
+ * has changed, and the model applies from the next turn.
+ */
+export function useSetContactModel(): {
+  setModel: (id: string, model: string | null, onDone?: () => void) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (input: { id: string; model: string | null }) =>
+      callProcedure('contacts.setModel', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+    }
+  })
+
+  return {
+    setModel: (id, model, onDone) => mutation.mutate({ id, model }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
  * Moves a contact between your checkout and its own (Phase 22).
  *
  * Invalidates contacts and branches: de-isolating removes a checkout while

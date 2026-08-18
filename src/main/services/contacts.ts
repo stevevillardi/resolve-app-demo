@@ -69,6 +69,9 @@ export function createContact(draft: ContactDraft): Contact {
       id,
       backendSessionId: null,
       isolation,
+      // The persona's model is the starting point; an override is a later,
+      // per-Contact decision (see contacts.setModel).
+      model: null,
       worktreePath: planned?.path ?? null,
       branch: planned?.branch ?? null,
       // A new Contact trusts nothing its repository says. Granting that is a
@@ -164,6 +167,32 @@ export function renameContact(id: string, displayName: string): Contact {
   // Re-read rather than patching the caller's copy: listContacts orders by
   // display_name, so the row's place in the list has just moved and the caller
   // should be looking at what is actually stored.
+  return getContact(id) as Contact
+}
+
+/**
+ * Points this Contact at a different model from its persona's (Phase 22).
+ *
+ * A persona is reusable across repositories; a model choice frequently is not.
+ * The same reviewer can be worth an expensive model on the codebase that pays
+ * for it and a cheap one everywhere else, and until now saying so meant editing
+ * the persona — which silently changed it for every Contact bound to that
+ * persona, including ones on repositories the user was not thinking about.
+ *
+ * `null` puts it back to following the persona, which is the default and the
+ * common case. No run guard: the model is read when a turn *starts*, so
+ * changing it under one simply applies from the next — the same reasoning that
+ * keeps `updatePersonaTemplate` narrow.
+ *
+ * Not validated against the backend's menu. `models.ts` says outright that it
+ * is a list of plausible choices rather than a promise, since availability
+ * depends on the account; an unusable model surfaces as a normal error in the
+ * thread, which is more legible than a refusal here pretending to know better.
+ */
+export function setContactModel(id: string, model: string | null): Contact {
+  const result = initDb().update(contacts).set({ model }).where(eq(contacts.id, id)).run()
+  if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+
   return getContact(id) as Contact
 }
 

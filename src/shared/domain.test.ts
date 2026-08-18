@@ -140,6 +140,7 @@ describe('contact', () => {
     worktreePath: null,
     branch: null,
     isolation: null,
+    model: null,
     repoTrust: null,
     lastReadAt: null
   }

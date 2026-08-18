@@ -5,6 +5,7 @@ import {
   Pencil,
   RefreshCcw,
   Check,
+  Cpu,
   FolderTree,
   RotateCcw,
   Trash2,
@@ -34,11 +35,13 @@ import {
   useDeleteContact,
   useRebindPersona,
   useRenameContact,
+  useSetContactModel,
   useSetIsolation,
   useStartFreshSession
 } from '@/hooks/useConversations'
 import { revealLocalPath } from '@/hooks/useDiffs'
 import { usePersonas } from '@/hooks/usePersonas'
+import { useModels } from '@/hooks/useModels'
 import { useUiStore } from '@/store/useUiStore'
 import type { Contact, Isolation, PersonaBackend } from '@/types'
 
@@ -54,7 +57,7 @@ import type { Contact, Isolation, PersonaBackend } from '@/types'
  */
 
 export type ContactDialogKind =
-  'context' | 'rename' | 'rebind' | 'freshSession' | 'isolation' | 'delete'
+  'context' | 'rename' | 'rebind' | 'freshSession' | 'isolation' | 'model' | 'delete'
 
 interface ContactActionItemsProps {
   /** Which menu family these items render into — they must match their popup. */
@@ -112,6 +115,10 @@ export function ContactActionItems({
         <FolderTree />
         Change where it works…
       </Item>
+      <Item onClick={() => onOpen('model')}>
+        <Cpu />
+        Use a different model…
+      </Item>
       {/* Not one of the parent's dialogs: recreate routes into the
           new-contact flow, prefilled. The flow clears the marker on close. */}
       <Item
@@ -154,6 +161,9 @@ export function ContactActionDialogs({
       {open === 'rebind' && <RebindPersonaDialog contact={contact} onClose={onClose} />}
       {open === 'freshSession' && <FreshSessionDialog contact={contact} onClose={onClose} />}
       {open === 'isolation' && <ChangeIsolationDialog contact={contact} onClose={onClose} />}
+      {open === 'model' && (
+        <ContactModelDialog contact={contact} backend={backend} onClose={onClose} />
+      )}
       {open === 'delete' && <DeleteContactDialog contact={contact} onClose={onClose} />}
       <ContextPanel
         contactId={contact.id}
@@ -264,6 +274,88 @@ function FreshSessionDialog({
             }
           >
             {isPending ? 'Starting…' : 'Start fresh'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * A model for this Contact alone (Phase 22).
+ *
+ * A persona is reusable across repositories and a model choice frequently is
+ * not — the same reviewer can be worth an expensive model on the codebase that
+ * pays for it and a cheap one everywhere else. Saying so used to mean editing
+ * the persona, which changed it for every Contact bound to that persona,
+ * including ones on repositories the user was not thinking about.
+ *
+ * "Follow the persona" is a real option rather than an empty state, because it
+ * is the default and going back to it is a decision worth being able to make.
+ */
+function ContactModelDialog({
+  contact,
+  backend,
+  onClose
+}: {
+  contact: Contact
+  backend: PersonaBackend
+  onClose: () => void
+}): React.JSX.Element {
+  const models = useModels(backend)
+  const personas = usePersonas().data ?? []
+  const personaModel =
+    personas.find((candidate) => candidate.id === contact.personaTemplateId)?.model ?? null
+  const [chosen, setChosen] = useState<string | null>(contact.model)
+  const { setModel, isPending, error } = useSetContactModel()
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Model for {contact.displayName}</DialogTitle>
+          <DialogDescription>
+            Applies to this contact only. Its persona keeps whatever it is set to, and every other
+            contact bound to that persona is unaffected. Takes effect on the next message.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+          <ListRow
+            active={chosen === null}
+            bordered
+            onSelect={() => setChosen(null)}
+            trailing={chosen === null ? <Check className="mt-0.5 size-4 shrink-0" /> : undefined}
+          >
+            <p className="text-sm font-medium">Follow the persona</p>
+            <p className="text-muted-foreground font-mono text-meta">
+              {personaModel ?? "default (backend's choice)"}
+            </p>
+          </ListRow>
+          {models.map((model) => (
+            <ListRow
+              key={model}
+              active={chosen === model}
+              bordered
+              onSelect={() => setChosen(model)}
+              trailing={chosen === model ? <Check className="mt-0.5 size-4 shrink-0" /> : undefined}
+            >
+              <p className="font-mono text-sm">{model}</p>
+            </ListRow>
+          ))}
+        </div>
+
+        {error && <p className="text-destructive text-row">{error}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={chosen === contact.model || isPending}
+            onClick={() => setModel(contact.id, chosen, onClose)}
+          >
+            {isPending ? 'Saving…' : 'Use it'}
           </Button>
         </DialogFooter>
       </DialogContent>

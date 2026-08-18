@@ -83,7 +83,12 @@ export function buildSessionSpec(
         }
       : {}),
     ...(options.usageBaseline ? { usageBaseline: options.usageBaseline } : {}),
-    ...(persona.model ? { model: persona.model } : {})
+    // The Contact's own model wins over its persona's. A persona is reusable
+    // across repositories and a model choice often is not — see the column
+    // comment on contacts.model.
+    ...((contact.model ?? persona.model)
+      ? { model: (contact.model ?? persona.model) as string }
+      : {})
   }
 }
 

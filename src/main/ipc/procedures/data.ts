@@ -8,6 +8,7 @@ import {
   rebindContactPersona,
   recreateContact,
   setContactIsolation,
+  setContactModel,
   startFreshSession,
   renameContact,
   setRepoTrust
@@ -63,6 +64,7 @@ registerProcedure('contacts.startFreshSession', ({ id }) => startFreshSession(id
 registerProcedure('contacts.recreate', ({ fromId, draft, bringHistory, discardUncommitted }) =>
   recreateContact(fromId, draft, bringHistory, discardUncommitted ?? false)
 )
+registerProcedure('contacts.setModel', ({ id, model }) => setContactModel(id, model))
 registerProcedure('contacts.setIsolation', ({ id, isolation, discardUncommitted }) =>
   setContactIsolation(id, isolation, discardUncommitted ?? false)
 )

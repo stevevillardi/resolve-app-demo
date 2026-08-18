@@ -30,6 +30,7 @@ function contact(id: string, personaTemplateId: string, repoPath: string): Conta
     worktreePath: null,
     branch: null,
     isolation: 'shared',
+    model: null,
     repoTrust: null,
     lastReadAt: null
   }

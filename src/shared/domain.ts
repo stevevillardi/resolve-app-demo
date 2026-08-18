@@ -165,6 +165,11 @@ export const contactSchema = z.object({
   /** Null reads as `shared` — that is what every pre-0007 row means. */
   isolation: isolationSchema.nullable(),
   /**
+   * A model for this Contact alone. Null means "whatever the persona says",
+   * which is the normal case — see the column comment in src/main/db/schema.ts.
+   */
+  model: z.string().nullable(),
+  /**
    * The unread boundary: message rows after this are unread. Null reads as
    * "everything read" — defensive only, since 0016 backfills and creation
    * stamps; the safe direction, because the failure mode of the other reading
@@ -345,6 +350,10 @@ export const contactDraftSchema = contactSchema
     worktreePath: true,
     branch: true,
     isolation: true,
+    // Not offered at bind time either: the persona's model is the default worth
+    // starting from, and overriding it is a later, per-Contact decision made
+    // with the thread in front of you.
+    model: true,
     // Not offered at bind time at all. Trusting a repository's instructions or
     // its skills means reading what they say first, and the bind flow has not
     // shown them — approval lives in the thread header, where the text is on
