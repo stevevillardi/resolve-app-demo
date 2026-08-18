@@ -9,7 +9,7 @@ systemic findings and two lists of smaller ones. The systemic three are closed:
 enough that a phase per item would cost more in ceremony than in code, and
 several touch the same files.
 
-It also lands a defect that arrived *with* the review follow-up rather than in
+It also lands a defect that arrived _with_ the review follow-up rather than in
 it, and it goes first because this repository lands defect fixes ahead of the
 feature that surfaced them.
 
@@ -20,10 +20,10 @@ the three Claude 5 rows were marked `inferred` and wanted confirming. The
 confirmation said those three were right to distrust, and that four rows marked
 `published` were wrong as well.
 
-| Tier | Models |
-|---|---|
-| 1M | Opus 4.6, 4.7, 4.8, Opus 5, Sonnet 4.6, Sonnet 5, Fable 5 |
-| 200k | Haiku 4.5, Sonnet 4.5, everything older |
+| Tier | Models                                                    |
+| ---- | --------------------------------------------------------- |
+| 1M   | Opus 4.6, 4.7, 4.8, Opus 5, Sonnet 4.6, Sonnet 5, Fable 5 |
+| 200k | Haiku 4.5, Sonnet 4.5, everything older                   |
 
 All eight ids in this app's picker had been recorded at 200k. The meter divides
 by that number, so it had been reporting a prompt using half of Opus 4.8's
@@ -31,8 +31,8 @@ context as **full**, and the remedy it invites — a fresh session — costs the
 model's memory of the thread.
 
 **What is worth carrying forward is not the numbers.** It is that `source`
-answers *how a figure was obtained* and says nothing about *whether it is still
-true*. A `published` row goes stale exactly as quietly as an `inferred` one, and
+answers _how a figure was obtained_ and says nothing about _whether it is still
+true_. A `published` row goes stale exactly as quietly as an `inferred` one, and
 the four wrong-and-unflagged rows are the proof. `CONTEXT_WINDOWS_LAST_VERIFIED`
 is the field that carries currency, and the file header now says so.
 
@@ -48,8 +48,8 @@ here pretends to. Three things are pinned instead:
 
 Two things deliberately did not move. Claude's cost comes from the SDK's own
 `total_cost_usd`, so `pricing.ts` is Codex-only and no spend figure changed. And
-`LONG_CONTEXT_THRESHOLD` stays 272k — that is OpenAI's input *tier boundary
-inside* the GPT-5 window, not a window, and the two numbers sit two files apart
+`LONG_CONTEXT_THRESHOLD` stays 272k — that is OpenAI's input _tier boundary
+inside_ the GPT-5 window, not a window, and the two numbers sit two files apart
 looking alike.
 
 ---
@@ -93,8 +93,8 @@ written as the literal `⌥↑ ⌥↓` and would have rendered a macOS glyph on 
 
 ## §G2 — Export
 
-The review's phrasing is the brief: *"the honest cost data deserves an exit
-door."*
+The review's phrasing is the brief: _"the honest cost data deserves an exit
+door."_
 
 **The rule that outranks both formats:** an unknown cost leaves as an empty cell,
 never a zero. Inside the app a null renders `—` beside a tooltip that explains
@@ -115,7 +115,7 @@ meaningless in a file opened somewhere else six months later.
 `isKnownLocalPath` on purpose; this deliberately is not, and the difference is
 `showSaveDialog`. The renderer never names a destination — it proposes a
 filename, and a person picks the folder in an OS panel and can decline. That
-panel *is* the authorization; an allowlist over it would only mean refusing to
+panel _is_ the authorization; an allowlist over it would only mean refusing to
 write where the user just said to. It lives in `procedures/shell.ts` beside the
 allowlisted two, so the next person adding a reach-outside procedure reads the
 rule and the exception together.
@@ -201,7 +201,7 @@ nobody could act on.
 which is what lets an upgraded profile behave exactly as it did with nothing
 backfilled.
 
-`name` null means *derive from `repo_path`*. Storing the derived name at creation
+`name` null means _derive from `repo_path`_. Storing the derived name at creation
 freezes it: a repository moved on disk would keep the old folder's name forever
 with nothing to explain why. As a nullable override, clearing the field **is**
 the reset, so `groups.rename` takes `string | null` and needs no second
@@ -209,13 +209,13 @@ procedure. Typing the repository's own name into the dialog collapses to null fo
 the same reason.
 
 `hidden` null means visible. **Hiding is not deletion, and there is no delete to
-fall back on:** a group is a *view* of the contacts bound to a repository, so
+fall back on:** a group is a _view_ of the contacts bound to a repository, so
 removing the row while those contacts exist only means `ensureGroupForRepo`
 recreating it on the next turn — with its read boundary reset, lighting up every
 old message as unread.
 
 Two consequences worth stating. A search still reaches hidden groups: hiding
-governs the list's *resting* state, and answering "nothing matches" when someone
+governs the list's _resting_ state, and answering "nothing matches" when someone
 types the name of a group they hid is both wrong and what would make hiding feel
 like deletion. And the way back is a count at the foot of the list rather than a
 permanent "Hidden" section — the row exists to be found once, not to reinstate
@@ -243,7 +243,7 @@ cost under the wrong reply, silently.
 **The referential action would have shipped broken.** drizzle-kit emits the FK on
 an ADD COLUMN with no action at all — its own snapshot records `set null`
 correctly, so only the SQL emitter drops it — and SQLite defaults to NO ACTION.
-`messages` cascades from `contacts`, so under NO ACTION the usage row *blocks*
+`messages` cascades from `contacts`, so under NO ACTION the usage row _blocks_
 the cascading message delete. Executed against real SQLite with the pragma this
 app sets:
 
@@ -262,7 +262,7 @@ rule is that spend outlives what spent it.
 
 `TurnCost` is the third question in the set the other two usage surfaces answer —
 `UsageBadge` says what a conversation has cost, `ContextMeter` how much room is
-left, this what *that* answer cost. Deliberately the quietest thing in the
+left, this what _that_ answer cost. Deliberately the quietest thing in the
 thread, because it renders under every assistant bubble.
 
 ---

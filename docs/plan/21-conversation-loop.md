@@ -49,7 +49,7 @@ deferred); **B8** (edit / regenerate / fork) stays deferred per the review's own
   the unanswered row — because `user_mention` rows record neither target nor token.
 - **The watchdog measures silence, not duration.** A thorough turn can run half an
   hour emitting tool events; a stalled one goes quiet. It records `failure` and
-  emits its error event *before* aborting, and a `timedOut` guard keeps the
+  emits its error event _before_ aborting, and a `timedOut` guard keeps the
   adapters' SIGTERM-shaped teardown from overwriting the wording — asserted from
   the claim (final wording), not the flag. Ten minutes, exported constant, no
   Settings surface (pre-release; one number).
@@ -69,7 +69,7 @@ deferred); **B8** (edit / regenerate / fork) stays deferred per the review's own
   verbatim — `startTurn`'s no-rewriting invariant holds, and both SDKs read files
   themselves. Ranking is basename-first (people type suffixes), a deliberate
   departure from `scoreCommand`'s label/detail tiers. Groups complete against the
-  *mentioned* contact's tree, only once a mention resolves.
+  _mentioned_ contact's tree, only once a mention resolves.
 - **Composer drafts clear on success, never restore on error** (a restore would
   clobber text typed while the IPC was in flight), live in a RAM-only
   `useDraftStore` (a resurrected week-old draft would surprise more than help), and

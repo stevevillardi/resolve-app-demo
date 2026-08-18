@@ -48,13 +48,14 @@ Both Claude and Codex expose the same primitive: create a session/thread → run
 
 ```ts
 interface AgentAdapter {
-  createSession(persona: PersonaTemplate, repoPath: string): Session;
-  run(session: Session, prompt: string): AsyncIterable<AgentEvent>;
-  resume(sessionId: string): Session;
+  createSession(persona: PersonaTemplate, repoPath: string): Session
+  run(session: Session, prompt: string): AsyncIterable<AgentEvent>
+  resume(sessionId: string): Session
 }
 ```
 
 ### Claude adapter
+
 - Runs via Claude Agent SDK.
 - System prompt + resolved skill content passed directly as the session's system prompt.
 - Sandbox → SDK permission mode.
@@ -62,6 +63,7 @@ interface AgentAdapter {
 - **Usage/cost:** the `ResultMessage` (TS: `SDKResultMessage`) returned at the end of a call includes cumulative `usage` (input/output/cache tokens) and `total_cost_usd` directly. This is a **client-side estimate from a bundled price table, not authoritative billing** — fine for in-app display, not for anything financial. When a turn uses multiple tools, per-step assistant messages can share an id; dedupe by id before summing to avoid double-counting.
 
 ### Codex adapter
+
 - Runs via `@openai/codex-sdk` (`startThread()` / `run()` / `resumeThread(threadId)`).
 - Sandbox → built-in presets: `read_only`, `workspace_write`, `full_access`.
 - **Context injection — confirmed, with a caveat:** `developer_instructions` is a real, documented config field (<cite>"Additional developer instructions injected into the session"</cite>) distinct from `AGENTS.md`, settable via the SDK's `config` option without touching the user's repo. **However**, multiple open GitHub issues report it being unreliably applied — not injected in some app contexts, and at least one user couldn't confirm via trace logging that it was picked up in CLI sessions at all. **Treat as unverified until tested against the actual SDK version in use.** Fallback if it proves unreliable: write a scoped, session-specific instructions file and pass it via `model_instructions_file`, or fall back to a temporary `AGENTS.md` override in the repo (less clean, has filesystem side effects, but is the more battle-tested mechanism).
@@ -69,9 +71,11 @@ interface AgentAdapter {
 - **Usage/cost:** the turn result exposes token counts (`input_tokens`, `output_tokens`, `cached_input_tokens`, `reasoning_output_tokens`, `total_tokens`) but **no dollar figure** — unlike Claude's SDK, there's no bundled price table. We compute `cost_usd` ourselves from a small hardcoded per-model price table (maintain alongside the adapter; prices change, this will need occasional updates). Watch for double-counting: don't naively add `cached_input_tokens` on top of `input_tokens` — confirm whether cached is a subset or additive for the specific field names returned before writing the cost formula.
 
 ### AgentEvent normalization
+
 Both backends stream text deltas, tool-call start/result events, support session resumption, schema-constrained structured output, and expose token usage. Normalize into one internal type; UI and cost logic branch only where the backends genuinely diverge (tool-execution visibility, presence/absence of a direct dollar cost).
 
 ### Not in scope for v1
+
 Cursor SDK. The adapter interface supports adding it later with no redesign.
 
 ---
@@ -79,12 +83,15 @@ Cursor SDK. The adapter interface supports adding it later with no redesign.
 ## 4. Data model
 
 ### Skill
+
 ```
 Skill { id, name, description, content }
 ```
+
 Reusable, library-level. Referenced by id from persona templates.
 
 ### PersonaTemplate
+
 ```
 PersonaTemplate {
   id, name, avatar/color
@@ -97,6 +104,7 @@ PersonaTemplate {
 ```
 
 ### Contact
+
 ```
 Contact {
   id, personaTemplateId, repoPath
@@ -104,9 +112,11 @@ Contact {
   backendSessionId: string | null  // resume key
 }
 ```
+
 **v1 scope: one persona template bound to one repo per Contact.** To reuse a persona on a second repo, clone it into a second Contact.
 
 ### Group
+
 ```
 Group { id, repoPath }   // one per repo
 
@@ -119,9 +129,11 @@ GroupMessage {
   durable?: boolean                                  // system_summary only
 }
 ```
+
 A Group has **no backend session of its own** — it's a merged view and router. Every Contact's end-of-session summary posts here as `system_summary`; @mentioning a Contact resolves to that Contact's real session via the same `AgentAdapter.run()` used in 1:1 threads; scheduled routine runs (Section 7) post as `routine_run`.
 
 ### Routine
+
 ```
 Routine {
   id, contactId
@@ -134,6 +146,7 @@ Routine {
 ```
 
 ### UsageEvent
+
 ```
 UsageEvent {
   id, contactId, timestamp
@@ -142,9 +155,11 @@ UsageEvent {
   costUsd: number | null   // Claude: from SDK. Codex: computed from price table.
 }
 ```
+
 Logged per turn, not aggregated in place — keeps full history for a spend-over-time view and avoids race conditions on a running total.
 
 ### Composition flow
+
 ```
 Skill library → PersonaTemplate → Contact (bound to repo) → Session (Claude/Codex)
                                         ↓                          ↓
@@ -170,14 +185,18 @@ Skill library → PersonaTemplate → Contact (bound to repo) → Session (Claud
 **Intent and rationale are not free** — they live in a private conversation and need the Group layer to cross Contact boundaries.
 
 ### Compaction rule
+
 At session end, request a structured summary instead of free text:
+
 ```
 { summary: string, category: "decision" | "tradeoff" | "routine" }
 ```
+
 - `decision` / `tradeoff` → `durable: true`, kept indefinitely, always injected. This is the running decision log for the project.
 - `routine` → `durable: false`, only the most recent N are injected; older ones remain queryable in SQLite but aren't surfaced.
 
 ### Known limitations
+
 - No real-time sync between two Contacts running simultaneously on the same repo. Mitigation: one active session per repo at a time, enforced as a soft rule in the router.
 - The Group/journal layer is for intent, not conflict resolution — git remains the safety net for code-level conflicts.
 - Same concurrency rule applies to routines (Section 7): a scheduled wake should not fire if another session is already active on that repo — queue or skip, don't run in parallel.
@@ -189,6 +208,7 @@ At session end, request a structured summary instead of free text:
 **Do not use Codex's or any vendor's native scheduling.** Codex's scheduled tasks are a cloud-only feature of chatgpt.com/codex, not exposed via the CLI or SDK, and even the desktop app's automation feature has an open bug where the scheduled prompt sometimes never gets injected into the run. Build scheduling ourselves, in the Electron main process, calling the same `AgentAdapter.run()` used everywhere else.
 
 **Mechanism:**
+
 - `node-cron` in the main process holds all enabled `Routine`s, scheduled from their cron expression on app startup.
 - On fire: check the concurrency rule (Section 6) — skip or queue if the repo already has an active session — then call `AgentAdapter.run(contact.session, routine.prompt)` exactly as a user-sent message would.
 - Result is appended to the Contact's normal message history (so opening the contact shows what it did while "asleep") and posted to the repo's Group as a `routine_run` message.
@@ -215,6 +235,7 @@ At session end, request a structured summary instead of free text:
 **Auth:** OAuth Device Flow (`@octokit/auth-oauth-device`) — no local redirect server needed, and matches the pattern Codex's own SDK already uses for its login, so it's consistent with the rest of the stack. Store the token via Electron's `safeStorage` API, not plaintext.
 
 **Two responsibilities:**
+
 1. **Repo discovery/binding** — `NewContactFlow`'s repo picker lists the user's actual GitHub repos via the API instead of a manually-typed path; offers to clone if not present locally.
 2. **Remote actions** — pushing branches, opening PRs, commenting — via GitHub REST API calls (Octokit) from the main process, not by trusting the agent to shell out raw git commands unsupervised. Surface as an explicit action (e.g. "Open PR" button), not an automatic side effect — this matters even more for routine-triggered runs (Section 7).
 
@@ -224,45 +245,45 @@ At session end, request a structured summary instead of free text:
 
 ## 10. UI/UX — component mapping
 
-| Concept | Data | Component |
-|---|---|---|
-| Sidebar list | `Contact[]` + `Group[]` | `ConversationList` |
-| 1:1 thread | Resume `Contact.backendSessionId` | `ThreadView` |
-| Group thread | `GroupMessage[]` | `GroupThreadView` |
-| Sent/received message | — | `MessageBubble` (outbound/inbound) |
-| Streaming state | Active `AgentEvent` stream | `StreamingIndicator` |
-| System/journal notice | `GroupMessage` type `system_summary` | `JournalNotice` |
-| Routine run notice | `GroupMessage` type `routine_run` | `RoutineRunNotice` — visually distinct from a live reply, since no one was watching when it ran |
-| @mention picker | Contacts scoped to repo | `MentionPicker` (`cmdk`) |
-| New persona/contact | `PersonaTemplate` + repo bind | `NewContactFlow` |
-| Persona detail/edit | `PersonaTemplate` fields | `PersonaDetailPanel` |
-| Skill library | `Skill[]` CRUD | `SkillLibraryView` |
-| GitHub connect | OAuth device flow state | `GitHubConnectDialog` |
-| Open PR action | Post-session action | `OpenPRButton` |
-| Routine setup | `Routine` CRUD on a Contact | `RoutineEditor` — schedule picker + prompt field |
-| Usage/cost display | `UsageEvent[]` aggregated per Contact | `UsageBadge` (inline, per contact in sidebar) + `UsageDashboard` (spend over time, by persona/repo) |
+| Concept               | Data                                  | Component                                                                                           |
+| --------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Sidebar list          | `Contact[]` + `Group[]`               | `ConversationList`                                                                                  |
+| 1:1 thread            | Resume `Contact.backendSessionId`     | `ThreadView`                                                                                        |
+| Group thread          | `GroupMessage[]`                      | `GroupThreadView`                                                                                   |
+| Sent/received message | —                                     | `MessageBubble` (outbound/inbound)                                                                  |
+| Streaming state       | Active `AgentEvent` stream            | `StreamingIndicator`                                                                                |
+| System/journal notice | `GroupMessage` type `system_summary`  | `JournalNotice`                                                                                     |
+| Routine run notice    | `GroupMessage` type `routine_run`     | `RoutineRunNotice` — visually distinct from a live reply, since no one was watching when it ran     |
+| @mention picker       | Contacts scoped to repo               | `MentionPicker` (`cmdk`)                                                                            |
+| New persona/contact   | `PersonaTemplate` + repo bind         | `NewContactFlow`                                                                                    |
+| Persona detail/edit   | `PersonaTemplate` fields              | `PersonaDetailPanel`                                                                                |
+| Skill library         | `Skill[]` CRUD                        | `SkillLibraryView`                                                                                  |
+| GitHub connect        | OAuth device flow state               | `GitHubConnectDialog`                                                                               |
+| Open PR action        | Post-session action                   | `OpenPRButton`                                                                                      |
+| Routine setup         | `Routine` CRUD on a Contact           | `RoutineEditor` — schedule picker + prompt field                                                    |
+| Usage/cost display    | `UsageEvent[]` aggregated per Contact | `UsageBadge` (inline, per contact in sidebar) + `UsageDashboard` (spend over time, by persona/repo) |
 
 ---
 
 ## 11. Tech stack
 
-| Layer | Choice | Why |
-|---|---|---|
-| Shell | Electron | Process/session management, background residency for routines |
-| Renderer framework | React | Standard Electron pairing |
-| Styling / components | Tailwind + shadcn/ui | `Command` (built on `cmdk`) fits the @mention picker directly; `Dialog`/`Sheet`/`Popover` cover persona editor, new-contact flow, skill library, routine editor |
-| Main↔renderer bridge | Hand-rolled typed IPC layer (`ipcMain.handle`/`ipcRenderer.invoke` + Zod-validated contract) | **Resolved during Phase 1 planning (2026-08-15):** `electron-trpc` was verified stale (last release ~20 months prior) with open, unresolved GitHub issues hitting this exact toolchain (tRPC v11 incompatibility, `moduleResolution: Bundler` incompatibility) — see `docs/plan/00-progress.md` decisions log for citations. Superseded by a hand-rolled `src/shared/ipc-contract.ts` (procedure name → Zod input/output schema) plus a request/response bridge and a streaming bridge for `AgentEvent`s (event-based push over a per-session channel, replacing tRPC subscriptions). End-to-end type safety preserved; revisit `electron-trpc` only if it ships a maintained v11-compatible release. |
-| Data fetching/cache | TanStack Query | Every renderer read is an async call across a process boundary |
-| Local UI/ephemeral state | Zustand | Cross-component state that isn't persisted (e.g. which Contact is currently streaming) |
-| Scheduler | `node-cron` | Runs in main process; drives Routines (Section 7) |
-| Storage | SQLite (`better-sqlite3`) | Resumable local agent session state; synchronous, no server process |
-| Query/schema layer | Drizzle ORM (optional) | Typed, lightweight — cuttable for time if the schema stays this small; hand-written SQL is a reasonable v1 substitute |
-| Claude backend | `@anthropic-ai/claude-agent-sdk` | Main process only |
-| Codex backend | `@openai/codex-sdk` | Main process only |
-| GitHub auth + API | Octokit (`@octokit/rest`, `@octokit/auth-oauth-device`) | Device flow matches existing SDK auth pattern |
-| Secret storage | Electron `safeStorage` | OS keychain-backed encryption for GitHub token |
-| Validation | Zod | Backs the hand-rolled IPC contract's input/output schemas; also used for SDK structured-output schemas (compaction summaries) |
-| Markdown/code rendering | `react-markdown` + `shiki` | Agent responses routinely contain code |
+| Layer                    | Choice                                                                                       | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shell                    | Electron                                                                                     | Process/session management, background residency for routines                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Renderer framework       | React                                                                                        | Standard Electron pairing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Styling / components     | Tailwind + shadcn/ui                                                                         | `Command` (built on `cmdk`) fits the @mention picker directly; `Dialog`/`Sheet`/`Popover` cover persona editor, new-contact flow, skill library, routine editor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Main↔renderer bridge     | Hand-rolled typed IPC layer (`ipcMain.handle`/`ipcRenderer.invoke` + Zod-validated contract) | **Resolved during Phase 1 planning (2026-08-15):** `electron-trpc` was verified stale (last release ~20 months prior) with open, unresolved GitHub issues hitting this exact toolchain (tRPC v11 incompatibility, `moduleResolution: Bundler` incompatibility) — see `docs/plan/00-progress.md` decisions log for citations. Superseded by a hand-rolled `src/shared/ipc-contract.ts` (procedure name → Zod input/output schema) plus a request/response bridge and a streaming bridge for `AgentEvent`s (event-based push over a per-session channel, replacing tRPC subscriptions). End-to-end type safety preserved; revisit `electron-trpc` only if it ships a maintained v11-compatible release. |
+| Data fetching/cache      | TanStack Query                                                                               | Every renderer read is an async call across a process boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Local UI/ephemeral state | Zustand                                                                                      | Cross-component state that isn't persisted (e.g. which Contact is currently streaming)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Scheduler                | `node-cron`                                                                                  | Runs in main process; drives Routines (Section 7)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Storage                  | SQLite (`better-sqlite3`)                                                                    | Resumable local agent session state; synchronous, no server process                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Query/schema layer       | Drizzle ORM (optional)                                                                       | Typed, lightweight — cuttable for time if the schema stays this small; hand-written SQL is a reasonable v1 substitute                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Claude backend           | `@anthropic-ai/claude-agent-sdk`                                                             | Main process only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Codex backend            | `@openai/codex-sdk`                                                                          | Main process only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| GitHub auth + API        | Octokit (`@octokit/rest`, `@octokit/auth-oauth-device`)                                      | Device flow matches existing SDK auth pattern                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Secret storage           | Electron `safeStorage`                                                                       | OS keychain-backed encryption for GitHub token                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Validation               | Zod                                                                                          | Backs the hand-rolled IPC contract's input/output schemas; also used for SDK structured-output schemas (compaction summaries)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Markdown/code rendering  | `react-markdown` + `shiki`                                                                   | Agent responses routinely contain code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ---
 
@@ -320,7 +341,9 @@ Five gaps surfaced doing a full pass over the design that weren't covered by any
 Three journeys, chosen to each exercise a different part of the architecture and map to a different stakeholder's priorities in Part 2, rather than three variations on "send a message."
 
 ### Journey 1 — Configure a persona and get real, scoped work done
-*Exercises: PersonaTemplate/Skill/Contact model, backend adapter, sandbox enforcement, context injection.*
+
+_Exercises: PersonaTemplate/Skill/Contact model, backend adapter, sandbox enforcement, context injection._
+
 1. Create a persona template ("Code Reviewer") — system prompt, attach 1–2 skills, pick backend (Claude), set sandbox to `read_only`.
 2. Bind it to a repo via the GitHub repo picker → creates a Contact.
 3. Send it a message ("review the changes in `auth.ts`").
@@ -329,7 +352,9 @@ Three journeys, chosen to each exercise a different part of the architecture and
 The foundational loop. Simplest to guarantee live; if this doesn't work, nothing else matters.
 
 ### Journey 2 — Two personas coordinate on the same repo via the Group
-*Exercises: Group/GroupMessage, compaction (decision vs. routine), @mention routing.*
+
+_Exercises: Group/GroupMessage, compaction (decision vs. routine), @mention routing._
+
 1. Run "Refactor Buddy" (`workspace_write`) on a repo — it renames something and states a rationale.
 2. Its structured end-of-session summary posts to the repo's Group as `system_summary`, marked `durable`.
 3. Open "Code Reviewer," scoped to the same repo — its first response references the refactor without being told manually.
@@ -338,7 +363,9 @@ The foundational loop. Simplest to guarantee live; if this doesn't work, nothing
 The differentiated moment: proves this is coordinated, not three parallel chatbots. Answers the "so is this actually multi-agent, or just separate windows" question directly.
 
 ### Journey 3 — A routine wakes up, does bounded autonomous work, and reports cost
-*Exercises: Routine/scheduler, tray/background residency, GitHub PR action, UsageEvent tracking, governance (`githubScope`).*
+
+_Exercises: Routine/scheduler, tray/background residency, GitHub PR action, UsageEvent tracking, governance (`githubScope`)._
+
 1. Set up a routine on a persona ("check for newly reported issues daily, fix trivial ones") with `githubScope: open_pr`.
 2. Trigger it live via a manual "run now" button — same code path as the scheduled fire, used for demo reliability rather than waiting on real cron.
 3. It reads the repo/issues, makes a change, opens a PR (not a direct push) — visible via `OpenPRButton`/GitHub.

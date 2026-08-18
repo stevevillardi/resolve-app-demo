@@ -6,7 +6,7 @@
 
 ## Goal
 
-Build the visual language and the static app shell — iMessage-style layout, working navigation between a sidebar and a thread view — entirely on mock/static data. No backend adapters, no real persistence, no auth. By the end, the app should *look* and *navigate* like the finished product even though nothing is real yet.
+Build the visual language and the static app shell — iMessage-style layout, working navigation between a sidebar and a thread view — entirely on mock/static data. No backend adapters, no real persistence, no auth. By the end, the app should _look_ and _navigate_ like the finished product even though nothing is real yet.
 
 Doing this before auth/data/adapters is deliberate: it lets layout and visual decisions get made and reviewed without being entangled with backend plumbing, and gives every later phase a real UI to plug into instead of building UI and logic simultaneously.
 
@@ -66,17 +66,17 @@ The first pass met every acceptance check above but read as templated rather tha
 
 ### Defects fixed in the same pass
 
-| Defect | Effect |
-|---|---|
-| Shiki emitted `--shiki-dark` with no CSS rule consuming it | Code blocks rendered light-theme colours in dark mode |
-| `TooltipTrigger`/`PopoverTrigger` wrapping a `<Button>` without `render` | `<button>` inside `<button>` in `OpenPRButton` and `MentionPicker` |
-| `bg-white` on the routine toggle knob | Hard white in dark mode (now shadcn `Switch`) |
-| Nested `<Dialog>` as a sibling of `DialogContent` in `SkillLibraryView` | Stacked backdrops, detail dialog had no close |
-| Form state initialised from props once, components never unmounted | Editing one persona then opening another showed the first one's values (now keyed by entity id) |
-| GFM tables, blockquote, `hr`, `h4`–`h6` unstyled despite `remarkGfm` | Tables rendered as raw markup |
-| `lucide-react` has no `Github` icon in v1; `GitFork` had been substituted | Wrong icon on a GitHub affordance (now an inlined mark) |
-| `codeToHtml()` called per mount | Re-instantiated the shiki engine per code block (now a cached `createHighlighter`) |
-| `Composer` used `rows={1}` + `max-h-32` | The textarea never actually grew |
+| Defect                                                                    | Effect                                                                                          |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Shiki emitted `--shiki-dark` with no CSS rule consuming it                | Code blocks rendered light-theme colours in dark mode                                           |
+| `TooltipTrigger`/`PopoverTrigger` wrapping a `<Button>` without `render`  | `<button>` inside `<button>` in `OpenPRButton` and `MentionPicker`                              |
+| `bg-white` on the routine toggle knob                                     | Hard white in dark mode (now shadcn `Switch`)                                                   |
+| Nested `<Dialog>` as a sibling of `DialogContent` in `SkillLibraryView`   | Stacked backdrops, detail dialog had no close                                                   |
+| Form state initialised from props once, components never unmounted        | Editing one persona then opening another showed the first one's values (now keyed by entity id) |
+| GFM tables, blockquote, `hr`, `h4`–`h6` unstyled despite `remarkGfm`      | Tables rendered as raw markup                                                                   |
+| `lucide-react` has no `Github` icon in v1; `GitFork` had been substituted | Wrong icon on a GitHub affordance (now an inlined mark)                                         |
+| `codeToHtml()` called per mount                                           | Re-instantiated the shiki engine per code block (now a cached `createHighlighter`)              |
+| `Composer` used `rows={1}` + `max-h-32`                                   | The textarea never actually grew                                                                |
 
 ### Notes carried forward
 

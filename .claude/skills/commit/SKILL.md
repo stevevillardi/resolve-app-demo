@@ -35,7 +35,7 @@ Commitizen (`cz`) prompts for. Follow this format exactly rather than freeform m
   `usage`, `ui`, `deps` — these line up with the `docs/plan/NN-*.md` phases so scope maps to phase.
 - **subject** — imperative mood ("add", not "added"/"adds"), no capitalized first letter unless a proper
   noun, no trailing period, first line ≤72 chars total including `type(scope): `.
-- **body** (optional) — wrap ~72 chars, blank line after subject. Explain *what changed and why*, not a
+- **body** (optional) — wrap ~72 chars, blank line after subject. Explain _what changed and why_, not a
   line-by-line restatement of the diff. Omit for small/obvious commits.
 - **footer** (optional) — `BREAKING CHANGE: <description>` if applicable; `Refs #<n>` / `Closes #<n>` for
   issue/PR references.

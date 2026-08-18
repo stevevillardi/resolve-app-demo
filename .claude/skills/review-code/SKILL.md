@@ -10,7 +10,7 @@ Claude Agent SDK + Codex SDK adapters, GitHub OAuth device flow, Zustand, TanSta
 Architecture reference: `persona-router-blueprint.md` (repo root) and `docs/plan/*.md`.
 
 For a general correctness/simplification pass over a diff, the built-in `/code-review` skill already
-does mechanical scanning. Use *this* skill as the additional, stack-aware checklist — DRY, edge cases,
+does mechanical scanning. Use _this_ skill as the additional, stack-aware checklist — DRY, edge cases,
 missing tests, and the architecture rules this specific app depends on — whether run standalone or
 layered on top of that pass.
 
@@ -28,7 +28,7 @@ layered on top of that pass.
 ## 1. DRY / duplication
 
 - Claude/Codex adapter logic duplicated instead of going through the shared `AgentEvent` normalization
-  layer (blueprint §3) — UI and cost logic should only branch where the backends *genuinely* diverge
+  layer (blueprint §3) — UI and cost logic should only branch where the backends _genuinely_ diverge
   (tool-execution visibility, presence/absence of a direct dollar cost).
 - Zod schemas hand-duplicated between a tRPC procedure's input and the Drizzle table shape, instead of
   deriving one from the other (e.g. `drizzle-zod`) or sharing a single source of truth.
@@ -68,12 +68,14 @@ directly** — only typed tRPC procedures. Treat any violation as high severity,
 ## 4. Edge cases
 
 General:
+
 - Empty/zero states: no personas, no contacts, no repo bound yet, empty skill library.
 - A message/action sent to a contact while a run is already in-flight on that repo.
 - Streaming interrupted mid-turn (network drop, process crash, app quit) — is partial state left
   consistent in SQLite and reflected correctly in the UI on next load, or does it look silently stuck?
 
 Stack-specific:
+
 - Session resume (`resume(sessionId)`) called with a stale/invalid id (app updated, session expired,
   DB out of sync with backend state).
 - Codex `cached_input_tokens` vs `input_tokens` — additive or subset is still explicitly unconfirmed

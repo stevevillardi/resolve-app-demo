@@ -69,7 +69,7 @@ One caveat carried forward: `StreamingIndicator.tsx`'s comment says Claude emits
    - `read_only` personas take a **shared** hold; anything that can write takes
      an **exclusive** one. Readers are unlimited and are never refused. (True of
      the code only from Phase 7 — the shipped version refused a reader that tried
-     to *start* while a writer held. See the §15D entry in `00-progress.md`.)
+     to _start_ while a writer held. See the §15D entry in `00-progress.md`.)
    - Keyed on the **working path**, not the repo. Identical today —
      `workingPathFor(contact)` returns `contact.repoPath` — and the indirection
      is what the worktree phase (`12-worktree-isolation.md`) changes in one

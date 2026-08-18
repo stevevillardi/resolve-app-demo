@@ -8,7 +8,7 @@ settled and 12 is not** — see the annotations there. Items 10 and 11 both turn
 out to be defects. The results are recorded under "Found in the Phase 6/7 live
 close-out" in [`00-progress.md`](00-progress.md).
 **Companion doc:** [`06-core-messaging.md`](06-core-messaging.md) — the original
-scope doc. This file is the *implementation* plan derived from it, written after
+scope doc. This file is the _implementation_ plan derived from it, written after
 a fresh pass over the code. Where the two disagree, this file is newer and says
 why.
 **Written:** 2026-08-16, immediately after Phase 5 merged (`600357d`).
@@ -59,18 +59,18 @@ Two things changed during planning and are the reason this plan is longer than
 the scope doc:
 
 1. **Blueprint §15D's concurrency lock is over-broad and is being corrected.**
-   As specified it keys on `repoPath` and blocks *every* run, which would stop a
+   As specified it keys on `repoPath` and blocks _every_ run, which would stop a
    `read_only` reviewer from reading while a writer works — personas that cannot
    mutate the tree do not need a mutex. The lock becomes a **write lock keyed on
    the working path**: readers never acquire it, writers hold it exclusively.
 2. **Git worktree isolation is adopted as a future phase**, not built here, so
-   that two *writing* personas can eventually run concurrently. Phase 6 leaves
+   that two _writing_ personas can eventually run concurrently. Phase 6 leaves
    the seam (`workingPathFor(contact)`); the design is recorded in Part B so
    Phases 7–9 are planned against it.
 
 ## Decisions taken during planning
 
-- **Repo binding: GitHub list *and* local folder.** `NewContactFlow` gets both
+- **Repo binding: GitHub list _and_ local folder.** `NewContactFlow` gets both
   paths — the Octokit repo list with a clone offer (blueprint §9.1), and a
   native folder picker. Journey 1 then never depends on a clone succeeding.
 - **Clone root: asked for on first clone**, then remembered in the existing
@@ -84,8 +84,8 @@ the scope doc:
   already permits); Phase 8's scheduled writers are the first real contention;
   Phase 9's Open PR is much better with a per-persona branch to push.
 - **Worktree isolation is chosen per Contact at bind time**, not per persona —
-  the same persona may want isolation on one repo and not another. *Not built in
-  Phase 6*: a control that does nothing is worse than a control added later, so
+  the same persona may want isolation on one repo and not another. _Not built in
+  Phase 6_: a control that does nothing is worse than a control added later, so
   `NewContactFlow` gains the step in the worktree phase.
 
 ---
@@ -103,13 +103,13 @@ prerequisites for anything else working.
 know it exists; the rest of this item is the record of what landed and where it
 differs from what was planned.
 
-| Table | Column | Why |
-|---|---|---|
-| `persona_templates` | `model TEXT NULL` | item 2; null = the backend's default, so no backfill |
-| `usage_events` | `model TEXT NULL` | "attributed to the model that actually ran" had no column |
-| `usage_events` | `cost_source TEXT NULL` | `'sdk'` vs `'computed'`; Phase 10 must label estimates honestly |
-| `usage_events` | `cache_write_input_tokens INTEGER NULL` | see below |
-| `usage_events` | `reasoning_output_tokens INTEGER NULL` | see below |
+| Table               | Column                                  | Why                                                             |
+| ------------------- | --------------------------------------- | --------------------------------------------------------------- |
+| `persona_templates` | `model TEXT NULL`                       | item 2; null = the backend's default, so no backfill            |
+| `usage_events`      | `model TEXT NULL`                       | "attributed to the model that actually ran" had no column       |
+| `usage_events`      | `cost_source TEXT NULL`                 | `'sdk'` vs `'computed'`; Phase 10 must label estimates honestly |
+| `usage_events`      | `cache_write_input_tokens INTEGER NULL` | see below                                                       |
+| `usage_events`      | `reasoning_output_tokens INTEGER NULL`  | see below                                                       |
 
 **Correction to the original plan.** It said the last two were "deliberately not
 added — neither appears in blueprint §12 and neither feeds the cost formula."
@@ -117,7 +117,7 @@ They went in anyway. The reasoning that overrode it: both adapters have produced
 these two fields on every turn since Phase 5, and a column that costs nothing
 until written is cheaper than discovering in Phase 10 that a year of turns
 recorded neither. The cost-formula argument was also the weaker one — Codex
-prompt-cache *writes* are free today, but that is a vendor pricing decision, not
+prompt-cache _writes_ are free today, but that is a vendor pricing decision, not
 a property of the data.
 
 `usageEventSchema` and `personaTemplateSchema` in `src/shared/domain.ts`,
@@ -134,7 +134,7 @@ a lossy one.
 
 The database and domain half landed with migration `0004` above:
 `personaTemplate.model` is `z.string().nullable()`, mapped, and covered by tests
-asserting that null parses and an *absent* model does not. What follows is the
+asserting that null parses and an _absent_ model does not. What follows is the
 part still to build.
 
 Do this before item 4 — a session cannot run without a resolved model.
@@ -154,7 +154,7 @@ only correct until it isn't, and cost attribution is a guess whenever it's wrong
   and `SegmentedControl` is a fixed-width sliding-thumb control that won't hold
   a model list. Use the Base UI `Select` — the one existing consumer to copy is
   `src/renderer/src/components/routines/RoutineEditor.tsx:79-104` (note its
-  unusual API: both an `items` prop *and* children). First option is
+  unusual API: both an `items` prop _and_ children). First option is
   "Default (backend's choice)" mapping to `null`.
 - The field joins `PersonaForm`'s per-field `useState` and the `edited` object;
   the `JSON.stringify` dirty check picks it up for free. `PersonaForm` is keyed
@@ -191,12 +191,12 @@ export const agentStreamMessageSchema = z.discriminatedUnion('kind', [
 
 - **Main:** new `src/main/services/agent-events.ts` exporting
   `emitAgentEvent(runId, event)` and `emitRunsChanged()`. Resolve the window
-  *at send time* via `BrowserWindow.getAllWindows()[0]` with an `isDestroyed()`
+  _at send time_ via `BrowserWindow.getAllWindows()[0]` with an `isDestroyed()`
   guard — `setupIpc()` runs before `createWindow()` in `src/main/index.ts`, so a
   window cannot be captured at registration time, and `mainWindow` is a
   function-local `const` that is never exported. Keeping the lookup here also
   preserves the rule that `src/main/adapters/**` never imports `electron`.
-- **Preload:** add to `src/preload/index.ts` *and* `src/preload/index.d.ts`
+- **Preload:** add to `src/preload/index.ts` _and_ `src/preload/index.d.ts`
   (the runtime file holds the loose signature, the ambient decl is where
   genericity is asserted):
   ```ts
@@ -258,8 +258,8 @@ Supporting pieces to add:
   `text_delta`, see `CODEX_CAPABILITIES.streamsTextDeltas: false`); persist the
   `usage_events` row from `done.usage` with `source: 'message'`; write
   `session.sessionId` onto the Contact if it changed (the adapters mutate
-  `session.sessionId` in place, so read it *after* the run); release the lock;
-  *then* `emitAgentEvent(runId, doneEvent)` and `emitRunsChanged()`.
+  `session.sessionId` in place, so read it _after_ the run); release the lock;
+  _then_ `emitAgentEvent(runId, doneEvent)` and `emitRunsChanged()`.
 - **Take `AgentUsage.costUsd` as-is.** Do not recompute — `null` means unknown
   and must never be rendered as `0`. Do not re-derive Claude's tokens by summing
   assistant messages; Phase 5 measured that as reading 80× low. `AgentUsage`
@@ -271,7 +271,7 @@ Supporting pieces to add:
 ## 5. Concurrency: a write lock on the working path
 
 **This supersedes blueprint §15D**, which specifies a `repoPath → boolean busy`
-map checked before *any* run. That would block a `read_only` reviewer while a
+map checked before _any_ run. That would block a `read_only` reviewer while a
 writer works, which needlessly serializes personas that cannot collide. The
 hazard is two writers mutating one working tree — half-applied edits, one agent
 reading a file another is rewriting, `.git/index.lock` contention.
@@ -280,7 +280,7 @@ New `src/main/services/run-lock.ts`, pure and fully unit-testable:
 
 ```ts
 export type LockMode = 'shared' | 'exclusive'
-export function workingPathFor(contact: Contact): string       // contact.repoPath today — the worktree seam
+export function workingPathFor(contact: Contact): string // contact.repoPath today — the worktree seam
 export function lockModeFor(persona: PersonaTemplate): LockMode // read_only -> shared, else exclusive
 export function acquire(path: string, mode: LockMode, holder: RunHolder): Release | null
 export function holderOf(path: string): RunHolder | null
@@ -288,7 +288,7 @@ export function activeRuns(): RunHolder[]
 ```
 
 Semantics: unlimited `shared` holders; one `exclusive` holder, which also
-excludes new `shared` holders *starting* (a reader may finish alongside a writer
+excludes new `shared` holders _starting_ (a reader may finish alongside a writer
 that started after it — a reader seeing a mid-write snapshot is a stale read, not
 corruption). Module-level mutable state matches the existing style in
 `github-auth.ts` / `codex-auth.ts`.
@@ -394,7 +394,7 @@ The persona picker is already real (`usePersonas()`). The repo step is the work.
   `error` → error bubble; `done` → invalidate `messagesKey(contactId)`, the
   usage key, and `contactsKey`.
   The two overlap rather than following on from each other: Claude emits the
-  deltas for a block *and then the same block whole*, so a fold that appends
+  deltas for a block _and then the same block whole_, so a fold that appends
   both renders every reply twice. Pinned by a test in
   `src/main/adapters/claude.test.ts` ("emits the same text twice") and
   documented on the schema in `src/shared/agent.ts`. What gets persisted is
@@ -405,7 +405,7 @@ The persona picker is already real (`usePersonas()`). The repo step is the work.
   titles.
 
   The comment in `agent.ts` used to claim these "map across with no translation
-  table"; the post-Phase-5 review corrected it, because a *superset* is exactly
+  table"; the post-Phase-5 review corrected it, because a _superset_ is exactly
   what cannot be assigned. `unknown` is what `classifyErrorMessage` returns by
   default, so it is the common case rather than an edge one — an unwidened union
   means the most likely error renders with an empty title. `auth` deserves its
@@ -413,10 +413,11 @@ The persona picker is already real (`usePersonas()`). The repo step is the work.
   user action behind it. Also change `ERROR_TITLE[error?.kind ?? 'network']` to
   fall back to `unknown` — defaulting a missing error to "Network error" states
   a cause nobody established.
+
 - Do **not** rewrite `StreamingIndicator.tsx`'s Claude-vs-Codex comment. The SDK
   defines `SDKToolProgressMessage` and the adapter maps it, but it has never been
   observed firing — every Phase 5 probe used fast tools. `streamsToolProgress` is
-  true on both backends while only Codex has been *seen* to stream progress.
+  true on both backends while only Codex has been _seen_ to stream progress.
 - Keep `messages` renderer-transient fields out of the database. Blueprint §12's
   five columns are deliberate; `status` and `error` describe an in-flight turn,
   and a message loaded from disk is by definition finished. The tempting fix
@@ -434,7 +435,7 @@ The persona picker is already real (`usePersonas()`). The repo step is the work.
   §15C) — not a silent failure, not console-only. Cover at minimum: SDK auth
   failure, network failure mid-stream, sandbox denial.
 - Sandbox enforcement is Phase 5 work, corrected by the post-Phase-5 review and
-  now OS-enforced on both backends. Scope item 3 is a *demonstration* in the
+  now OS-enforced on both backends. Scope item 3 is a _demonstration_ in the
   running app against Journey 1's scripted scenario, not new enforcement code —
   but see verification items 11–12, which are the live checks the review could
   not run.
@@ -511,14 +512,16 @@ discovering them through a wrong number in the dashboard.
 
 10. **Is Claude's `total_cost_usd` / `modelUsage` per-turn or cumulative under
     `resume`?** `claude.ts`'s header asserts per-turn, reasoned from SDK docs
-    about *streaming-input* sessions — never checked across an actual resume.
+    about _streaming-input_ sessions — never checked across an actual resume.
     If it is cumulative, every `UsageEvent` after the first over-reports and
     item 4 must store a delta rather than the raw figure. Two probe turns
     settle it:
+
     ```
     npm run probe:adapters -- --backend claude --repo <scratch> --prompt "say ok"
     npm run probe:adapters -- --backend claude --repo <scratch> --prompt "say ok again" --resume <id>
     ```
+
     Compare `done.usage` across the two and record the numbers either way — a
     verified "it is per-turn" is worth as much as finding a bug.
 
@@ -529,12 +532,13 @@ discovering them through a wrong number in the dashboard.
     three one-word replies. Fixed with migration `0006` + `baselineFor()`; full
     numbers in `00-progress.md`. Both worth having — the "no bug" answer for
     Claude is what makes the Codex one legible.
+
 11. **Does the OS sandbox actually engage?** `claudeSandboxOptions` sets
-    `Options.sandbox` and unit tests assert the *options*, which is not the same
+    `Options.sandbox` and unit tests assert the _options_, which is not the same
     as the kernel refusing a write. In a scratch repo with a `read_only`
     persona, attempt `find . -delete` and a `Write`, then assert the file is
     still on disk — not merely that an event said "denied". Do the same at
-    `workspace_write` with a target *outside* the repo, which is the case that
+    `workspace_write` with a target _outside_ the repo, which is the case that
     was unenforced before the review.
 
     ⚠️ **Settled 2026-08-16, and it did not hold.** `read_only` was sound on
@@ -545,10 +549,11 @@ discovering them through a wrong number in the dashboard.
     `/tmp`, because `sandbox.allowUnsandboxedCommands` defaults to `true` and
     nothing had turned it off. Fixed at both layers and re-verified. Note the
     instruction above was right about the method and it still nearly missed:
-    the *first* attempt used a `read_only` persona with the probe's default
+    the _first_ attempt used a `read_only` persona with the probe's default
     "do not modify anything" system prompt, and the model declined on policy
     grounds, which looks exactly like enforcement. Take the restraining prompt
     off before believing a sandbox test.
+
 12. **What happens when the sandbox cannot start?** `failIfUnavailable: true`
     means the turn fails rather than running unconfined. Confirm that failure
     reaches the thread as an error bubble instead of a hang — it is the path
@@ -557,8 +562,9 @@ discovering them through a wrong number in the dashboard.
     ❌ **Still open.** Forcing the sandbox to fail to start on a machine where
     it works is the hard part, and nothing found during the close-out did it by
     accident. The option is set and unit-tested; what is unverified is the
-    error's *path to the UI*. Carry it into Phase 11's failure-state pass,
+    error's _path to the UI_. Carry it into Phase 11's failure-state pass,
     which is already doing that job for every other error kind.
+
 13. **Migration `0004` against a populated database.** The mapper tests cover a
     freshly migrated `:memory:` db. Copy a real `userData` database from before
     `0004`, launch, and confirm existing personas and usage rows survive with
@@ -606,7 +612,7 @@ Item 5 currently says "extend Phase 6's `repoPath → busy` map." Rewrite for th
 new model: an @mention run acquires the same working-path lock in the mode its
 persona implies, so an @mentioned reader is never blocked. Add that the Group is
 the awareness channel for branch state once worktrees land, and that Journey 2 as
-scripted works *without* worktrees under the new lock — one writer plus one
+scripted works _without_ worktrees under the new lock — one writer plus one
 reader run concurrently already.
 
 ## `docs/plan/08-routines-scheduler.md`
@@ -630,11 +636,11 @@ where that plumbing belongs.
 Numbered 12 so nothing renumbers, but **slotted between Phases 8 and 9 in the
 tracker's execution order**, with a one-line note explaining the mismatch.
 
-**Goal.** Let two *writing* personas work the same repo concurrently, each in its
+**Goal.** Let two _writing_ personas work the same repo concurrently, each in its
 own `git worktree` on its own branch.
 
 **Schema.** `contacts.worktree_path` and `contacts.branch`, both nullable.
-`repo_path` keeps meaning *the canonical repo*, so blueprint §4's "one Group per
+`repo_path` keeps meaning _the canonical repo_, so blueprint §4's "one Group per
 repo" and the `groups_repo_path_unique` index are untouched — the Group still
 keys on the repo, the session just runs elsewhere. Session cwd becomes
 `worktree_path ?? repo_path`, which is exactly what `workingPathFor()` returns.
@@ -651,7 +657,7 @@ answer, in three layers, only the last of which involves a human:
 1. **Ambient awareness — automatic.** A worktree session that commits records its
    branch, head sha, and touched files in its Phase 7 end-of-session summary.
    Phase 7 already injects durable `GroupMessage`s into every session start on
-   that repo, so the *next* session begins knowing there is unmerged work on
+   that repo, so the _next_ session begins knowing there is unmerged work on
    `persona/refactor-buddy` touching `src/auth.ts`. This rides an existing seam
    and costs nothing new.
 2. **Read without merging — automatic, no mutation.** Worktrees share one object
@@ -660,11 +666,11 @@ answer, in three layers, only the last of which involves a human:
    `git log`. Each session's context gets a short "open sibling branches" block
    saying so. This is what keeps Journey 2 working: a reviewer can review a
    refactor without anything being merged anywhere. §6's "filesystem state is
-   free" degrades only to "the *object store* is free." Confirm
+   free" degrades only to "the _object store_ is free." Confirm
    `isReadOnlyCommand()` in `sandbox.ts` classifies `git show` / `git diff` /
    `git log` as reads, or a `read_only` persona cannot use any of this.
-3. **Integrate — human, one click.** A persona that needs a sibling's changes *in
-   its own tree* cannot self-serve. It raises a request, carried as an optional
+3. **Integrate — human, one click.** A persona that needs a sibling's changes _in
+   its own tree_ cannot self-serve. It raises a request, carried as an optional
    `needs: { branch, reason }` on Phase 7's structured summary — cheaper than
    exposing an MCP tool, though `@modelcontextprotocol/sdk` is already a
    dependency if a richer channel is wanted later. The Group thread renders it as
@@ -673,7 +679,7 @@ answer, in three layers, only the last of which involves a human:
    diff**, **Merge into `<target working path>`**, **Open PR** (Phase 9),
    **Discard**. Run `git merge --no-commit --no-ff` as a dry run first so the
    merge button is honest about conflicts before it is clicked. Merges target a
-   *specific* working path — merging for Code Reviewer touches Code Reviewer's
+   _specific_ working path — merging for Code Reviewer touches Code Reviewer's
    tree, not the user's. Nothing merges without a click.
 
 A blocked persona's turn ends normally rather than hanging; after the human

@@ -67,7 +67,7 @@ So everything below is still to build — none of it was partially done:
 
 ## Acceptance checks
 
-- [x] Blueprint §16 Journey 3 runs live: set up a routine with `githubScope: open_pr`, trigger via "run now," it makes a change, opens a PR (verified this is a real PR via GitHub, not a push) — **closed in Phase 9, 2026-08-16**, by `src/main/services/journey3.live.test.ts`: two sonnet runs fired through `fireRoutine` (the same function cron calls), each producing a real pull request on a throwaway repo with the right file in it. The *"reads the repo/issues"* clause is **not** closed and is not Phase 9's to close — nothing gives a persona a view of GitHub issues, deliberately, and that is scoped as [`14-agent-capability-surface.md`](14-agent-capability-surface.md).
+- [x] Blueprint §16 Journey 3 runs live: set up a routine with `githubScope: open_pr`, trigger via "run now," it makes a change, opens a PR (verified this is a real PR via GitHub, not a push) — **closed in Phase 9, 2026-08-16**, by `src/main/services/journey3.live.test.ts`: two sonnet runs fired through `fireRoutine` (the same function cron calls), each producing a real pull request on a throwaway repo with the right file in it. The _"reads the repo/issues"_ clause is **not** closed and is not Phase 9's to close — nothing gives a persona a view of GitHub issues, deliberately, and that is scoped as [`14-agent-capability-surface.md`](14-agent-capability-surface.md).
 - [x] The run posts to the Group as `routine_run`, visually distinct per Phase 2's `RoutineRunNotice`. `RoutineRunNotice` and its `case` in `GroupThreadView` already existed; what was missing was anything writing the row. Covered by `compaction.test.ts` and `messaging.test.ts`.
 - [x] `UsageEvent` with `source: "routine"` is logged — asserted in `scheduler.test.ts`'s shared `expectRoutineRan` helper. Reflected in the `UsageBadge` by the same path every other source uses.
 - [x] Closing the app window (not quitting) and waiting past a scheduled fire time results in the routine actually running, verified without reopening the window until after. **Automated** in `e2e/routines.spec.ts`, in two forms — window hidden, and window destroyed so `getAllWindows()` is genuinely empty — re-asserting on every poll that nothing is visible. Verified to fail when the scheduler is not started.
@@ -106,7 +106,7 @@ order stays 8 → 12 → 9, so the check above stays open across two phases; not
 else in this phase depends on it.
 
 **Settled 2026-08-16, in Phase 9.** The PR half is closed and verified live. The
-journey turned out to have a *second* dependency this note did not anticipate:
+journey turned out to have a _second_ dependency this note did not anticipate:
 its first sentence, "check for newly reported issues", needs a persona to be able
 to see something that is not a file on disk, and nothing in the app can — the
 Claude adapter passes `settingSources: []` on purpose and no MCP servers are

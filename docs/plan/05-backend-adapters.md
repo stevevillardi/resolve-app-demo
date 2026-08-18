@@ -189,13 +189,13 @@ caught by a failing check. Fixes landed on `review-post-phase-5`.
 `evaluateToolUse` was executed directly over a case list rather than inspected.
 Five classes of write walked through it:
 
-| Command | Why |
-|---|---|
-| `find . -delete` | `find` was allowlisted; its write predicates were unchecked |
-| `find . -exec rm {} +` | the `+` form carries no shell metacharacter, so `SHELL_CONTROL` never fired |
-| `sed -ni` / `sed --in-place` | the in-place test was a prefix match on `-i`; `-ni` is a short cluster and `--in-place` is the GNU long form |
-| `git branch -D` / `git remote add` | both were on the read-only subcommand list; both mutate |
-| `git -c diff.external=…` | `gitSubcommand()` skipped `-c`'s value by design, and several config keys name programs git then executes |
+| Command                            | Why                                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `find . -delete`                   | `find` was allowlisted; its write predicates were unchecked                                                  |
+| `find . -exec rm {} +`             | the `+` form carries no shell metacharacter, so `SHELL_CONTROL` never fired                                  |
+| `sed -ni` / `sed --in-place`       | the in-place test was a prefix match on `-i`; `-ni` is a short cluster and `--in-place` is the GNU long form |
+| `git branch -D` / `git remote add` | both were on the read-only subcommand list; both mutate                                                      |
+| `git -c diff.external=…`           | `gitSubcommand()` skipped `-c`'s value by design, and several config keys name programs git then executes    |
 
 `sandbox.test.ts` had a case named "rejects sed -i" that passed the whole time.
 It asserted the happy path of the guard rather than the property the guard
@@ -225,7 +225,7 @@ refusal still reaches the model as a sentence it can act on. The allowlist is
 fixed too, but as the second layer rather than the only one.
 
 `workspace_write` was the level that gained the most. `evaluateToolUse` returned
-ALLOW for *any* Bash command at that level — deliberately, with a comment
+ALLOW for _any_ Bash command at that level — deliberately, with a comment
 explaining that constraining it would mean parsing shell — so the repo boundary
 was enforced on `Write`/`Edit` and not at all on `rm -rf ~`. The label and the
 enforcement now agree.

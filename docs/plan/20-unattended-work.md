@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Origin:** The 2026-08-17 workflow review ("The Missing Half of the Loop"), §C — the
-review's second systemic finding: *the unattended story has no delivery and no brakes.*
+review's second systemic finding: _the unattended story has no delivery and no brakes._
 Routines survive a closed window via real tray residency, and then a 3 a.m. run's only
 trace was a group row the user had to go look for. Not one OS notification existed in
 `src/`, in an app styled after the product whose entire core loop is the notification —
@@ -26,7 +26,7 @@ Four review items, plus one scope addition the user chose:
    stopped, or paused.
 4. **C4 — Unread state.** `last_read_at` per conversation, iMessage-blue count badges
    in the sidebar, a "New messages" divider in threads, and the macOS dock badge.
-5. **Recency sort** *(user decision)* — the conversation list orders by last message,
+5. **Recency sort** _(user decision)_ — the conversation list orders by last message,
    not alphabetically; unread rows surface at the top.
 
 ## Decisions (recorded in 00-progress.md)
@@ -91,7 +91,7 @@ Four review items, plus one scope addition the user chose:
 - **Screens sweep, both themes:** the budget banner in its "at least $2.15 of its
   $1.50" form with the alerts-only sentence; Home's missed-schedules section (×3,
   last-missed time); the iMessage-blue unread badge on the group row; the
-  recency-sorted sidebar — and, incidentally, the whole loop: the sweep *opens* the
+  recency-sorted sidebar — and, incidentally, the whole loop: the sweep _opens_ the
   first conversation, whose badge is gone in the very screenshot that shows its
   sibling's, because the mark-read effect fired through the real UI.
 - **E2E (`unread.spec.ts`):** a contact is born read; opening its thread through the

@@ -7,3 +7,11 @@ tsconfig.*.json
 coverage
 playwright-report
 test-results
+
+# Written by drizzle-kit, not by hand. Formatting these cannot stay fixed:
+# every `drizzle-kit generate` writes the new snapshot in its own style and
+# rewrites _journal.json, so a formatted meta/ is un-formatted again at the
+# next migration — 0020 and 0021 landed unformatted for exactly that reason.
+# Same class as pnpm-lock.yaml above. The .sql files are hand-edited and
+# prettier has no parser for them, so they are unaffected either way.
+drizzle/meta

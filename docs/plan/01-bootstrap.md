@@ -13,7 +13,7 @@ Get an empty repo to "electron-vite dev launches a blank window, main/preload/re
    - `npm create @quick-start/electron@latest <tmp-dir> -- --template react-ts`, run outside the repo (repo isn't empty — has planning docs already), then merge generated files into the repo root and delete the temp dir. This is electron-vite's own official scaffold tool (`@quick-start/create-electron`) — do not use the similarly-named `create-electron-vite`, which is ~2 years stale.
    - Set `"name": "persona-router"` in `package.json` and `productName: Persona Router` in `electron-builder.yml` immediately after merging, before any dev/build run — this fixes the `app.getPath('userData')` directory name consistently across dev and packaged runs from the start.
    - Confirm Node version (pin via `.nvmrc`; electron-vite requires `^20.19.0 || >=22.12.0`).
-   - `.gitignore` (node_modules, dist, out, *.db*, .env, .eslintcache, safeStorage-related local secrets) — merge with the scaffold's generated `.gitignore` rather than overwrite either.
+   - `.gitignore` (`node_modules`, `dist`, `out`, `*.db*`, `.env`, `.eslintcache`, safeStorage-related local secrets) — merge with the scaffold's generated `.gitignore` rather than overwrite either.
 
 2. **Process layout** (blueprint §2 process boundary rule)
    - `src/main/` — main process entry, adapters, services, scheduler, SQLite access. Nothing here is reachable from the renderer except via IPC.
@@ -48,7 +48,7 @@ Get an empty repo to "electron-vite dev launches a blank window, main/preload/re
    - Everywhere other phase docs (03–06) said "tRPC procedure" or "tRPC subscription," read it as "IPC procedure" / this layer's streaming primitive — those docs have been updated to match.
 
 6. **Storage baseline**
-   - Install `better-sqlite3` (→ `dependencies`, not `devDependencies` — ships in the packaged app; pin exact/`~`, not `^`, since it's ABI-sensitive). This is the single highest-risk item in the phase — de-risk it in isolation *before* wiring Drizzle on top:
+   - Install `better-sqlite3` (→ `dependencies`, not `devDependencies` — ships in the packaged app; pin exact/`~`, not `^`, since it's ABI-sensitive). This is the single highest-risk item in the phase — de-risk it in isolation _before_ wiring Drizzle on top:
      - The scaffold already wires `"postinstall": "electron-builder install-app-deps"` and `electron-builder.yml` already sets `npmRebuild: false` — native-module rebuild is already half set up via postinstall. Don't add `@electron/rebuild` separately unless this proves insufficient.
      - Add a throwaway one-liner in `src/main/index.ts` (`new (require('better-sqlite3'))(':memory:')`, logged), run `npm run dev`, confirm no `NODE_MODULE_VERSION` mismatch, then remove the line.
      - After `npm run build`, grep `out/main/index.js` for `better-sqlite3` to confirm it's externalized (resolved via `node_modules` at runtime) rather than bundled inline — verify electron-vite's default dependency-externalization behavior empirically, don't assume it.

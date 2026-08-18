@@ -38,7 +38,7 @@ Make the Group layer real: end-of-session structured summaries posting as `syste
 
    **Read `00-progress.md`'s entry on this before assuming §15D's wording.** Phase 6
    deliberately did not build the `repoPath → busy` map §15D describes. The lock
-   is a *write* lock keyed on the working path: `read_only` personas take a
+   is a _write_ lock keyed on the working path: `read_only` personas take a
    shared hold and are never refused, and only writer-vs-writer serializes.
 
    - An @mention-triggered run acquires through the same
@@ -48,7 +48,7 @@ Make the Group layer real: end-of-session structured summaries posting as `syste
      Group thread's UI rather than the composer's.
    - So an @mentioned **reader** is never blocked, which is what makes Journey 2
      work as scripted: Refactor Buddy (`workspace_write`) and Code Reviewer
-     (`read_only`) run against one repo *concurrently*, with no worktrees
+     (`read_only`) run against one repo _concurrently_, with no worktrees
      involved. Journey 2 does not need `12-worktree-isolation.md`.
    - What still serializes is two writers. If that becomes the limiting factor
      here rather than in Phase 8, pull the worktree phase forward.
@@ -70,13 +70,13 @@ Make the Group layer real: end-of-session structured summaries posting as `syste
 
 - **A Phase 6 lock defect that this phase's third acceptance check depended on.**
   `blockingHolder` refused a `shared` acquire whenever an exclusive holder existed, so a
-  reader could not *start* while a writer held the path. Four documents said the opposite,
+  reader could not _start_ while a writer held the path. Four documents said the opposite,
   and three tests asserted the code rather than the claim — including one titled
   `lets a reader run while a writer holds the repo` that asserted the writer was refused,
   and one titled `lets a reader and a writer run together` that asserted neither could join
   the other. Fixed, and the tests rewritten from the claim.
 - **Structured output differs enough between the two SDKs to change the design.** Claude's
-  `outputFormat` is session-level and its structured turns carry a *placeholder* in the field
+  `outputFormat` is session-level and its structured turns carry a _placeholder_ in the field
   `run()` treats as authoritative; Codex's `outputSchema` is per-turn and returns JSON where
   prose would go. Hence `summarize()` beside `run()` rather than an option on it. Full detail
   in `00-progress.md`.

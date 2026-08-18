@@ -60,7 +60,7 @@ out as part of the phase, not bolted on afterwards.
 - `npm test` runs the unit suite, and `npm run build` runs typecheck + tests
   before bundling — so packaging cannot ship a red suite. Note the consequence:
   a deliberate mutation to check that a test has teeth will fail the gate and
-  leave Playwright driving the *previous* bundle. Rebuild with
+  leave Playwright driving the _previous_ bundle. Rebuild with
   `npx electron-vite build` directly when doing that.
 - Database-backed services test against a real `:memory:` SQLite with the
   checked-in migrations applied (`createTestDb`), never hand-written DDL. A copy
@@ -85,13 +85,13 @@ Behaviour that costs money or needs a real network lives in `*.live.test.ts`,
 **checked in** and skipped behind an env var, so it can be re-run on demand
 rather than being a thing someone once did:
 
-| Gate | What it proves |
-|---|---|
-| `LIVE_CODEX_CONTEXT=1` | a repository cannot instruct a Codex persona |
-| `LIVE_GITHUB=1` | real pull requests, create-or-comment, dead-token wording |
-| `LIVE_JOURNEY2=1` | blueprint §16 Journey 2, end to end |
-| `LIVE_JOURNEY3=1` | blueprint §16 Journey 3, end to end |
-| `LIVE_WORKTREES=1` | worktree isolation against real git |
+| Gate                   | What it proves                                            |
+| ---------------------- | --------------------------------------------------------- |
+| `LIVE_CODEX_CONTEXT=1` | a repository cannot instruct a Codex persona              |
+| `LIVE_GITHUB=1`        | real pull requests, create-or-comment, dead-token wording |
+| `LIVE_JOURNEY2=1`      | blueprint §16 Journey 2, end to end                       |
+| `LIVE_JOURNEY3=1`      | blueprint §16 Journey 3, end to end                       |
+| `LIVE_WORKTREES=1`     | worktree isolation against real git                       |
 
 `npm run probe:adapters` and `npm run probe:structured` drive the real SDKs
 outside Electron. That only works because **nothing under `src/main/adapters/`

@@ -23,14 +23,14 @@ Real write-side GitHub actions — push, open PR, comment — performed via the 
    - Wire Phase 2's shell to a real action: given a Contact's session has made local changes (detect via git status on the bound `repoPath`, or track explicitly if the adapter reports files changed), push the branch and open a PR via the API.
    - **Much cleaner once `12-worktree-isolation.md` has landed**, and worth
      sequencing after it if the order is still open. A worktree Contact already
-     works on its own branch, so "Open PR" pushes *that* branch — rather than
+     works on its own branch, so "Open PR" pushes _that_ branch — rather than
      having to invent one from whatever state the user's own working tree
      happens to be in, which is the awkward case this step otherwise has to
      handle. A Contact bound to a plain directory (not a git repo at all — the
      picker allows it) has no branch and no PR path; hide the action rather than
      failing it.
    - This is explicitly a user-clicked action for interactive sessions (blueprint §9: "surface as an explicit action... not an automatic side effect").
-   - For routine-triggered runs (Phase 8), this same code path is what fires automatically at the end of a routine run that made changes — reconcile this with the "explicit action" framing: the distinction is that the *routine itself* is the explicit, user-configured trigger (the user set `githubScope: open_pr` and enabled the routine), not that a human clicks a button per run. Document this distinction clearly since it's a subtle point the blueprint raises but doesn't fully spell out.
+   - For routine-triggered runs (Phase 8), this same code path is what fires automatically at the end of a routine run that made changes — reconcile this with the "explicit action" framing: the distinction is that the _routine itself_ is the explicit, user-configured trigger (the user set `githubScope: open_pr` and enabled the routine), not that a human clicks a button per run. Document this distinction clearly since it's a subtle point the blueprint raises but doesn't fully spell out.
 
 3. **`githubScope` enforcement**
    - `read_only` — no write API calls available to that persona's Contact, full stop (buttons disabled/hidden in UI).
@@ -73,14 +73,14 @@ runs it on the other one. The token comes from the environment because
 
 ## What was built
 
-| Piece | Where |
-|---|---|
-| Octokit as a port, with the only place a status code is read | `src/main/services/github-client.ts` (`listRepos` refactored onto it, gaining its first tests) |
-| `originUrl`, `githubSlug`, `pushBranch`, `describePushError`, and the clone credential fix | `src/main/services/git.ts` |
-| The gate chain, create-or-comment, and the PR body | `src/main/services/pull-requests.ts` |
-| `github.pullRequestState` / `github.openPullRequest` | `src/shared/ipc-contract.ts`, `src/main/ipc/procedures/github.ts`, `src/renderer/src/hooks/usePullRequests.ts` |
-| The action, in a thread and in the Branches panel | `OpenPRButton.tsx`, `ThreadView.tsx`, `BranchDetail.tsx` (`branchSummarySchema` gained `githubScope`) |
-| The unattended pull request | `src/main/services/scheduler.ts` |
+| Piece                                                                                      | Where                                                                                                          |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Octokit as a port, with the only place a status code is read                               | `src/main/services/github-client.ts` (`listRepos` refactored onto it, gaining its first tests)                 |
+| `originUrl`, `githubSlug`, `pushBranch`, `describePushError`, and the clone credential fix | `src/main/services/git.ts`                                                                                     |
+| The gate chain, create-or-comment, and the PR body                                         | `src/main/services/pull-requests.ts`                                                                           |
+| `github.pullRequestState` / `github.openPullRequest`                                       | `src/shared/ipc-contract.ts`, `src/main/ipc/procedures/github.ts`, `src/renderer/src/hooks/usePullRequests.ts` |
+| The action, in a thread and in the Branches panel                                          | `OpenPRButton.tsx`, `ThreadView.tsx`, `BranchDetail.tsx` (`branchSummarySchema` gained `githubScope`)          |
+| The unattended pull request                                                                | `src/main/services/scheduler.ts`                                                                               |
 
 **No migration.** GitHub already knows whether a branch has an open pull request,
 and `GET /pulls?state=open&head=owner:branch` answers it directly — so PR state is
@@ -103,7 +103,7 @@ moment somebody merged in a browser.
   addressing review feedback pushes to the same branch, and `createPr` would fail
   with GitHub's own 422 at best.
 - **A routine's PR is not the exception §9 forbids.** §9 wants remote actions
-  explicit rather than automatic. The explicit act is *setting the routine up* —
+  explicit rather than automatic. The explicit act is _setting the routine up_ —
   an `open_pr` persona, a prompt, a schedule — not a click per fire, because
   nobody is awake at 3am to give one. The bound that matters is preserved: a pull
   request, never a push to the default branch, for `full_access` too.
@@ -117,7 +117,7 @@ moment somebody merged in a browser.
   credential-bearing URL to `git clone`, and git writes the URL it is handed
   verbatim into the new repo's `.git/config` — so every app-cloned repo held a
   live token in a plaintext file inside a directory personas then work in.
-  `gitWritePathsFor` fences `.git` against *writes*; nothing restricts reads.
+  `gitWritePathsFor` fences `.git` against _writes_; nothing restricts reads.
   Reproduced before fixing. The remote is now scrubbed to the clean URL as part
   of the clone, `pushBranch` passes its URL rather than configuring one, and
   `github.live.test.ts` asserts a real clone leaves nothing behind. **Not fixed:**
@@ -138,7 +138,7 @@ moment somebody merged in a browser.
 
 ## Deferred out of this phase
 
-Blueprint §16 Journey 3's *"it reads the repo/issues"* step. Nothing gives a
+Blueprint §16 Journey 3's _"it reads the repo/issues"_ step. Nothing gives a
 persona any view of GitHub issues, and the reason is structural rather than an
 oversight: `claude.ts` passes `settingSources: []` deliberately, and no
 `mcpServers` are passed on either backend. Building a one-off issue-fetch for one

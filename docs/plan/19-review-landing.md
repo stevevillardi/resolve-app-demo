@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Origin:** The 2026-08-17 workflow review ("The Missing Half of the Loop"), Theme A — the
-app delivers *delegate → watch* and has no surface for *review → land*. Six items, built
+app delivers _delegate → watch_ and has no surface for _review → land_. Six items, built
 together because they share one data spine: what a turn or a branch actually changed.
 
 ## Goal
@@ -21,7 +21,7 @@ A developer can see the work inside the app and land it inside the app. Concrete
    `branch_request` rows resolved; Home's "waiting" count excludes merged branches.
 5. **A4 — Commit affordance.** A branch whose worktree holds uncommitted work gets a
    human-clicked "Commit work…" — author is the persona, committer is the user. The app
-   still never commits *unattended*; see the decision below.
+   still never commits _unattended_; see the decision below.
 6. **A2 — Open / reveal.** `shell.openPath` / `shell.revealPath`, validated against known
    roots (bound repos + the worktree root), with buttons where the paths appear.
 
@@ -65,28 +65,28 @@ Verified against a real scratch repo + worktree before any code (2026-08-17):
 ## Acceptance checks
 
 - [x] A branch's diff renders per file with old/new panes, renames and binaries handled,
-      in both themes; the merge flow is unchanged around it. *Content pairs proven in
+      in both themes; the merge flow is unchanged around it. _Content pairs proven in
       `diffs.test.ts` against real git (rename, binary, merge-base-after-main-moves);
       rendering proven by the screens sweep — Monaco with its inline worker under the
-      packaged file:// renderer, split view, monarch highlighting, both themes.*
+      packaged file:// renderer, split view, monarch highlighting, both themes._
 - [x] A turn that edits files shows chips; clicking shows that turn's diff; a read-only
-      persona's turns show none. *Capture proven in `turn-work.test.ts`; the stamp
+      persona's turns show none. _Capture proven in `turn-work.test.ts`; the stamp
       through the real turn loop in `messaging.test.ts` (gated against a real repo, so
-      the mutation is always the turn's own); a changeless turn stamps nothing.*
-- [x] A persisted tool row expands to its detail/output; a live one matches. *Adapters
+      the mutation is always the turn's own); a changeless turn stamps nothing._
+- [x] A persisted tool row expands to its detail/output; a live one matches. _Adapters
       pinned on both content shapes (`claude.test.ts` string + content-part results,
       `codex.test.ts` aggregated output + MCP result/error); persistence pinned on the
-      bound rather than the value, so the doc-15 reversal cannot become unbounded.*
+      bound rather than the value, so the doc-15 reversal cannot become unbounded._
 - [x] Merging a requested branch resolves its `branch_request` in the group thread, and
-      the branch row reads merged; Home stops counting it. *`branches.test.ts`: merge
+      the branch row reads merged; Home stops counting it. _`branches.test.ts`: merge
       stamps, discard stamps, an already-answered ask keeps its first stamp; `merged`
-      flips on `merge-base --is-ancestor`.*
+      flips on `merge-base --is-ancestor`._
 - [x] "Commit work…" commits with persona author / user committer and refreshes the
       panel; it is absent for orphan branches and refused while a run is active.
-      *`branches.test.ts` — including the run-lock refusal, because half a turn's work
-      is the worst possible thing to commit.*
+      _`branches.test.ts` — including the run-lock refusal, because half a turn's work
+      is the worst possible thing to commit._
 - [x] Open folder / reveal works from thread and branch surfaces; a path outside known
-      roots is refused. *`local-paths.test.ts`, including the symlink-out-of-root and
-      prefix-sibling cases.*
+      roots is refused. _`local-paths.test.ts`, including the symlink-out-of-root and
+      prefix-sibling cases._
 - [x] `npm test` (1,391 unit tests), `npm run build` (gated), the E2E suite (56), and
       `npm run screens` all pass on this branch.

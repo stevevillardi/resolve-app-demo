@@ -13,7 +13,7 @@ only since Phase 7 — see the §15D decision entry in `00-progress.md`), so a r
 read a repo while a refactor runs. That freed the read-heavy majority, and it is
 why Journey 2 works without anything here.
 
-Two *writing* personas on one repo still queue. That is a real limit rather than
+Two _writing_ personas on one repo still queue. That is a real limit rather than
 a theoretical one:
 
 - Phase 8's routines fire unattended. A scheduled writer colliding with the repo
@@ -40,12 +40,11 @@ URL can carry a live token.
 > `0006` for `usage_events.session_id`. `branch` already exists — what is still
 > unclaimed is `needs`, which nothing has modelled yet.
 
-
-| Table | Column | Meaning |
-|---|---|---|
-| `contacts` | `worktree_path TEXT NULL` | where this Contact actually works; null = the repo itself |
-| `contacts` | `branch TEXT NULL` | the branch its worktree is on |
-| `contacts` | `isolation TEXT NULL` | `shared` / `worktree` / `exclusive`; null reads as `shared` |
+| Table      | Column                    | Meaning                                                     |
+| ---------- | ------------------------- | ----------------------------------------------------------- |
+| `contacts` | `worktree_path TEXT NULL` | where this Contact actually works; null = the repo itself   |
+| `contacts` | `branch TEXT NULL`        | the branch its worktree is on                               |
+| `contacts` | `isolation TEXT NULL`     | `shared` / `worktree` / `exclusive`; null reads as `shared` |
 
 `repo_path` keeps meaning **the canonical repo**, so blueprint §4's "one Group
 per repo" and the `groups_repo_path_unique` index are untouched — the Group
@@ -61,14 +60,14 @@ still keys on the repo, the session just runs somewhere else.
 - `SessionSpec.repoPath` becomes the worktree path, so `isInsideRepo()` fences
   the right directory. ~~with **no change to `sandbox.ts`**~~ — **this was wrong,
   and it is the finding the phase turns on.** A linked worktree's `.git` is a
-  *file* pointing at `<repo>/.git/worktrees/<name>`, so the index, every new
-  object and every ref update land *outside* the working directory: a sandbox
+  _file_ pointing at `<repo>/.git/worktrees/<name>`, so the index, every new
+  object and every ref update land _outside_ the working directory: a sandbox
   fenced to the cwd fails at `git add`. `SessionSpec` gained `writablePaths`,
   resolved by `gitWritePathsFor()` and applied as Claude's `allowWrite` and
   Codex's `--add-dir`. The grant is the narrowest that permits a commit
   (`worktrees/<name>` + `objects` + `refs` + `logs`) and deliberately excludes
   `.git/hooks` and `.git/config` — a writable hooks directory is a sandbox
-  *escape*, because a hook written during a turn runs unsandboxed on the user's
+  _escape_, because a hook written during a turn runs unsandboxed on the user's
   next git command. `isInsideRepo()` itself is unchanged, as promised.
 
 ### 4. Chosen per Contact, at bind time
@@ -82,13 +81,13 @@ because the same persona may want isolation on one repo and not another.
   persona that needs uncommitted work, `node_modules`, or a directory that isn't
   a git repo at all.
 
-Create the worktree lazily, on the first *writing* turn — not at bind time, so a
+Create the worktree lazily, on the first _writing_ turn — not at bind time, so a
 Contact that only ever reads costs nothing. Branch name `persona/<slug>-<short-id>`.
 
 ## The hard part: blueprint §6 stops being true
 
-§6 says *"Filesystem state is free — every session reads the live repo on disk,
-so code changes are automatically visible across Contacts."* Put a writer on its
+§6 says _"Filesystem state is free — every session reads the live repo on disk,
+so code changes are automatically visible across Contacts."_ Put a writer on its
 own branch and that is false: Code Reviewer in the main tree cannot see Refactor
 Buddy's work. That is Journey 2 step 3 exactly.
 
@@ -97,7 +96,7 @@ The answer is three layers, and only the last involves a human.
 **1. Awareness — automatic.** A worktree session that commits records its branch,
 head sha, and touched files in its Phase 7 end-of-session summary. Phase 7
 already injects durable `GroupMessage`s into every session start on that repo, so
-the *next* session begins knowing there is unmerged work on
+the _next_ session begins knowing there is unmerged work on
 `persona/refactor-buddy` touching `src/auth.ts`. This rides an existing seam and
 costs nothing new — which is why `07-group-coordination.md` was told to leave
 room for branch metadata in that structured output.
@@ -123,7 +122,7 @@ subcommands on the deny side, so this needs checking rather than assuming, or a
 `read_only` persona cannot use any of it.
 
 **3. Integrating — human, one click.** A persona that needs a sibling's changes
-*in its own tree* cannot self-serve, and should not.
+_in its own tree_ cannot self-serve, and should not.
 
 - It raises a request, carried as an optional `needs: { branch, reason }` on
   Phase 7's structured summary. Cheaper than exposing an MCP tool for it, though
@@ -135,7 +134,7 @@ subcommands on the deny side, so this needs checking rather than assuming, or a
 - Row actions: **Merge into `<target working path>`** and **Discard** (Open PR
   waits for Phase 9). The conflict check is `git merge-tree --write-tree`, not
   the `git merge --no-commit --no-ff` this doc originally proposed — that one is
-  a dry run that *isn't*, leaving the target tree conflicted on failure, which is
+  a dry run that _isn't_, leaving the target tree conflicted on failure, which is
   a poor thing to do to a directory somebody is working in. `merge-tree` merges
   in the object store: exit 1 signals conflicts, `--name-only` names the files,
   and HEAD and the working tree are untouched. It answers "do these two commits
@@ -168,7 +167,7 @@ discover them:
 
 - Automatic merging of any kind. Layer 3 is human by design.
 - Cross-repo worktrees, or more than one worktree per Contact.
-- Rebasing or conflict *resolution* UI — the dry run reports conflicts, and
+- Rebasing or conflict _resolution_ UI — the dry run reports conflicts, and
   resolving them is the user's job in their own tools.
 
 ## Acceptance checks
@@ -181,10 +180,10 @@ discover them:
       treating those two as contending — `run-lock.test.ts`, a deliberate edit
       to the test that pinned the old answer, plus the matrix for decision 5
       below.
-- [x] A `read_only` Contact can read an unmerged sibling branch via `git
-      show`/`git diff` without anything merged and without the sandbox refusing
-      — measured directly under a write fence, and the allowlist already
-      permitted all three commands (`sandbox.test.ts`).
+- [x] A `read_only` Contact can read an unmerged sibling branch via
+      `git show`/`git diff` without anything merged and without the sandbox
+      refusing — measured directly under a write fence, and the allowlist
+      already permitted all three commands (`sandbox.test.ts`).
 - [x] A writer's end-of-session summary names its branch, and the next session
       on that repo starts already aware of it — `compaction.test.ts` for the
       stamping, `context.test.ts` for the injected block. Stamped by git, not
@@ -209,8 +208,8 @@ point rather than thoroughness theatre: the two reach the sandbox by different
 routes — `sandbox.filesystem.allowWrite` versus `--add-dir` — so one passing
 says nothing about the other.
 
-- [x] **A worktree writer actually commits.** Claude: reply *"Add GREETING
-      constant to util.ts"*, branch moved past `main`, `git show <branch>:util.ts`
+- [x] **A worktree writer actually commits.** Claude: reply _"Add GREETING
+      constant to util.ts"_, branch moved past `main`, `git show <branch>:util.ts`
       contains the constant, and the user's own checkout is untouched and clean.
       Codex: the same, on the same assertions.
 - [x] **Two writers run at once and both complete.** Neither refused, each file
@@ -225,7 +224,7 @@ Cost: about $0.84 per full Claude run at `claude-sonnet-5`, $0.08 on Codex at
 
 Branch awareness was confirmed as a side effect, which is the cheapest kind of
 confirmation: the summaries came back stamped `on persona/refactor-buddy-…` with
-text of their own accord saying the work *"is not checked out in the main tree"*.
+text of their own accord saying the work _"is not checked out in the main tree"_.
 
 ## Verified live (2026-08-16)
 
@@ -235,7 +234,7 @@ Everything below was measured, not reasoned about.
   worktrees cannot share a branch (hard `fatal`); `prune` reclaims a
   hand-deleted worktree and **the branch survives**, which is what makes that
   deletion recoverable; `worktree remove` refuses a dirty tree without `--force`
-  and the branch survives removal too; a *failed* `add` still creates its
+  and the branch survives removal too; a _failed_ `add` still creates its
   branch, which had to be cleaned up or the next attempt would silently reuse a
   branch pointing at nothing meaningful; `add` creates missing intermediate
   directories; and `.git/worktrees/<name>` is deduped from the path's basename
@@ -256,7 +255,7 @@ Everything below was measured, not reasoned about.
 Gate 2 failed the first time it ran on `claude-sonnet-5`, and only there: seven
 runs on haiku and every Codex run passed. The failure was a permission denial on
 one writer, and the message named no path, so the first job was to make the
-adapter say *what* had been refused. With that in place it reproduced
+adapter say _what_ had been refused. With that in place it reproduced
 immediately and both writers named the same shape of target:
 
     Blocked Write: this persona's sandbox does not allow it.
@@ -268,7 +267,7 @@ git puts the index a commit has to lock — rather than against its own working
 tree. The right basename, the wrong parent. Both layers refused it correctly, so
 nothing escaped; the turn simply failed to do its work.
 
-Gate 1 never hit this because it *edits an existing file*, which gives the model
+Gate 1 never hit this because it _edits an existing file_, which gives the model
 an unambiguous path. It takes a **new** file with a bare name to expose it — and
 personas create files constantly, so this was a real defect rather than an
 artefact of the test prompt.
@@ -288,7 +287,7 @@ mocks the adapter, and a mocked adapter never resolves a path.
   path is `<userData>/worktrees/<repo-name>/<persona-slug>-<short-id>`, and the
   repo component is the basename. Two Contacts always differ by short id, so
   nothing collides in practice, but the directory is named for readability and
-  it is the *branch* that git actually polices.
+  it is the _branch_ that git actually polices.
 - **A packed ref reports no head in the sibling-branch block.** The list is
   resolved synchronously while the session spec is built, so it reads
   `refs/heads/<branch>` off disk rather than running git. Worktree branches are

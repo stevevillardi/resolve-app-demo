@@ -11,7 +11,7 @@ Two independent auth concerns, done together because both gate every later phase
 1. **Agent backend auth** — can this app actually call Claude and Codex.
 2. **GitHub auth** — can this app read the user's repos and later act on them (push/PR).
 
-Neither is about *using* these credentials yet (no adapters, no repo picker calling the real API) — this phase is "acquire and securely store the credentials, and reflect auth state in the UI." Real usage of GitHub's API for repo listing lands in Phase 6 (`NewContactFlow`); real usage of Claude/Codex auth lands in Phase 5 (adapters).
+Neither is about _using_ these credentials yet (no adapters, no repo picker calling the real API) — this phase is "acquire and securely store the credentials, and reflect auth state in the UI." Real usage of GitHub's API for repo listing lands in Phase 6 (`NewContactFlow`); real usage of Claude/Codex auth lands in Phase 5 (adapters).
 
 ## Scope
 
@@ -43,28 +43,28 @@ Neither is about *using* these credentials yet (no adapters, no repo picker call
 
 ## Acceptance checks
 
-- [x] Fresh install → app detects no auth → onboarding flow appears. *(Splash → onboarding verified on a profile with no `onboarding_completed` row.)*
-- [x] Claude auth: either detects existing CLI auth, or accepts and stores an API key. *(Detected existing CLI auth: `source: "cli"`, email + org + `Claude Pro` returned.)*
+- [x] Fresh install → app detects no auth → onboarding flow appears. _(Splash → onboarding verified on a profile with no `onboarding_completed` row.)_
+- [x] Claude auth: either detects existing CLI auth, or accepts and stores an API key. _(Detected existing CLI auth: `source: "cli"`, email + org + `Claude Pro` returned.)_
 - [x] Codex auth: SDK's own auth-reuse/device-login behavior confirmed working (or documented as broken/unverified with a fallback noted). **The blueprint's assumption was wrong — see the correction below.** Reuse detection and the device-code login both work via the vendored CLI.
-- [x] GitHub device flow completes end-to-end: code shown, user authorizes in browser, app detects completion, token stored via `safeStorage`. *(Confirmed by the user. Resulting state: `github_token.bin` written at mode `0600` with a `v10` keychain-encrypted prefix, `github_account_login=stevevillardi` and `github_scopes=repo read:user` in `app_state`, and zero token-shaped strings anywhere in the DB.)*
-- [x] Restarting the app after completing onboarding does not re-prompt. *(`completeOnboarding` → reload → app shell, not onboarding.)*
-- [x] No token/key is ever written to SQLite or logs in plaintext. *(`app_state` holds only `onboarding_completed`; no token-shaped strings anywhere under userData or in console output; `safeStorage` round-trip confirmed `v10`-prefixed ciphertext at mode `0600` that does not contain its plaintext.)*
-- [x] `auth.getStatus` reflects backend states independently. *(Claude + Codex authenticated while GitHub disconnected rendered correctly; the sidebar dot read `data-connected=false` in the same pass.)*
+- [x] GitHub device flow completes end-to-end: code shown, user authorizes in browser, app detects completion, token stored via `safeStorage`. _(Confirmed by the user. Resulting state: `github_token.bin` written at mode `0600` with a `v10` keychain-encrypted prefix, `github_account_login=stevevillardi` and `github_scopes=repo read:user` in `app_state`, and zero token-shaped strings anywhere in the DB.)_
+- [x] Restarting the app after completing onboarding does not re-prompt. _(`completeOnboarding` → reload → app shell, not onboarding.)_
+- [x] No token/key is ever written to SQLite or logs in plaintext. _(`app_state` holds only `onboarding_completed`; no token-shaped strings anywhere under userData or in console output; `safeStorage` round-trip confirmed `v10`-prefixed ciphertext at mode `0600` that does not contain its plaintext.)_
+- [x] `auth.getStatus` reflects backend states independently. _(Claude + Codex authenticated while GitHub disconnected rendered correctly; the sidebar dot read `data-connected=false` in the same pass.)_
 
 ## Tests
 
 Added 2026-08-16, alongside a retroactive pass over Phases 1–2 — see the testing decision in `00-progress.md`.
 
-| Area | File | Covers |
-|---|---|---|
-| Encryption boundary | `src/main/services/secrets.test.ts` | round trip, `0600` mode, plaintext never on disk, refusal when no keychain, recovery from foreign ciphertext |
-| App state | `src/main/services/app-state.test.ts` | real in-memory SQLite, upsert, flag semantics |
-| GitHub device flow | `src/main/services/github-auth.test.ts` | transitions, generation guard against late resolves from a cancelled flow, error translation, disconnect |
-| Codex | `src/main/services/codex-auth.test.ts` | device-code parsing against captured real CLI output, chunk merging, `login status` mapping, key on stdin not argv |
-| Claude | `src/main/services/claude-auth.test.ts` | `AccountInfo` mapping, session teardown, caching, `process.env` spread |
-| Aggregation | `src/main/services/auth-status.test.ts` | all eight connected/disconnected combinations |
-| IPC boundary | `src/main/ipc/registerProcedure.test.ts`, `src/shared/ipc-contract.test.ts` | dispatch, unknown procedure, input/output validation, schema shape |
-| Launch flow | `e2e/launch.spec.ts` | real app: splash → onboarding → shell, migrations, relaunch persistence, allowlist enforcement |
+| Area                | File                                                                        | Covers                                                                                                             |
+| ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Encryption boundary | `src/main/services/secrets.test.ts`                                         | round trip, `0600` mode, plaintext never on disk, refusal when no keychain, recovery from foreign ciphertext       |
+| App state           | `src/main/services/app-state.test.ts`                                       | real in-memory SQLite, upsert, flag semantics                                                                      |
+| GitHub device flow  | `src/main/services/github-auth.test.ts`                                     | transitions, generation guard against late resolves from a cancelled flow, error translation, disconnect           |
+| Codex               | `src/main/services/codex-auth.test.ts`                                      | device-code parsing against captured real CLI output, chunk merging, `login status` mapping, key on stdin not argv |
+| Claude              | `src/main/services/claude-auth.test.ts`                                     | `AccountInfo` mapping, session teardown, caching, `process.env` spread                                             |
+| Aggregation         | `src/main/services/auth-status.test.ts`                                     | all eight connected/disconnected combinations                                                                      |
+| IPC boundary        | `src/main/ipc/registerProcedure.test.ts`, `src/shared/ipc-contract.test.ts` | dispatch, unknown procedure, input/output validation, schema shape                                                 |
+| Launch flow         | `e2e/launch.spec.ts`                                                        | real app: splash → onboarding → shell, migrations, relaunch persistence, allowlist enforcement                     |
 
 `applyDeviceAuthOutput` was extracted from the spawn handler in `codex-auth.ts` so the parsing is testable without launching a 220MB binary.
 
@@ -74,14 +74,14 @@ Two constraints worth knowing: E2E redirects `HOME`/`CODEX_HOME` at a throwaway 
 
 §15A says Codex's SDK handles login itself, "with its own device-code browser login if none exists." Verified against `@openai/codex-sdk@0.147.0`: the SDK exports only `Codex`, `Thread`, and `CodexOptions { codexPathOverride, baseUrl, apiKey, config, env }` — **no login or auth API of any kind**. That behaviour belongs to the `codex` CLI, which the SDK vendors as a dependency.
 
-Driving that CLI directly turned out to be *better* than what the blueprint assumed, because it exposes a device-code flow with the same shape as GitHub's:
+Driving that CLI directly turned out to be _better_ than what the blueprint assumed, because it exposes a device-code flow with the same shape as GitHub's:
 
-| Command | Behaviour (confirmed by running the vendored binary) |
-|---|---|
-| `codex login status` | exit 0 `Logged in using ChatGPT` / exit 1 `Not logged in` |
-| `codex login --device-auth` | prints `https://auth.openai.com/codex/device` + a one-time code (e.g. `UHHW-B1Z5X`), 15-minute expiry; exits 0 on completion |
-| `codex login --with-api-key` | reads the key from **stdin**, so it never appears in argv or `ps` |
-| `CODEX_HOME` | honoured — lets a logged-out profile be tested without touching real credentials |
+| Command                      | Behaviour (confirmed by running the vendored binary)                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `codex login status`         | exit 0 `Logged in using ChatGPT` / exit 1 `Not logged in`                                                                    |
+| `codex login --device-auth`  | prints `https://auth.openai.com/codex/device` + a one-time code (e.g. `UHHW-B1Z5X`), 15-minute expiry; exits 0 on completion |
+| `codex login --with-api-key` | reads the key from **stdin**, so it never appears in argv or `ps`                                                            |
+| `CODEX_HOME`                 | honoured — lets a logged-out profile be tested without touching real credentials                                             |
 
 Because both providers are device-code flows, they share one `DeviceFlowState` shape in the IPC contract and one `DeviceCodeDisplay` component.
 
