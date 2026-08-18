@@ -339,9 +339,19 @@ describe('contextFill', () => {
       backend
     ) as ContextTokens
 
+  /**
+   * Each case divides by *its own* model's window, which is the claim — one
+   * shared constant would pass a single case and be wrong for every other
+   * model, and that is close to the defect this file's denominator actually
+   * had. Ids are drawn from all three tiers the table now knows for that
+   * reason.
+   */
   it('divides the last prompt by the model’s window', () => {
-    // 50k of a Claude model's 200k.
-    expect(contextFill(session(50_000, 'claude-opus-5'))?.fraction).toBeCloseTo(0.25)
+    // 250k of a 1M Claude window.
+    expect(contextFill(session(250_000, 'claude-opus-5'))?.fraction).toBeCloseTo(0.25)
+    // 50k of Haiku's 200k — the same fraction from a fifth of the tokens, so a
+    // wrong tier cannot pass by arithmetic coincidence.
+    expect(contextFill(session(50_000, 'claude-haiku-4-5'))?.fraction).toBeCloseTo(0.25)
     // 100k of a GPT-5 400k.
     expect(contextFill(session(100_000, 'gpt-5.5'))?.fraction).toBeCloseTo(0.25)
   })
@@ -355,25 +365,31 @@ describe('contextFill', () => {
   })
 
   it('carries where the denominator came from', () => {
-    expect(contextFill(session(1000, 'claude-haiku-4-5'))?.windowSource).toBe('published')
-    expect(contextFill(session(1000, 'claude-opus-5'))?.windowSource).toBe('inferred')
+    expect(contextFill(session(1000, 'claude-opus-5'))?.windowSource).toBe('published')
+    expect(contextFill(session(1000, 'gpt-5.5'))?.windowSource).toBe('inferred')
   })
 
   // A stale table, or a model served with a bigger window than the one
   // published, would otherwise render "130% full" — which reads as a bug rather
   // than as the honest "at least full" it actually means.
   it('clamps at full rather than reporting over 100%', () => {
-    expect(contextFill(session(500_000, 'claude-opus-5'))?.fraction).toBe(1)
+    expect(contextFill(session(2_000_000, 'claude-opus-5'))?.fraction).toBe(1)
   })
 
-  // The numerator is the last prompt, never the running bill. On Codex those
-  // diverge without bound, and using the bill would make a long cheap
-  // conversation look full when it is not.
+  /**
+   * The numerator is the last prompt, never the running bill. On Codex those
+   * diverge without bound, and using the bill would make a long cheap
+   * conversation look full when it is not.
+   *
+   * Sized against Haiku's 200k so the two readings land far apart: the bill
+   * would render 60% and the truth is 10%. On a 1M model the same rows differ
+   * by eight points, which a passing test would not distinguish from rounding.
+   */
   it('measures the last request, not everything the session has been billed', () => {
     const tokens = contextTokens(
       [
-        event({ timestamp: 1, inputTokens: 100_000, sessionId: 's', model: 'claude-opus-5' }),
-        event({ timestamp: 2, inputTokens: 20_000, sessionId: 's', model: 'claude-opus-5' })
+        event({ timestamp: 1, inputTokens: 100_000, sessionId: 's', model: 'claude-haiku-4-5' }),
+        event({ timestamp: 2, inputTokens: 20_000, sessionId: 's', model: 'claude-haiku-4-5' })
       ],
       's',
       'codex'

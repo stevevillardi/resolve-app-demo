@@ -20,12 +20,22 @@
  * Like `models.ts` and `pricing.ts`, this WILL go stale. LAST_VERIFIED is how
  * the next person finds out.
  *
- * **Two open items ride on this file**, both in `docs/plan/00-progress.md` under
- * "Cross-cutting open items": the Claude 5 rows are `inferred` and want
- * confirming, and the Claude SDK reports a window per turn that this app is not
- * yet reading — which would retire the first item for that backend. Recorded
- * there rather than only here so they are found by someone reading the plan,
- * not only by someone already editing this table.
+ * **The first table was wrong, and wrong in the direction nobody was watching.**
+ * Phase 22 flagged the Claude 5 rows as `inferred` and asked for confirmation;
+ * confirmation arrived and said those rows were right to distrust — but so were
+ * four rows carrying `published`, which is the stronger claim. Seven Claude ids
+ * hold 1M, not the 200k every one of them was recorded at, so the meter was
+ * dividing by a denominator five times too small and reporting a prompt at 50%
+ * of its window as *full*. The lesson worth keeping is not "check the inferred
+ * rows": it is that `source` records where a number came from and says nothing
+ * about whether it is current, so a `published` row goes stale exactly as
+ * quietly as an `inferred` one. LAST_VERIFIED is the field that answers that,
+ * and it is the one to read first.
+ *
+ * One open item still rides on this file, in `docs/plan/00-progress.md` under
+ * "Cross-cutting open items": the Claude SDK reports a window per turn that
+ * this app is not yet reading, which would make that denominator a measurement
+ * and retire this class of defect for that backend outright.
  */
 
 /** ISO date this table was last checked against vendor documentation. */
@@ -55,20 +65,26 @@ export interface ContextWindow {
  * trailing date. That is measured from a real run, not assumed.
  */
 const CONTEXT_WINDOWS: Record<string, ContextWindow> = {
-  // Anthropic has published 200k for every Claude model to date, and the
-  // captured fixture confirms it for haiku-4-5.
-  'claude-opus-4-8': { tokens: 200_000, source: 'published' },
-  'claude-opus-4-7': { tokens: 200_000, source: 'published' },
-  'claude-opus-4-6': { tokens: 200_000, source: 'published' },
-  'claude-sonnet-4-6': { tokens: 200_000, source: 'published' },
+  // Anthropic documents a 1M-token window for the Opus 4.6-and-later line, the
+  // Sonnet 4.6-and-later line, and the whole 5 family — on the Claude API,
+  // Bedrock, Vertex and Foundry alike. 1M is the *default* for these ids: no
+  // beta header, and long-context requests bill at standard rates, so there is
+  // no tier boundary inside the window the way there is for the GPT-5 line
+  // below. (Those requests cap at 128k output tokens, which is a limit on the
+  // reply rather than on the window, so nothing here reads it.)
+  'claude-fable-5': { tokens: 1_000_000, source: 'published' },
+  'claude-opus-5': { tokens: 1_000_000, source: 'published' },
+  'claude-opus-4-8': { tokens: 1_000_000, source: 'published' },
+  'claude-opus-4-7': { tokens: 1_000_000, source: 'published' },
+  'claude-opus-4-6': { tokens: 1_000_000, source: 'published' },
+  'claude-sonnet-5': { tokens: 1_000_000, source: 'published' },
+  'claude-sonnet-4-6': { tokens: 1_000_000, source: 'published' },
+  // Everything older stayed at 200k, Sonnet 4.5 included. Haiku is the only
+  // model in this app's picker on that tier, and it is the one the captured SDK
+  // fixture covers — `claude.test.ts` has reported `contextWindow: 200000` for
+  // it since Phase 5, which is the single row here confirmed by a real run
+  // rather than by transcription.
   'claude-haiku-4-5': { tokens: 200_000, source: 'published' },
-  // The 5 family at the family baseline. Marked inferred deliberately: it is
-  // the figure every Claude generation has shipped with, but it is not a number
-  // read off a page for these ids, and a reader deciding whether to act on "92%
-  // full" deserves to know which of those two they are looking at.
-  'claude-fable-5': { tokens: 200_000, source: 'inferred' },
-  'claude-opus-5': { tokens: 200_000, source: 'inferred' },
-  'claude-sonnet-5': { tokens: 200_000, source: 'inferred' },
 
   // OpenAI documents 400k total for the GPT-5 line. Consistent with this repo's
   // own LONG_CONTEXT_THRESHOLD of 272k, which is the *input* tier boundary
