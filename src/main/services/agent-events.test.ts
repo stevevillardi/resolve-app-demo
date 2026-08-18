@@ -13,8 +13,13 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => windows }
 }))
 
-const { emitAgentEvent, emitMessagesChanged, emitRoutinesChanged, emitRunsChanged, onMessagesChangedInMain } =
-  await import('./agent-events')
+const {
+  emitAgentEvent,
+  emitMessagesChanged,
+  emitRoutinesChanged,
+  emitRunsChanged,
+  onMessagesChangedInMain
+} = await import('./agent-events')
 const { AGENT_EVENT_CHANNEL } = await import('../../shared/agent')
 
 function fakeWindow(destroyed = false): FakeWindow {

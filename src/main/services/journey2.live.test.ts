@@ -58,7 +58,10 @@ vi.mock('./agent-events', () => ({
   emitUsageChanged: () => {},
   emitMessagesChanged: () => {}
 }))
-vi.mock('../notifications', () => ({ notifyTurnFinished: () => {}, notifyRoutineOutcome: () => {} }))
+vi.mock('../notifications', () => ({
+  notifyTurnFinished: () => {},
+  notifyRoutineOutcome: () => {}
+}))
 
 // The real adapters, with no injected config: outside Electron the Codex SDK
 // resolves its own binary and both CLIs use the login already on this machine.

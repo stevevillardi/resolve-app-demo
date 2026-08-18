@@ -63,7 +63,10 @@ vi.mock('./agent-events', () => ({
   emitUsageChanged: () => {},
   emitMessagesChanged: () => {}
 }))
-vi.mock('../notifications', () => ({ notifyTurnFinished: () => {}, notifyRoutineOutcome: () => {} }))
+vi.mock('../notifications', () => ({
+  notifyTurnFinished: () => {},
+  notifyRoutineOutcome: () => {}
+}))
 
 // Real adapters with no injected config, exactly as scripts/probe-adapters.ts
 // runs them: outside Electron both CLIs use the login already on this machine.
