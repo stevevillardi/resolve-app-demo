@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { contextWindowFor } from '../../shared/context-windows'
 import { CODEX_PRICES } from './pricing'
 import { MODELS_LAST_VERIFIED, SUMMARY_MODELS, modelsForBackend, summaryModelFor } from './models'
 
@@ -76,6 +77,26 @@ describe('the model menu', () => {
     // ships. The aliases do not.
     for (const model of [...modelsForBackend('claude'), SUMMARY_MODELS.claude]) {
       expect(model, model).not.toMatch(/-\d{8}$/)
+    }
+  })
+
+  /**
+   * Two dated tables, in different files, keyed by the same strings — the shape
+   * that drifts. The file header already asks for exactly this against
+   * CODEX_PRICES in prose; this makes the same rule executable for the context
+   * meter, whose failure is quieter still. A model added to the picker with no
+   * window here does not error: its percentage silently stops appearing, with
+   * nothing on screen to say why.
+   *
+   * Asserted in one direction only. A window for a model the picker has since
+   * dropped is harmless and wanted — old usage rows still name it, and
+   * resolving those is the point.
+   */
+  it('offers no model without a context window', () => {
+    for (const backend of ['claude', 'codex'] as const) {
+      for (const model of modelsForBackend(backend)) {
+        expect(contextWindowFor(model), model).not.toBeNull()
+      }
     }
   })
 })
