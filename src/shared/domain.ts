@@ -385,7 +385,19 @@ export const contactDraftSchema = contactSchema
   // Optional rather than nullable: an absent isolation means "decide for me",
   // and main picks from the persona's sandbox level. Null is only ever a stored
   // value, meaning a row written before the column existed.
-  .extend({ isolation: isolationSchema.optional() })
+  .extend({
+    isolation: isolationSchema.optional(),
+    /**
+     * Same `.trim().min(1)` as `contacts.update`'s rename (§G4).
+     *
+     * The two disagreed until the flow could ask for a name at all: renaming a
+     * contact to nothing was refused, while *creating* one called nothing was
+     * accepted — the shape was unreachable only because the name was derived.
+     * Now that there is a field, the boundary has to say what it means, and it
+     * should say the same thing at both ends.
+     */
+    displayName: z.string().trim().min(1)
+  })
 /**
  * `timestamp` is omitted alongside `id` because main mints it too — a
  * renderer-supplied time would let a clock skew reorder the thread.

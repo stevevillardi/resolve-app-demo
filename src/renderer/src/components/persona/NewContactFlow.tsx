@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Check, CloudDownload, FolderGit2, FolderOpen, Search } from 'lucide-react'
+import {
+  AlertTriangle,
+  Check,
+  CloudDownload,
+  FolderGit2,
+  FolderOpen,
+  Plus,
+  Search
+} from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +24,8 @@ import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { CheckRow } from '@/components/common/CheckRow'
 import { ListRow } from '@/components/common/ListRow'
+import { Field } from '@/components/common/Field'
+import { Input } from '@/components/ui/input'
 import { ISOLATION_OPTIONS } from '@/lib/isolation'
 import { Github } from '@/components/github/GithubMark'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
@@ -28,6 +38,8 @@ import { ipcErrorMessage } from '@/lib/ipc-client'
 import { repoName } from '@/lib/format'
 import { NON_REPO_NOTE, repoBindingProblem } from '@/lib/repo-binding'
 import { filterRepos, isPossiblyTruncated } from '@/lib/repo-filter'
+import { filterPersonas, PERSONA_FILTER_THRESHOLD } from '@/lib/persona-filter'
+import { QuickPersonaDialog } from './QuickPersonaDialog'
 import { REPO_FETCH_LIMIT } from '../../../../shared/repos'
 import { cn } from '@/lib/utils'
 import { defaultIsolation } from '../../../../shared/domain'
@@ -66,6 +78,17 @@ const STEP_COPY: Record<Step, { title: string; description: string }> = {
     description: 'Your own checkout, or one of its own.'
   },
   confirm: { title: 'Confirm', description: 'Check the scope before creating the contact.' }
+}
+
+/**
+ * The name a contact gets when nobody types one (blueprint §4's example shape).
+ *
+ * A function rather than an inline template because the confirm step's field
+ * and `handleCreate` both need it, and a second copy is how a placeholder comes
+ * to advertise a name the contact does not end up with.
+ */
+function derivedName(personaName: string, path: string): string {
+  return `${personaName} · ${repoName(path)}`
 }
 
 function StepDots({ current }: { current: Step }): React.JSX.Element {
@@ -147,6 +170,21 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const [repoQuery, setRepoQuery] = useState('')
   const visibleRepos = filterRepos(repos.data ?? [], repoQuery)
 
+  const [personaQuery, setPersonaQuery] = useState('')
+  const visiblePersonas = filterPersonas(personaTemplates, personaQuery)
+  const [creatingPersona, setCreatingPersona] = useState(false)
+
+  /**
+   * The contact's name, editable on the confirm step (§G4).
+   *
+   * Null means "follow the derived name", so the field keeps tracking the
+   * persona and repository while the user is still choosing them and stops the
+   * moment they type. Seeding a string on mount instead would freeze the name
+   * at whatever the first persona was, and going back a step to change the
+   * persona would silently leave the old one's name behind.
+   */
+  const [displayName, setDisplayName] = useState<string | null>(null)
+
   const { choose, isPending: choosing } = useChooseDirectory()
   const { clone, isPending: cloning, error: cloneError } = useCloneRepo()
   const { create, isPending: creating, error: createError } = useCreateContact()
@@ -163,6 +201,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       setIsolation(null)
       setSource('github')
       setRepoQuery('')
+      setPersonaQuery('')
+      setDisplayName(null)
+      setCreatingPersona(false)
       setPrefilledFrom(null)
       setBringHistory(true)
       setRecreateContactId(null)
@@ -201,8 +242,11 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       const draft = {
         personaTemplateId: persona.id,
         repoPath: path,
-        // Blueprint §4's example shape — "Code Reviewer · my-app".
-        displayName: `${persona.name} · ${repoName(path)}`,
+        // What the user typed, or blueprint §4's example shape — "Code Reviewer
+        // · my-app" — when they left it alone. `derivedName` is the same
+        // expression the confirm step shows, so the field is never a preview of
+        // something other than what gets created.
+        displayName: displayName?.trim() || derivedName(persona.name, path),
         isolation: chosenIsolation
       }
       // Land the user in the thread they just made rather than back on
@@ -237,8 +281,34 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
         </DialogHeader>
 
         {step === 'persona' && (
-          <div className="flex flex-col gap-1.5">
-            {personaTemplates.map((template) => (
+          <div className="flex max-h-96 flex-col gap-1.5 overflow-y-auto">
+            {/*
+              Only once the list is long enough to be worth searching. A fresh
+              profile has the three seeded personas, so this is furniture until
+              someone opens the starter library or writes their own — see
+              PERSONA_FILTER_THRESHOLD.
+            */}
+            {personaTemplates.length >= PERSONA_FILTER_THRESHOLD && (
+              <InputGroup>
+                <InputGroupAddon>
+                  <Search className="size-4" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  placeholder="Filter personas"
+                  value={personaQuery}
+                  onChange={(event) => setPersonaQuery(event.target.value)}
+                />
+              </InputGroup>
+            )}
+            {visiblePersonas.length === 0 && (
+              <EmptyState
+                compact
+                icon={Search}
+                title={`Nothing matches “${personaQuery.trim()}”`}
+                description="Try the name, the backend, or the scope."
+              />
+            )}
+            {visiblePersonas.map((template) => (
               <ListRow
                 key={template.id}
                 active={personaId === template.id}
@@ -266,6 +336,20 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                 </span>
               </ListRow>
             ))}
+            {/*
+              The way out of "none of these". Without it the answer to the very
+              first question the app asks was to cancel, go to Personas, work
+              out that a new persona means editing a blank draft, save, and
+              start again from ⌘N.
+            */}
+            <Button
+              variant="outline"
+              className="mt-1 gap-2 self-start"
+              onClick={() => setCreatingPersona(true)}
+            >
+              <Plus className="size-4" />
+              New persona…
+            </Button>
           </div>
         )}
 
@@ -474,6 +558,22 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                 <p className="text-muted-foreground truncate font-mono text-xs">{chosenLabel}</p>
               </div>
             </div>
+            {/*
+              Nameable at creation (§G4). It was derived and unaskable, so the
+              only way to name a contact was to make it, find it, and rename it
+              — and the derived name is mostly invisible anyway, since the
+              conversation list shows the persona's. That matters most for the
+              case this flow makes easy: two contacts on the same persona and
+              the same repository, previously identical on screen.
+            */}
+            <Field label="Name" htmlFor="contact-display-name">
+              <Input
+                id="contact-display-name"
+                value={displayName ?? ''}
+                placeholder={chosenPath ? derivedName(persona.name, chosenPath) : persona.name}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
+            </Field>
             <div className="flex flex-wrap items-center gap-1.5">
               <BackendBadge backend={persona.backend} />
               <ScopeChip axis="sandbox" value={persona.sandbox} />
@@ -506,6 +606,22 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             )}
           </div>
         )}
+
+        {/*
+          A second dialog rather than a step: creating a persona is a detour
+          from this flow, not part of it, and inserting it into STEPS would make
+          the progress dots claim a five-step process for everyone.
+        */}
+        <QuickPersonaDialog
+          open={creatingPersona}
+          onClose={() => setCreatingPersona(false)}
+          onCreated={(created) => {
+            // Selected, and the filter cleared — the new persona may well not
+            // match whatever was typed to establish it did not already exist.
+            setPersonaId(created.id)
+            setPersonaQuery('')
+          }}
+        />
 
         <DialogFooter className="items-center sm:justify-between">
           <StepDots current={step} />

@@ -22,6 +22,15 @@ export function usePersonas(): UseQueryResult<PersonaTemplate[]> {
 export function useCreatePersona(): {
   create: (draft: PersonaTemplateDraft, onCreated?: (persona: PersonaTemplate) => void) => void
   isPending: boolean
+  /**
+   * Why a create was refused, in the wording main sent.
+   *
+   * Added with the quick-create dialog (§G4). `personas.create` can refuse at
+   * the Zod boundary — `requireScopePairing` is the live case — and until now
+   * this hook discarded the error, so the only caller was a blank draft that
+   * cannot fail. A form that can be refused needs somewhere to say so.
+   */
+  error: string | null
 } {
   const queryClient = useQueryClient()
   const mutation = useMutation({
@@ -31,7 +40,8 @@ export function useCreatePersona(): {
 
   return {
     create: (draft, onCreated) => mutation.mutate(draft, { onSuccess: onCreated }),
-    isPending: mutation.isPending
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
   }
 }
 
