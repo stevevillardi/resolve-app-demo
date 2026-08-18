@@ -135,7 +135,6 @@ test.afterAll(async () => {
 
 test.describe('the session boundary', () => {
   test('draws the divider where the session changed', async () => {
-    const { window } = launched
     await expect(thread().getByText('New session — nothing above is in memory')).toBeVisible()
   })
 
