@@ -1,6 +1,6 @@
 # Phase 11 — Demo Journeys & Polish
 
-**Status:** In progress
+**Status:** Done
 **Blueprint refs:** §16 (all three journeys), §13 (scope cuts — verify nothing crept back in), §15 (all cross-cutting decisions)
 
 ## Goal
@@ -38,10 +38,9 @@ Final pass: run all three blueprint §16 journeys back-to-back in one sitting, o
 - [x] Every screen reachable in the app has a sane empty state and a sane error state, not just a happy-path render. _(Fresh-profile sweep of all seven sections captured before any content existed — all sane, with real copy. Error states: repo-picker error path, in-thread failure bubble, lock refusals all render; quality issues are F1/F6, not absences. Both-theme `npm run screens` sweep re-run at close.)_
 - [x] Demo runbook written and another person (or a fresh read by whoever's demoing) can follow it without needing to ask what a step means. _(Top-level `README.md` rewritten: setup, onboarding, the three journeys as a demo script, the staged `npm run demo` profile, live-check gates.)_
 
-**Findings F1–F7 below are logged, not fixed** — triage decides which land
-as fixes (each its own commit on a `phase-11` branch) and which are recorded
-as accepted limits. The phase closes after that pass plus a clean journey
-re-run.
+**All seven findings were fixed on `phase-11-demo-journeys`** (each its own
+commit, outcomes noted per finding below) and **the clean re-run passed on
+2026-08-18** — see the re-run log at the end of this document.
 
 ## Journey run log (live, 2026-08-18)
 
@@ -300,3 +299,52 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   gpt-5.4-mini on 2026-08-17 precisely because it is 3.75× cheaper), and
   the comment already names the quality risk to watch. The live run's
   numbers agree ($0.0025 for the summary). No change needed.
+
+## Clean re-run (2026-08-18, branch build, all fixes in)
+
+Profile reset to fresh (DB/worktrees/demo deleted, credentials kept), remote
+demo repo reset (PR closed, branch deleted, both issues open), clones dir
+removed. All three journeys re-driven in one continuous session against the
+`phase-11-demo-journeys` build. **All passed**, and each fix was verified
+against the exact scenario that had produced its finding:
+
+- **F1** — the worktree's own `npm ci` Electron is a different ad-hoc
+  signature, so the locked-credential state reproduced *by construction* (and
+  retroactively explains the first run). The repo picker now showed the
+  precise sentence with a Reconnect button; the connect dialog's fuller
+  wording ("Nothing was revoked; connect again once") rendered as designed;
+  one device-flow reconnect and the run proceeded.
+- **F2** — confirm step warned "You'll be asked where cloned repositories
+  should go", and Create read **"Choosing a folder…"** during the native ask
+  instead of "Cloning…".
+- **F3** — typing `@Docs` popped the suggestion panel (persona + sandbox
+  chip); Enter completed the token to `@Docs Writer ` *without sending*; the
+  mention routed normally.
+- **F5** — the routine prompt again said "fix it on a branch", and this time
+  the session **stayed on `persona/refactor-buddy-a913`**: PR #4's head, the
+  Branches panel (PR chip, no "checkout removed", head `41c5642`), the
+  summary stamps, and the registered branch all agree.
+- **F4** — the `routine_run` row ends "**Opened PR #4.**" appended after the
+  model's own account of its sandbox-blocked push. The Group no longer
+  asserts a PR failed while it sits open.
+- **F7** — a turn was deliberately left to finish with no thread mounted (the
+  original leak scenario); the live block cleared within seconds of the turn
+  ending instead of surviving until restart.
+- **§15E** — the routine again ran to completion with the window closed to
+  the tray; skip-while-locked wording unchanged and legible.
+
+Run cost $1.37 (Code Reviewer $0.61 / Docs Writer $0.67 / Refactor Buddy
+$0.10). Screenshots in the session scratchpad (`rerun/`).
+
+**Two residual observations, recorded rather than fixed (cosmetic):**
+
+- **R1** — the onboarding connect card shows a plain "Connected" for a
+  `locked` GitHub credential; the truth surfaces one click later in the
+  connect dialog. Low stakes because onboarding's next step for a locked
+  token *is* that dialog, but the card could carry the same nuance.
+- **R2** — a PR title built from the summary fallback uses the *latest*
+  `system_summary` on the branch, which can describe an unrelated turn
+  (PR #4 was titled "The checkout contents were briefly listed." after a
+  file-listing turn's summary outranked the typo fix). Head, body, and
+  commits are all correct; only the title reads odd. The fallback could
+  prefer the newest commit subject over a newer unrelated summary.
