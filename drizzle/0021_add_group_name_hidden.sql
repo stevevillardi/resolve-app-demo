@@ -1,0 +1,21 @@
+-- A group can be renamed and can be kept out of the list (review §G5). Both
+-- were the last things in the sidebar with no way to act on them at all: group
+-- rows had no context menu, and groups appear without being asked for, since
+-- `ensureGroupForRepo` runs inside `createContact`.
+--
+-- Neither column is backfilled, and in both cases null carries the meaning.
+--
+-- `name` null means *derive from repo_path*, which is what every group showed
+-- before this column. Writing the derived name into the row at creation would
+-- have frozen it — a repository moved on disk would keep the old folder's name
+-- forever with nothing on screen to explain it — and it would have made
+-- "rename" and "put it back" two different operations. As a nullable override,
+-- clearing the field is the reset.
+--
+-- `hidden` null means visible, matching last_read_at's posture in this table.
+-- Hiding is deliberately not deletion: a group is a *view* of the contacts on a
+-- repository, and that set still exists. So the row is hidden and nothing else
+-- — messages, spend and unread counts keep being recorded, and unhiding gives
+-- back a whole thread rather than one that starts from the moment it returned.
+ALTER TABLE `groups` ADD `name` text;--> statement-breakpoint
+ALTER TABLE `groups` ADD `hidden` integer;

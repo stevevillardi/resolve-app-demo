@@ -17,7 +17,7 @@ import { emitMessagesChanged } from '../../services/agent-events'
 import { contactFiles } from '../../services/contact-files'
 import { unreadCounts } from '../../services/unread'
 import { contactContext, repoOffers } from '../../services/session-spec'
-import { listGroups, markGroupRead } from '../../services/groups'
+import { listGroups, renameGroup, setGroupHidden, markGroupRead } from '../../services/groups'
 import {
   createPersonaTemplate,
   deletePersonaTemplate,
@@ -79,6 +79,14 @@ registerProcedure('contacts.delete', async ({ id, discardUncommitted }) => ({
 }))
 
 registerProcedure('groups.list', () => listGroups())
+// Thin, like every other handler here. There is no `groups-changed` push
+// channel and these do not need one: both are user actions taken in the
+// renderer, so the mutation hooks invalidate `groupsKey` in their own
+// onSuccess, exactly as contact create and delete already do. The push
+// channels exist for writes that originate in *main* — a routine's reply, a
+// turn finishing against a closed window — which is not this.
+registerProcedure('groups.rename', ({ id, name }) => renameGroup(id, name))
+registerProcedure('groups.setHidden', ({ id, hidden }) => setGroupHidden(id, hidden))
 
 registerProcedure('unread.counts', () => unreadCounts())
 // Marking read announces on the same channel a new message does: one signal

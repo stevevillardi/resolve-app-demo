@@ -99,7 +99,12 @@ export function toGroup(row: GroupRow): Group {
   return {
     id: row.id,
     repoPath: row.repoPath,
-    lastReadAt: row.lastReadAt === null ? null : row.lastReadAt.getTime()
+    lastReadAt: row.lastReadAt === null ? null : row.lastReadAt.getTime(),
+    // Both pass through as null rather than being defaulted here: null is the
+    // meaning (derive the name; not hidden), and collapsing it at the mapper
+    // would leave the renderer unable to tell an override from a default.
+    name: row.name,
+    hidden: row.hidden
   }
 }
 
@@ -164,6 +169,7 @@ export function toUsageEvent(row: UsageEventRow): UsageEvent {
     ...optional('reasoningOutputTokens', row.reasoningOutputTokens),
     ...optional('model', row.model),
     ...optional('costSource', row.costSource),
-    ...optional('sessionId', row.sessionId)
+    ...optional('sessionId', row.sessionId),
+    ...optional('messageId', row.messageId)
   }
 }

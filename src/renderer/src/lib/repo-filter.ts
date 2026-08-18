@@ -1,14 +1,18 @@
 import { scoreCommand } from './command-palette'
+import { REPO_FETCH_LIMIT } from '../../../shared/repos'
 import type { RepoOption } from '../../../shared/ipc-contract'
 
 /**
  * Filtering the GitHub repository picker.
  *
- * `github-client.ts` justifies fetching a single `per_page: 100` page with the
- * words "this is a picker with a filter box, not an inventory". The filter box
- * did not exist. So the list was capped at 100 *and* unsearchable, in a dialog
- * showing about six rows at a time — for anyone with a real account that is a
- * scroll through a hundred names looking for one.
+ * `github-client.ts` once justified fetching a single `per_page: 100` page with
+ * the words "this is a picker with a filter box, not an inventory". The filter
+ * box did not exist. So the list was capped at 100 *and* unsearchable, in a
+ * dialog showing about six rows at a time — for anyone with a real account that
+ * is a scroll through a hundred names looking for one. This file was the first
+ * half of the answer; §G3's paging is the second, and the two are meant to be
+ * read together: fetch enough that the list is the account, then rank it so the
+ * size stops mattering.
  *
  * Ranking is `scoreCommand`'s rather than a second implementation of the same
  * idea. It already splits on `/`, which is exactly what a repo full name needs:
@@ -38,13 +42,14 @@ export function filterRepos(repos: RepoOption[], query: string): RepoOption[] {
 /**
  * Whether the list we are showing might not be the whole account.
  *
- * `listRepos` asks for one page of 100 with no pagination, so exactly 100 rows
- * is indistinguishable from 100-of-400. Silently showing a truncated list as
- * though it were complete is the failure mode worth naming: someone whose repo
- * is missing needs to know it is a cap, not an absence.
+ * The check outlives the cap it was written against (review §G3) and is now far
+ * less likely to fire, but the failure mode is unchanged: a list of exactly
+ * REPO_FETCH_LIMIT rows is indistinguishable from the first REPO_FETCH_LIMIT of
+ * more, and presenting a truncated list as complete tells someone their
+ * repository does not exist when it is merely past the end. The number moved,
+ * and it is read from `src/shared` rather than restated here, so the sentence
+ * the UI prints cannot outlive the fetch that justified it.
  */
-export const REPO_PAGE_SIZE = 100
-
 export function isPossiblyTruncated(repos: RepoOption[]): boolean {
-  return repos.length >= REPO_PAGE_SIZE
+  return repos.length >= REPO_FETCH_LIMIT
 }

@@ -185,6 +185,18 @@ export function modifierKey(platform: string | undefined): string {
 }
 
 /**
+ * The *other* modifier, for the bindings that deliberately avoid ⌘.
+ *
+ * Same default-to-macOS reasoning as `modifierKey`. Kept as its own function
+ * rather than a second branch inside that one because the two answer different
+ * questions — "how does this platform write the command key" and "how does it
+ * write the alt key" — and a caller wanting one never wants the other.
+ */
+export function altKey(platform: string | undefined): string {
+  return platform === undefined || platform === 'darwin' ? '⌥' : 'Alt+'
+}
+
+/**
  * Every binding the app claims, in one list.
  *
  * They come from four unrelated places — the application menu, a capture-phase
@@ -199,6 +211,7 @@ export function modifierKey(platform: string | undefined): string {
  */
 export function shortcutHints(platform: string | undefined): ShortcutHint[] {
   const mod = modifierKey(platform)
+  const alt = altKey(platform)
   const menuKey = (action: MenuActionId): string =>
     MENU_ACCELERATORS[action].replace('CmdOrCtrl+', mod)
 
@@ -208,6 +221,11 @@ export function shortcutHints(platform: string | undefined): ShortcutHint[] {
     // full-text message search.
     { keys: menuKey('command-palette'), label: 'Jump to anything, or search every message' },
     { keys: menuKey('new-contact'), label: 'New contact' },
+    // ConversationList.tsx. ⌥ rather than ⌘ so the composer keeps ⌘↑/⌘↓ for
+    // moving the caret; these are Slack's channel keys.
+    { keys: `${alt}↑ ${alt}↓`, label: 'Previous or next conversation' },
+    // Composer.tsx, which owns the ref and is mounted once.
+    { keys: `${mod}L`, label: 'Jump to the message box' },
     // sidebar.tsx, SIDEBAR_KEYBOARD_SHORTCUT.
     { keys: `${mod}B`, label: 'Show or hide the rail' },
     { keys: menuKey('open-settings'), label: 'Settings' },

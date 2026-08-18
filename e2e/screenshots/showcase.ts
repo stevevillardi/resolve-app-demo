@@ -246,8 +246,8 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
       `insert into usage_events
          (id, contact_id, persona_template_id, repo_path, timestamp, source,
           input_tokens, output_tokens, cached_input_tokens, cost_usd, model,
-          cost_source, session_id)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          cost_source, session_id, message_id)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     interface Spend {
       contact: string
@@ -261,6 +261,13 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
       model: string
       costSource: 'sdk' | 'computed'
       at: number
+      /**
+       * The assistant reply this spend paid for (§G6), so the per-turn cost
+       * line is photographed. Null on the two rows that legitimately have no
+       * reply — a routine posts to the group, and a summary writes no message
+       * at all — which is also what keeps those two out of the thread.
+       */
+      message: string | null
     }
     const spend: Spend[] = [
       {
@@ -274,7 +281,8 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         cost: 0.42,
         model: 'claude-sonnet-5',
         costSource: 'sdk',
-        at: now - DAY - 3 * HOUR
+        at: now - DAY - 3 * HOUR,
+        message: 'm2'
       },
       {
         contact: reviewer.id,
@@ -287,7 +295,8 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         cost: 0.51,
         model: 'claude-sonnet-5',
         costSource: 'sdk',
-        at: now - 2 * HOUR
+        at: now - 2 * HOUR,
+        message: 'm4'
       },
       {
         contact: reviewer.id,
@@ -300,7 +309,9 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         cost: 0.18,
         model: 'claude-haiku-4-5',
         costSource: 'sdk',
-        at: now - 90 * MINUTE
+        at: now - 90 * MINUTE,
+        // A routine's record is the group's routine_run row, not a 1:1 reply.
+        message: null
       },
       {
         contact: refactorer.id,
@@ -313,7 +324,8 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         cost: 0.77,
         model: 'gpt-5.5',
         costSource: 'computed',
-        at: now - 5 * HOUR
+        at: now - 5 * HOUR,
+        message: 'm6'
       },
       {
         contact: refactorer.id,
@@ -326,7 +338,9 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         cost: 0.04,
         model: 'gpt-5.4',
         costSource: 'computed',
-        at: now - 5 * HOUR + 90_000
+        at: now - 5 * HOUR + 90_000,
+        // Compaction writes no message; its spend belongs to the dashboard only.
+        message: null
       },
       // No published price for this model, so costUsd is null. Present on
       // purpose: `$x.xx+` and the "N turns on a model with no published price"
@@ -342,7 +356,14 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         cost: null,
         model: 'claude-opus-5',
         costSource: 'sdk',
-        at: now - 26 * HOUR
+        at: now - 26 * HOUR,
+        // Null because this contact's thread deliberately ends on an
+        // *unanswered* question — Phase 21's interrupted-tail rendering is the
+        // subject of another shot — so there is no reply for a cost to sit
+        // under. The consequence is that the per-turn line's unpriced `—` is
+        // not in this sweep; `usage.test.ts` covers it, and inventing a reply
+        // here would cost a different screenshot its subject.
+        message: null
       },
       {
         contact: billing.id,
@@ -355,7 +376,8 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         cost: 0.23,
         model: 'claude-sonnet-5',
         costSource: 'sdk',
-        at: now - 3 * DAY
+        at: now - 3 * DAY,
+        message: null
       }
     ]
     spend.forEach((row, index) => {
@@ -374,7 +396,8 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         row.costSource,
         // One session id per contact, so a per-session reading of context size
         // has something coherent to sum or take the last of.
-        `session-${row.contact}`
+        `session-${row.contact}`,
+        row.message
       )
     })
     // --- Phase 22 chrome ---

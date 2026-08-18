@@ -58,3 +58,41 @@ export function markGroupRead(id: string, at = Date.now()): Group {
     .run()
   return { ...current, lastReadAt: at }
 }
+
+/**
+ * Rename a group, or clear the override with null (review §G5).
+ *
+ * A group's name has always been derived from its repository path, and this
+ * makes that a default rather than a fact — see the `name` column comment.
+ * Passing null is a real operation, not a missing argument: it is how a rename
+ * is undone, which is why there is no separate "reset" procedure beside this
+ * one.
+ *
+ * Trimming happens at the Zod boundary (`groups.rename` uses the same
+ * `.trim().min(1)` shape `contacts.update` does), so an empty string cannot
+ * arrive here and be stored as a name that renders blank.
+ */
+export function renameGroup(id: string, name: string | null): Group {
+  const row = initDb().select().from(groups).where(eq(groups.id, id)).get()
+  if (!row) throw new Error(`No such group: ${id}`)
+
+  initDb().update(groups).set({ name }).where(eq(groups.id, id)).run()
+  return { ...toGroup(row), name }
+}
+
+/**
+ * Hide a group from the conversation list, or bring it back.
+ *
+ * Deliberately not a delete, and there is no delete to fall back on: a group is
+ * a *view* of the contacts bound to a repository, so removing the row while
+ * those contacts exist would only mean `ensureGroupForRepo` recreating it on
+ * the next turn — with its `last_read_at` reset, which would light up every
+ * message in it as unread. Hiding changes what is listed and nothing else.
+ */
+export function setGroupHidden(id: string, hidden: boolean): Group {
+  const row = initDb().select().from(groups).where(eq(groups.id, id)).get()
+  if (!row) throw new Error(`No such group: ${id}`)
+
+  initDb().update(groups).set({ hidden }).where(eq(groups.id, id)).run()
+  return { ...toGroup(row), hidden }
+}

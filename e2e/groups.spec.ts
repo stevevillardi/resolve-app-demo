@@ -123,3 +123,63 @@ test('an unknown contact is refused without touching the group', async () => {
 
   await expect(invoke(window, 'groupMessages.list', { groupId })).resolves.toEqual([])
 })
+
+/**
+ * Rename and hide, through the real contract (review §G5).
+ *
+ * Group rows had no menu at all, and there was nothing behind one to call:
+ * `groups.*` was four read-ish procedures, none of which wrote anything a user
+ * had chosen. `groups.test.ts` proves the service rules against a real
+ * database; what belongs here is that the boundary refuses what it says it
+ * refuses, since the Zod shape is the only thing standing between a rename
+ * dialog and a sidebar row that renders blank.
+ */
+test('a group can be renamed and put back', async () => {
+  const { window } = launched
+
+  const renamed = await invoke<{ name: string | null }>(window, 'groups.rename', {
+    id: groupId,
+    name: 'Checkout service'
+  })
+  expect(renamed.name).toBe('Checkout service')
+
+  // Null is the reset, and it is a value the contract accepts rather than an
+  // omitted argument — that is what makes "use the repository name" one call.
+  const reset = await invoke<{ name: string | null }>(window, 'groups.rename', {
+    id: groupId,
+    name: null
+  })
+  expect(reset.name).toBeNull()
+})
+
+test('a name of spaces is refused at the boundary, not stored', async () => {
+  const { window } = launched
+
+  await expect(invoke(window, 'groups.rename', { id: groupId, name: '   ' })).rejects.toThrow()
+  // The refusal wrote nothing: the group still has no name of its own.
+  const groups = await invoke<{ id: string; name: string | null }[]>(window, 'groups.list')
+  expect(groups.find((group) => group.id === groupId)?.name).toBeNull()
+})
+
+test('hiding keeps the group and everything in it', async () => {
+  const { window } = launched
+
+  const hidden = await invoke<{ hidden: boolean | null }>(window, 'groups.setHidden', {
+    id: groupId,
+    hidden: true
+  })
+  expect(hidden.hidden).toBe(true)
+
+  // Still listed by the procedure — hiding is a property of the row, and it is
+  // the conversation list that acts on it. If this returned nothing, unhiding
+  // would have nothing to find.
+  const groups = await invoke<{ id: string }[]>(window, 'groups.list')
+  expect(groups.some((group) => group.id === groupId)).toBe(true)
+
+  // And the contact bound to the repository is untouched, which is the
+  // difference between hiding a group and deleting one.
+  const contacts = await invoke<{ id: string }[]>(window, 'contacts.list')
+  expect(contacts.some((contact) => contact.id === contactId)).toBe(true)
+
+  await invoke(window, 'groups.setHidden', { id: groupId, hidden: false })
+})

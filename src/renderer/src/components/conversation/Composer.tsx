@@ -1,4 +1,11 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode
+} from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ComposerPicker, type PickerRow } from './ComposerPicker'
@@ -76,6 +83,39 @@ export function Composer({
   fileMinStart = 0
 }: ComposerProps): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  /**
+   * ⌘L puts the caret in the composer from anywhere in the window.
+   *
+   * Bound in the composer itself rather than routed through the UI store,
+   * because the ref it needs is already here and exactly one composer is
+   * mounted at a time — `WorkspaceView` renders either the 1:1 thread or the
+   * group thread, never both. A focus token in the store would have had to
+   * survive the remount that happens on every conversation change, which is a
+   * mechanism to maintain in exchange for nothing.
+   *
+   * The caret goes to the end rather than selecting what is there: drafts
+   * survive conversation switches (Phase 21), so there is often a half-written
+   * message in the box, and a shortcut that selects it turns the next
+   * keystroke into a deletion.
+   *
+   * `globalThis.KeyboardEvent` because this module imports React's
+   * `KeyboardEvent` type for its own `onKeyDown` handler, which shadows the DOM
+   * one.
+   */
+  useEffect(() => {
+    const onFocusKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key !== 'l' || !(event.metaKey || event.ctrlKey) || event.altKey) return
+      const textarea = textareaRef.current
+      if (!textarea) return
+      event.preventDefault()
+      textarea.focus()
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+    }
+
+    window.addEventListener('keydown', onFocusKey, true)
+    return () => window.removeEventListener('keydown', onFocusKey, true)
+  }, [])
 
   // Escape closes the picker without clearing what was typed. Keyed on the
   // value so that typing another character reopens it — dismissing `/rel` and

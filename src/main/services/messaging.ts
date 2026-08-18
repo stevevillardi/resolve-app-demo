@@ -617,6 +617,15 @@ function finish(
     // and the dead-resume heal would otherwise split a question from its own
     // reply. Collected first, written once below.
     const stamped: string[] = [userMessageId]
+    /**
+     * The reply this turn produced, for the usage row written below (§G6).
+     *
+     * Hoisted out of the block rather than reordering the two writes: the usage
+     * row has to be able to name the message, so the message has to exist
+     * first. Null is a real answer here — an aborted turn is billable and has
+     * no reply — and it is the same null the column stores.
+     */
+    let replyId: string | null = null
 
     // An aborted turn usually has no final text, but it may have produced
     // billable tokens all the same — so the two are recorded independently
@@ -624,6 +633,7 @@ function finish(
     if (finalText.trim()) {
       const reply = insertMessage(contactId, 'assistant', finalText, work)
       stamped.push(reply.id)
+      replyId = reply.id
 
       // Stamp the turn's tool rows with the message it ended in, so history
       // can render the calls with the reply they produced. A turn that dies
@@ -663,7 +673,10 @@ function finish(
         origin.kind,
         done.usage,
         session.sessionId,
-        origin.kind === 'routine' ? origin.routineId : null
+        origin.kind === 'routine' ? origin.routineId : null,
+        // The reply this spend bought, so the thread can show a per-turn cost
+        // beside it (§G6). Null when the turn produced no text to point at.
+        replyId
       )
     }
 

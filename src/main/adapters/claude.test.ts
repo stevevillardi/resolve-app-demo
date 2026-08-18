@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentEvent } from '../../shared/agent'
+import { contextWindowFor } from '../../shared/context-windows'
 import type { PersonaTemplate } from '../../shared/domain'
 import type { SessionSpec } from './types'
 
@@ -778,5 +779,32 @@ describe('summarize', () => {
     const { options } = query.mock.calls[0][0]
     expect(options).not.toHaveProperty('mcpServers')
     expect(options.strictMcpConfig).toBe(true)
+  })
+})
+
+/**
+ * The one row of `context-windows.ts` this repository has *measured*.
+ *
+ * That table is transcribed from vendor documentation and nothing in the unit
+ * suite can check it against the source — which is how all eight Claude rows
+ * came to sit at 200k when seven of them hold 1M, and how the context meter
+ * came to report a half-full prompt as full. This fixture is the exception: it
+ * is a real `result` message from a real run, and the SDK stamped the window on
+ * it. So for exactly one model, the table can be held against an observation
+ * instead of against a reading.
+ *
+ * It lives here rather than in `context-windows.test.ts` because the fixture
+ * does, and a copy of it over there would drift from the captured shape the
+ * moment either moved — the same reason `createTestDb` applies the checked-in
+ * migrations rather than hand-written DDL.
+ */
+describe('the captured fixture against the context-window table', () => {
+  it('agrees with the window the table records for haiku', () => {
+    const captured = modelUsage()['claude-haiku-4-5-20251001']
+    expect(captured.contextWindow).toBe(200_000)
+    // Through the same lookup the meter uses, dated id and all — so this also
+    // holds the date-stripping rule against a real model id rather than an
+    // invented one.
+    expect(contextWindowFor('claude-haiku-4-5-20251001')?.tokens).toBe(captured.contextWindow)
   })
 })

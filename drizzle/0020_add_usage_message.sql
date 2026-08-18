@@ -1,0 +1,25 @@
+-- Ties a usage row to the assistant message it paid for, so the thread can show
+-- what a single turn cost (review §G6). Everything needed was already recorded;
+-- only the link was missing, which is why aggregates were the whole story.
+--
+-- ON DELETE SET NULL is hand-written here, and it is not decoration.
+-- drizzle-kit emits the FK with no referential action on an ADD COLUMN — its
+-- own snapshot records `"onDelete": "set null"` correctly, so only the SQL
+-- emitter drops it — and SQLite's default is NO ACTION. Executed against real
+-- SQLite with the foreign_keys pragma this app sets, the difference is total:
+--
+--   as generated   DELETE FAILED: FOREIGN KEY constraint failed
+--   set null       deleted ok, usage row kept, cost_usd intact
+--
+-- `messages` cascades from `contacts`, so under NO ACTION every message delete
+-- is blocked by the usage row pointing at it — meaning deleting any contact
+-- that had ever run a turn would throw, and `clearAppData` with it.
+-- Regenerating this migration will quietly reintroduce that. Keep the clause.
+--
+-- SET NULL rather than CASCADE for the same reason `contact_id` uses it:
+-- Phase 10's rule is that spend outlives what spent it. A cascade here would
+-- delete a month of cost history along with a tidied-up contact.
+--
+-- No backfill. Null means "not recorded", which is true of every row written
+-- before this column and of every turn that produced no reply to point at.
+ALTER TABLE `usage_events` ADD `message_id` text REFERENCES messages(id) ON DELETE SET NULL;

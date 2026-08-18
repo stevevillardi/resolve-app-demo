@@ -8,6 +8,7 @@ import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { UsageBadge } from '@/components/usage/UsageBadge'
 import { ContextMeter } from '@/components/usage/ContextMeter'
+import { TurnCost } from '@/components/usage/TurnCost'
 import { OpenPRButton } from '@/components/github/OpenPRButton'
 import { ContactMenu } from './ContactMenu'
 import { ThreadHeader } from './ThreadHeader'
@@ -40,7 +41,7 @@ import { slashCommands } from '@/lib/slash'
 import { hasUnansweredTail } from '@/lib/turn-tail'
 import { firstUnreadIndex } from '@/lib/unread'
 import { awaitingFreshSession, sessionBoundaries } from '@/lib/session'
-import { contextTokens, usageForContact } from '@/lib/usage'
+import { contextTokens, usageByMessage, usageForContact } from '@/lib/usage'
 import { isSameDay, repoName } from '@/lib/format'
 
 interface ThreadViewProps {
@@ -82,6 +83,10 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   const { open: openPr, isPending: opening, error: prError, reset: resetPr } = useOpenPullRequest()
 
   const usage = useMemo(() => usageForContact(usageEvents, contactId), [usageEvents, contactId])
+
+  // Which usage row paid for which reply (§G6), from the same array. Built once
+  // rather than scanned per message: a long thread renders hundreds of bubbles.
+  const turnCosts = useMemo(() => usageByMessage(usageEvents), [usageEvents])
 
   // The session's own figures, from rows this view already has — no new query.
   // Read off `contact.backendSessionId` rather than contacts.context, which
@@ -277,6 +282,16 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                   />
                   {message.role === 'assistant' && message.work && (
                     <WorkChips work={message.work} onOpen={() => setWorkMessageId(message.id)} />
+                  )}
+                  {/*
+                    What this turn cost, under the reply it bought (§G6). Read
+                    from the usage events this view already holds, so no new
+                    query — only migration 0020's link. Absent rather than zero
+                    when there is no row: a turn from before the column existed
+                    has an unknown cost, not a free one.
+                  */}
+                  {message.role === 'assistant' && turnCosts.get(message.id) && (
+                    <TurnCost event={turnCosts.get(message.id)!} />
                   )}
                 </Fragment>
               )

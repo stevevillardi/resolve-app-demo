@@ -184,7 +184,17 @@ export const groupSchema = z.object({
   id: z.string(),
   repoPath: z.string(),
   /** Same contract as contactSchema.lastReadAt. */
-  lastReadAt: z.number().nullable()
+  lastReadAt: z.number().nullable(),
+  /**
+   * A name the user gave this group, or null to derive one from `repoPath`.
+   *
+   * Nullable rather than always populated, so that clearing it *is* the reset —
+   * see the column comment in db/schema.ts. Read it through `groupName()` below
+   * rather than directly, so no caller has to remember the fallback.
+   */
+  name: z.string().nullable(),
+  /** Kept out of the conversation list. Null is visible; see db/schema.ts. */
+  hidden: z.boolean().nullable()
 })
 
 export const groupMessageSchema = z.object({
@@ -326,7 +336,16 @@ export const usageEventSchema = z.object({
    * subtract Codex's cumulative token reading back down to one turn — see the
    * column comment in db/schema.ts.
    */
-  sessionId: z.string().optional()
+  sessionId: z.string().optional(),
+  /**
+   * The assistant message this turn produced (§G6), so a thread can put a
+   * cost beside a reply rather than only in a total.
+   *
+   * Absent on rows written before the column existed, on compaction's own
+   * spend, and on a turn that was billable but produced no text — all three of
+   * which are honestly "no reply to point at" rather than a missing link.
+   */
+  messageId: z.string().optional()
 })
 
 // --- Write shapes -----------------------------------------------------------
@@ -366,7 +385,19 @@ export const contactDraftSchema = contactSchema
   // Optional rather than nullable: an absent isolation means "decide for me",
   // and main picks from the persona's sandbox level. Null is only ever a stored
   // value, meaning a row written before the column existed.
-  .extend({ isolation: isolationSchema.optional() })
+  .extend({
+    isolation: isolationSchema.optional(),
+    /**
+     * Same `.trim().min(1)` as `contacts.update`'s rename (§G4).
+     *
+     * The two disagreed until the flow could ask for a name at all: renaming a
+     * contact to nothing was refused, while *creating* one called nothing was
+     * accepted — the shape was unreachable only because the name was derived.
+     * Now that there is a field, the boundary has to say what it means, and it
+     * should say the same thing at both ends.
+     */
+    displayName: z.string().trim().min(1)
+  })
 /**
  * `timestamp` is omitted alongside `id` because main mints it too — a
  * renderer-supplied time would let a clock skew reorder the thread.

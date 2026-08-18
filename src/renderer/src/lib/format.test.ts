@@ -5,6 +5,7 @@ import {
   formatRelative,
   formatTime,
   isSameDay,
+  groupName,
   previewLine,
   repoName
 } from './format'
@@ -173,5 +174,46 @@ describe('previewLine', () => {
   it('returns empty for empty or whitespace-only content', () => {
     expect(previewLine('')).toBe('')
     expect(previewLine('\n  \n')).toBe('')
+  })
+})
+
+/**
+ * A group's displayed name (review §G5).
+ *
+ * The fallback is the whole function: a group's name was derived from its
+ * repository path for every version of this app until now, and it still is
+ * until someone overrides it. Getting the null case wrong would rename every
+ * group in an upgraded profile to nothing at once.
+ */
+describe('groupName', () => {
+  it('uses the stored name when there is one', () => {
+    expect(groupName({ name: 'Checkout', repoPath: '/Users/dev/my-app' })).toBe('Checkout')
+  })
+
+  it('falls back to the repository name when there is not', () => {
+    expect(groupName({ name: null, repoPath: '/Users/dev/my-app' })).toBe('my-app')
+  })
+
+  it('trims the stored name', () => {
+    expect(groupName({ name: '  Checkout  ', repoPath: '/Users/dev/my-app' })).toBe('Checkout')
+  })
+
+  /**
+   * `groups.rename` refuses this at the Zod boundary, so it can only arrive on
+   * a row written before that existed — and a blank sidebar row is a worse
+   * failure than an unhelpful one, because there is nothing left to click.
+   */
+  it('reads an all-whitespace name as no name at all', () => {
+    expect(groupName({ name: '   ', repoPath: '/Users/dev/my-app' })).toBe('my-app')
+    expect(groupName({ name: '', repoPath: '/Users/dev/my-app' })).toBe('my-app')
+  })
+
+  // A name that happens to match the repository's is still an override, and
+  // renders the same either way — this is what lets the rename dialog collapse
+  // that case to null without anything on screen changing.
+  it('renders the same whether the name is stored or derived', () => {
+    expect(groupName({ name: 'my-app', repoPath: '/Users/dev/my-app' })).toBe(
+      groupName({ name: null, repoPath: '/Users/dev/my-app' })
+    )
   })
 })

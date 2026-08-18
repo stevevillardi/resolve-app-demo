@@ -44,7 +44,16 @@ export function recordUsage(
   source: UsageSource,
   usage: AgentUsage,
   sessionId?: string | null,
-  routineId?: string | null
+  routineId?: string | null,
+  /**
+   * The assistant message this turn produced, when it produced one (§G6).
+   *
+   * Optional because two callers legitimately have nothing to pass: a turn that
+   * ends without final text is still billable, and compaction's `summary` spend
+   * has no message to point at. Null on the row means exactly that — see the
+   * column comment in schema.ts for why a timestamp pairing was rejected.
+   */
+  messageId?: string | null
 ): UsageEvent {
   // Read once and copied onto the row, so the two questions the dashboard asks
   // of historical spend — whose, and on which repo — outlive the Contact.
@@ -61,6 +70,7 @@ export function recordUsage(
     timestamp: Date.now(),
     source,
     ...(sessionId ? { sessionId } : {}),
+    ...(messageId ? { messageId } : {}),
     // The routine id was always in hand at the call site (TurnOrigin carries
     // it) and simply discarded until Phase 20 needed per-routine budgets.
     ...(routineId ? { routineId } : {}),

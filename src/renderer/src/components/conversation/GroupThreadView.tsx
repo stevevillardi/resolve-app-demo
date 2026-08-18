@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ThreadHeader } from './ThreadHeader'
+import { GroupMenu } from './GroupMenu'
 import { DaySeparator } from './DaySeparator'
 import { UnreadSeparator } from './UnreadSeparator'
 import { MessageBubble } from './MessageBubble'
@@ -13,7 +14,7 @@ import { BranchRequestNotice } from './BranchRequestNotice'
 import { RoutineRunNotice } from './RoutineRunNotice'
 import { MentionPicker } from './MentionPicker'
 import { Composer } from './Composer'
-import { isSameDay, repoName } from '@/lib/format'
+import { groupName, isSameDay } from '@/lib/format'
 import { mentionToken, parseMention } from '@/lib/mention'
 import { streamText } from '@/lib/stream'
 import { useContacts, useGroups } from '@/hooks/useConversations'
@@ -242,7 +243,8 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
     return <EmptyState icon={Users} title="Group not found" />
   }
 
-  const name = repoName(group.repoPath)
+  // The stored override when there is one, the repository's name otherwise.
+  const name = groupName(group)
   const isRunning = Boolean(live)
 
   const handleSend = (): void => {
@@ -283,6 +285,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
             <span className="text-muted-foreground text-xs">
               {repoContacts.length} {repoContacts.length === 1 ? 'persona' : 'personas'}
             </span>
+            <GroupMenu group={group} />
           </div>
         }
       />

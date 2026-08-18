@@ -59,6 +59,23 @@ export function repoName(repoPath: string): string {
   return repoPath.split('/').filter(Boolean).pop() ?? repoPath
 }
 
+/**
+ * What to call a group on screen (review §G5).
+ *
+ * One function rather than the fallback written out at each of the places a
+ * group's name is rendered, because every reader that keeps saying
+ * `repoName(group.repoPath)` is a place a rename silently has no effect — and
+ * nothing on screen would show that it had not.
+ *
+ * Trims, and reads an all-whitespace override as absent. `groups.rename`
+ * refuses one at the Zod boundary already; this is what keeps a row written
+ * before that from rendering as a blank sidebar entry.
+ */
+export function groupName(group: { name: string | null; repoPath: string }): string {
+  const named = group.name?.trim()
+  return named ? named : repoName(group.repoPath)
+}
+
 /** Strips markdown syntax down to a single readable preview line. */
 export function previewLine(content: string): string {
   const firstMeaningful =
