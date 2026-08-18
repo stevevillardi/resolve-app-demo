@@ -1,4 +1,5 @@
 import { Octokit } from '@octokit/rest'
+import { REPO_FETCH_LIMIT, REPO_PAGE_SIZE } from '../../shared/repos'
 import { markTokenGood, markTokenRejected } from './github-token-state'
 
 /**
@@ -95,16 +96,52 @@ export function octokitClient(token: string): GitHubClient {
     },
 
     async listRepos() {
-      // Sorted by push rather than by name because the repo you want to bind is
-      // almost always one you touched recently. One page on purpose: this is a
-      // picker with a filter box, not an inventory.
-      const { data } = await call(() =>
-        octokit.rest.repos.listForAuthenticatedUser({
-          sort: 'pushed',
-          direction: 'desc',
-          per_page: 100,
-          affiliation: 'owner,collaborator,organization_member'
-        })
+      /**
+       * Sorted by push rather than by name, because the repo you want to bind
+       * is almost always one you touched recently.
+       *
+       * Paged rather than searched (review §G3). GitHub's search endpoint is
+       * the obvious answer to "the picker only sees 100" and the wrong one
+       * here: `/search/repositories` has no notion of "repositories I can
+       * reach", so it needs the viewer's login *and* every org they belong to
+       * spliced into the query as qualifiers — an extra API call to build,
+       * stale the moment someone joins an org, and silently returning all of
+       * public GitHub if a qualifier is ever dropped. It also reads an index
+       * that lags a freshly created repository by minutes, which is precisely
+       * when someone is trying to bind one.
+       *
+       * Paging the same endpoint keeps the affiliation filter that already
+       * makes this list *correct*, and turns the cap from a question about
+       * which repositories are reachable back into one about how many. The
+       * local filter box then ranks everything the account can see.
+       *
+       * `octokit.paginate` stops on its own when a page comes back short, so
+       * an account with 40 repositories still costs one request rather than
+       * REPO_FETCH_LIMIT / REPO_PAGE_SIZE of them.
+       *
+       * `done()` includes the page it fires on and then stops, so the walk ends
+       * exactly on REPO_FETCH_LIMIT only because that is a whole number of
+       * pages. That is an invariant rather than a coincidence, and
+       * `github-client.test.ts` asserts it — the alternative was a defensive
+       * `.slice()` here, which turned out to be unreachable code that no test
+       * could ever fail on.
+       */
+      let fetched = 0
+      const data = await call(() =>
+        octokit.paginate(
+          octokit.rest.repos.listForAuthenticatedUser,
+          {
+            sort: 'pushed',
+            direction: 'desc',
+            per_page: REPO_PAGE_SIZE,
+            affiliation: 'owner,collaborator,organization_member'
+          },
+          (response, done) => {
+            fetched += response.data.length
+            if (fetched >= REPO_FETCH_LIMIT) done()
+            return response.data
+          }
+        )
       )
 
       return data.map((repo) => ({

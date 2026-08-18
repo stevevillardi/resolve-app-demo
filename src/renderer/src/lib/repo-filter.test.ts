@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { filterRepos, isPossiblyTruncated, REPO_PAGE_SIZE } from './repo-filter'
+import { filterRepos, isPossiblyTruncated } from './repo-filter'
+import { REPO_FETCH_LIMIT } from '../../../shared/repos'
 import type { RepoOption } from '../../../shared/ipc-contract'
 
 function repo(fullName: string, localPath: string | null = null): RepoOption {
@@ -85,8 +86,8 @@ describe('isPossiblyTruncated', () => {
     expect(isPossiblyTruncated(REPOS)).toBe(false)
   })
 
-  it('is true at exactly the page size, because that is indistinguishable from more', () => {
-    const full = Array.from({ length: REPO_PAGE_SIZE }, (_, i) => repo(`acme/repo-${i}`))
+  it('is true at exactly the fetch limit, because that is indistinguishable from more', () => {
+    const full = Array.from({ length: REPO_FETCH_LIMIT }, (_, i) => repo(`acme/repo-${i}`))
     expect(isPossiblyTruncated(full)).toBe(true)
   })
 })

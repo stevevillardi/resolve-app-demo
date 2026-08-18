@@ -27,7 +27,8 @@ import { useUiStore } from '@/store/useUiStore'
 import { ipcErrorMessage } from '@/lib/ipc-client'
 import { repoName } from '@/lib/format'
 import { NON_REPO_NOTE, repoBindingProblem } from '@/lib/repo-binding'
-import { filterRepos, isPossiblyTruncated, REPO_PAGE_SIZE } from '@/lib/repo-filter'
+import { filterRepos, isPossiblyTruncated } from '@/lib/repo-filter'
+import { REPO_FETCH_LIMIT } from '../../../../shared/repos'
 import { cn } from '@/lib/utils'
 import { defaultIsolation } from '../../../../shared/domain'
 import type { Contact, Isolation } from '@/types'
@@ -386,11 +387,11 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                     icon={Search}
                     title={`Nothing matches “${repoQuery.trim()}”`}
                     // Names the cap, because "nothing matches" and "nothing
-                    // matches in the hundred we fetched" are different facts and
+                    // matches in the ones we fetched" are different facts and
                     // only one of them is a reason to give up.
                     description={
                       isPossiblyTruncated(repos.data)
-                        ? `Only the ${REPO_PAGE_SIZE} most recently pushed repositories are listed. If yours is older, clone it and bind the folder instead.`
+                        ? `Only the ${REPO_FETCH_LIMIT.toLocaleString()} most recently pushed repositories are listed. If yours is older, clone it and bind the folder instead.`
                         : 'Try the owner or the repository name.'
                     }
                   />
