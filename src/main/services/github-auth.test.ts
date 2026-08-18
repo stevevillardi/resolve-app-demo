@@ -426,6 +426,25 @@ describe('a stored token this build cannot decrypt', () => {
     unreadableKeys.delete('github_token')
     expect(github.getGitHubStatus().tokenState).not.toBe('locked')
   })
+
+  // Phase 11 F1: the repo picker told a locked-credential user to "Connect
+  // GitHub first" — the one remedy that was not the answer. Features that
+  // throw on a null token go through missingTokenError so the two causes of
+  // null keep their opposite remedies.
+  it('missingTokenError blames the binary when the credential is unreadable', () => {
+    secretStore.set('github_token', 'gho_x')
+    unreadableKeys.add('github_token')
+
+    const error = github.missingTokenError('list your repositories')
+    expect(error.message).toBe(github.LOCKED_TOKEN_MESSAGE)
+    expect(error.message).not.toMatch(/connect github first/i)
+  })
+
+  it('missingTokenError says connect when nothing is stored at all', () => {
+    expect(github.missingTokenError('open a pull request').message).toBe(
+      'Connect GitHub first to open a pull request.'
+    )
+  })
 })
 
 describe('client-id sanity guard', () => {

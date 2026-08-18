@@ -17,6 +17,7 @@ const emitMessagesChanged = vi.fn()
 vi.mock('./agent-events', () => ({ emitMessagesChanged: (): void => emitMessagesChanged() }))
 
 const {
+  appendToGroupMessage,
   contextForRepo,
   DURABLE_CONTEXT_LIMIT,
   groupForRepo,
@@ -94,6 +95,32 @@ describe('insertGroupMessage', () => {
   it('leaves branch absent rather than null when nothing reported one', () => {
     summary('Tidied imports', 'routine')
     expect('branch' in listGroupMessages(GROUP)[0]).toBe(false)
+  })
+})
+
+describe('appendToGroupMessage', () => {
+  // Phase 11 F4: the scheduler amends a routine_run with the app's own PR
+  // outcome after the summariser has already posted the model's account.
+  it('appends the line and announces the change', () => {
+    const row = insertGroupMessage({
+      groupId: GROUP,
+      type: 'routine_run',
+      content: 'A pull request could not be opened.'
+    })
+
+    emitMessagesChanged.mockClear()
+    appendToGroupMessage(row.id, 'Opened PR #3.')
+
+    expect(listGroupMessages(GROUP)[0].content).toBe(
+      'A pull request could not be opened.\n\nOpened PR #3.'
+    )
+    expect(emitMessagesChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('is a silent no-op for an id that no longer exists', () => {
+    emitMessagesChanged.mockClear()
+    appendToGroupMessage('gone', 'Opened PR #3.')
+    expect(emitMessagesChanged).not.toHaveBeenCalled()
   })
 })
 

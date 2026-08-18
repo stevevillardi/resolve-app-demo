@@ -12,7 +12,12 @@ export function useWorkspaceRoot(): UseQueryResult<IpcOutput<'workspace.getRoot'
 }
 
 /** Opens the native picker; a cancel changes nothing, including the cache. */
-export function useChooseWorkspaceRoot(): { choose: () => void; isPending: boolean } {
+export function useChooseWorkspaceRoot(): {
+  choose: () => void
+  /** Same picker, awaitable: resolves to the chosen path, or null on cancel. */
+  chooseAsync: () => Promise<string | null>
+  isPending: boolean
+} {
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: () => callProcedure('workspace.chooseRoot', undefined),
@@ -21,7 +26,11 @@ export function useChooseWorkspaceRoot(): { choose: () => void; isPending: boole
       queryClient.setQueryData(workspaceRootKey, { path: result.path, exists: true })
     }
   })
-  return { choose: () => mutation.mutate(), isPending: mutation.isPending }
+  return {
+    choose: () => mutation.mutate(),
+    chooseAsync: () => mutation.mutateAsync().then((result) => result.path),
+    isPending: mutation.isPending
+  }
 }
 
 export const notificationsKey = ['notifications'] as const

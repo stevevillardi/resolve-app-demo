@@ -33,6 +33,7 @@ import { useAuthStatus, useVerifyGitHubNow } from '@/hooks/useAuth'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useContacts, useCreateContact, useRecreateContact } from '@/hooks/useConversations'
 import { useChooseDirectory, useCloneRepo, useRepos } from '@/hooks/useRepos'
+import { useChooseWorkspaceRoot, useWorkspaceRoot } from '@/hooks/useSettings'
 import { useUiStore } from '@/store/useUiStore'
 import { ipcErrorMessage } from '@/lib/ipc-client'
 import { repoName } from '@/lib/format'
@@ -188,6 +189,13 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const { choose, isPending: choosing } = useChooseDirectory()
   const { clone, isPending: cloning, error: cloneError } = useCloneRepo()
   const { create, isPending: creating, error: createError } = useCreateContact()
+  // The first clone needs a workspace root, and main will open a native folder
+  // dialog for one mid-clone if it has to — invisible behind a button that says
+  // "Cloning…" (Phase 11, F2). Known-unset is asked for up front instead, with
+  // its own label; the mid-clone ask in cloneToWorkspace stays as the fallback
+  // for the brief window where the root query hasn't resolved yet.
+  const workspaceRoot = useWorkspaceRoot()
+  const { chooseAsync: chooseCloneRoot, isPending: choosingRoot } = useChooseWorkspaceRoot()
 
   // Reset on close rather than on open, so the dialog's exit animation doesn't
   // play over a half-cleared form.
@@ -216,7 +224,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const chosenPath = source === 'local' ? localRepo?.path : repo?.localPath
   const chosenLabel = source === 'local' ? localRepo?.path : repo?.fullName
   const hasRepo = source === 'local' ? Boolean(localRepo) : Boolean(repo)
-  const busy = cloning || creating
+  const busy = cloning || creating || choosingRoot
 
   // Caught at bind time rather than at the first send — see repoBindingProblem.
   const bindingProblem =
@@ -268,7 +276,16 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
 
     if (chosenPath) return bind(chosenPath)
     if (source === 'github' && repo) {
-      clone({ fullName: repo.fullName, cloneUrl: repo.cloneUrl }, (cloned) => bind(cloned.path))
+      const startClone = (): void =>
+        clone({ fullName: repo.fullName, cloneUrl: repo.cloneUrl }, (cloned) => bind(cloned.path))
+      if (workspaceRoot.data?.path === null) {
+        // A cancel is an answer: stay on the confirm step with nothing changed.
+        void chooseCloneRoot().then((path) => {
+          if (path) startClone()
+        })
+        return
+      }
+      startClone()
     }
   }
 
@@ -597,6 +614,8 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             {!chosenPath && (
               <p className="text-muted-foreground text-xs">
                 This repo isn&apos;t on this machine yet — creating the contact will clone it first.
+                {workspaceRoot.data?.path === null &&
+                  ' You’ll be asked where cloned repositories should go.'}
               </p>
             )}
             {(cloneError ?? createError ?? recreateError) && (
@@ -649,7 +668,13 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             {step === 'isolation' && <Button onClick={() => setStep('confirm')}>Continue</Button>}
             {step === 'confirm' && (
               <Button disabled={busy} onClick={handleCreate}>
-                {cloning ? 'Cloning…' : creating ? 'Creating…' : 'Create'}
+                {choosingRoot
+                  ? 'Choosing a folder…'
+                  : cloning
+                    ? 'Cloning…'
+                    : creating
+                      ? 'Creating…'
+                      : 'Create'}
               </Button>
             )}
           </div>

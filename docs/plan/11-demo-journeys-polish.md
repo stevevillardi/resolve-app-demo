@@ -1,6 +1,6 @@
 # Phase 11 — Demo Journeys & Polish
 
-**Status:** In progress
+**Status:** Done
 **Blueprint refs:** §16 (all three journeys), §13 (scope cuts — verify nothing crept back in), §15 (all cross-cutting decisions)
 
 ## Goal
@@ -38,10 +38,9 @@ Final pass: run all three blueprint §16 journeys back-to-back in one sitting, o
 - [x] Every screen reachable in the app has a sane empty state and a sane error state, not just a happy-path render. _(Fresh-profile sweep of all seven sections captured before any content existed — all sane, with real copy. Error states: repo-picker error path, in-thread failure bubble, lock refusals all render; quality issues are F1/F6, not absences. Both-theme `npm run screens` sweep re-run at close.)_
 - [x] Demo runbook written and another person (or a fresh read by whoever's demoing) can follow it without needing to ask what a step means. _(Top-level `README.md` rewritten: setup, onboarding, the three journeys as a demo script, the staged `npm run demo` profile, live-check gates.)_
 
-**Findings F1–F7 below are logged, not fixed** — triage decides which land
-as fixes (each its own commit on a `phase-11` branch) and which are recorded
-as accepted limits. The phase closes after that pass plus a clean journey
-re-run.
+**All seven findings were fixed on `phase-11-demo-journeys`** (each its own
+commit, outcomes noted per finding below) and **the clean re-run passed on
+2026-08-18** — see the re-run log at the end of this document.
 
 ## Journey run log (live, 2026-08-18)
 
@@ -135,6 +134,9 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   real users on every rebuilt dev binary, so the surfaces that discard it are
   a real defect regardless.
 - **Evidence:** `shots/08-repo-picker-error.png`, `auth.getStatus` capture.
+- **Fixed** on `phase-11-demo-journeys`: both throws now route through
+  `missingTokenError()` in `github-auth.ts`, which consults
+  `secretUnreadable()` and single-sources the locked wording.
 
 ### F2 — first clone's workspace-root ask hides behind a "Cloning…" label (degraded)
 
@@ -155,6 +157,10 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   Cloning…) would fix it.
 - **Evidence:** `shots/13-after-create.png` (dialog stuck on Cloning…),
   `workspace.getRoot` returning `{path: null}` at that moment.
+- **Fixed** on `phase-11-demo-journeys`: the confirm step warns the ask is
+  coming when the root is known-unset, and Create asks first — its own
+  'Choosing a folder…' state, cancel returning to confirm untouched —
+  before the clone starts. The mid-clone ask stays as the fallback.
 
 ### F3 — typing `@` in the Group composer gives no typeahead (cosmetic)
 
@@ -184,6 +190,10 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   the PR outcome line to the `routine_run` content app-side (the app knows
   the PR number), or run the PR step before summarize().
 - **Evidence:** `routine_run` group message vs `gh pr view 3`.
+- **Fixed** on `phase-11-demo-journeys`: the scheduler amends the
+  `routine_run` row with its own PR line via `appendToGroupMessage()`,
+  re-announcing on the messages-changed chokepoint. The model's account is
+  kept; the app's outcome lands after it.
 
 ### F5 — a model switching branches inside its worktree breaks branch bookkeeping (degraded)
 
@@ -211,6 +221,13 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
 - **Evidence:** `git worktree list` showing the worktree on
   `fix/readme-typo-receive`, Branches panel screenshot
   (`shots/31-branch-detail.png`), PR #3 title/head mismatch.
+- **Fixed** on `phase-11-demo-journeys`, both layers: the working-context
+  block now says the branch is load-bearing (stay on it, never create or
+  switch, "even when asked to put work on a branch"), and
+  `reconcileWorktreeBranch()` runs at turn end before the summariser
+  reads the row — git's answer wins over the registration. The PR title's
+  fallback names the branch actually pushed. Tested against real git
+  worktrees plus a real `:memory:` db.
 
 ### F6 — model-failure copy is a leaked vendor string, and the bubble isn't visibly an error (degraded)
 
@@ -232,6 +249,11 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   got the same treatment. Phase 6's error-bubble styling may also not be
   applied on this path.
 - **Evidence:** `shots/33-error-bubble.png`.
+- **Fixed** on `phase-11-demo-journeys`: the adapter now reads `is_error`
+  on success results and yields an error event, which puts the existing
+  §15C error bubble and Phase 21 retry in front of it with no renderer
+  change; the known unknown-model sentence is reworded to name the
+  persona's model picker, anything else passes through untouched.
 
 ### F7 — a finished turn can stay rendered as "working…" in the Group view until app restart (degraded)
 
@@ -257,13 +279,72 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
 - **Evidence:** `shots/35-dark-group.png` (stale block),
   `shots/36-group-after-restart.png` (cleared), `runs.list` + tool-call
   status dumps in the run transcript.
+- **Fixed** on `phase-11-demo-journeys`: root cause confirmed as the
+  store's only exit being the turn's own `done` event, which reaches it
+  solely through a *mounted* subscriber — both thread views unsubscribe on
+  unmount, so a turn finishing on another screen leaked its entry.
+  `useRunReconciliation` (mounted once in AppShell) now sweeps the store
+  against `runs.list` on every `runs-changed` push and on the window
+  becoming visible, invalidate-then-end like the done path, making the
+  class impossible rather than merely rarer.
 
-### O1 — session summaries run on a different model than the persona (observation, verify intent)
+### O1 — session summaries run on a different model than the persona (observation — resolved, deliberate)
 
 - Refactor Buddy is pinned to `gpt-5.4-mini`, but its end-of-session
   summary was billed to `gpt-5.6-luna`; Claude personas' summaries run on
-  `claude-haiku-4-5`. Claude-side that reads as a deliberate cheap-summarizer
-  choice; Codex-side `gpt-5.6-luna` is the *newest* model in the picker, so
-  if the intent was "backend default", the default drifted expensive. Cost
-  was trivial here ($0.0025), but a summary on a model the persona owner
-  never chose is worth an explicit decision either way.
+  `claude-haiku-4-5`. **Resolved at triage by reading
+  `SUMMARY_MODELS` (`src/main/adapters/models.ts`): both choices are
+  deliberate cheap-summarizer picks.** `gpt-5.6-luna` is the *cheapest*
+  entry the price table knows (0.20/1.20 per 1M — it took over from
+  gpt-5.4-mini on 2026-08-17 precisely because it is 3.75× cheaper), and
+  the comment already names the quality risk to watch. The live run's
+  numbers agree ($0.0025 for the summary). No change needed.
+
+## Clean re-run (2026-08-18, branch build, all fixes in)
+
+Profile reset to fresh (DB/worktrees/demo deleted, credentials kept), remote
+demo repo reset (PR closed, branch deleted, both issues open), clones dir
+removed. All three journeys re-driven in one continuous session against the
+`phase-11-demo-journeys` build. **All passed**, and each fix was verified
+against the exact scenario that had produced its finding:
+
+- **F1** — the worktree's own `npm ci` Electron is a different ad-hoc
+  signature, so the locked-credential state reproduced *by construction* (and
+  retroactively explains the first run). The repo picker now showed the
+  precise sentence with a Reconnect button; the connect dialog's fuller
+  wording ("Nothing was revoked; connect again once") rendered as designed;
+  one device-flow reconnect and the run proceeded.
+- **F2** — confirm step warned "You'll be asked where cloned repositories
+  should go", and Create read **"Choosing a folder…"** during the native ask
+  instead of "Cloning…".
+- **F3** — typing `@Docs` popped the suggestion panel (persona + sandbox
+  chip); Enter completed the token to `@Docs Writer ` *without sending*; the
+  mention routed normally.
+- **F5** — the routine prompt again said "fix it on a branch", and this time
+  the session **stayed on `persona/refactor-buddy-a913`**: PR #4's head, the
+  Branches panel (PR chip, no "checkout removed", head `41c5642`), the
+  summary stamps, and the registered branch all agree.
+- **F4** — the `routine_run` row ends "**Opened PR #4.**" appended after the
+  model's own account of its sandbox-blocked push. The Group no longer
+  asserts a PR failed while it sits open.
+- **F7** — a turn was deliberately left to finish with no thread mounted (the
+  original leak scenario); the live block cleared within seconds of the turn
+  ending instead of surviving until restart.
+- **§15E** — the routine again ran to completion with the window closed to
+  the tray; skip-while-locked wording unchanged and legible.
+
+Run cost $1.37 (Code Reviewer $0.61 / Docs Writer $0.67 / Refactor Buddy
+$0.10). Screenshots in the session scratchpad (`rerun/`).
+
+**Two residual observations, recorded rather than fixed (cosmetic):**
+
+- **R1** — the onboarding connect card shows a plain "Connected" for a
+  `locked` GitHub credential; the truth surfaces one click later in the
+  connect dialog. Low stakes because onboarding's next step for a locked
+  token *is* that dialog, but the card could carry the same nuance.
+- **R2** — a PR title built from the summary fallback uses the *latest*
+  `system_summary` on the branch, which can describe an unrelated turn
+  (PR #4 was titled "The checkout contents were briefly listed." after a
+  file-listing turn's summary outranked the typo fix). Head, body, and
+  commits are all correct; only the title reads odd. The fallback could
+  prefer the newest commit subject over a newer unrelated summary.

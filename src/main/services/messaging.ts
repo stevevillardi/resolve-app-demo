@@ -25,7 +25,7 @@ import { buildSessionSpec } from './session-spec'
 import { captureWorkEnd, captureWorkStart } from './turn-work'
 import type { TurnOrigin, TurnOutcome } from './turn-origin'
 import { baselineFor, recordUsage } from './usage-events'
-import { ensureWorktree } from './worktrees'
+import { ensureWorktree, reconcileWorktreeBranch } from './worktrees'
 import type { SessionSpec } from '../adapters/types'
 import { TOOL_DETAIL_MAX, toolExcerpt } from '../../shared/agent'
 import type { AgentEvent } from '../../shared/agent'
@@ -715,7 +715,15 @@ function finish(
     // the lock is released and after the renderer has been told the turn is
     // over, so a slow summariser delays nothing the user is waiting on. Not
     // awaited, and it never rejects — see summarizeTurn's contract.
-    const summarising = summarizeTurn(contactId, prompt, finalText, origin)
+    // The branch reconciliation goes first, because the summariser re-reads
+    // the Contact row: a session that switched branches inside its worktree
+    // must be stamped with the branch its commits actually live on, not the
+    // one it was assigned (Phase 11, F5). reconcileWorktreeBranch never
+    // throws, so the chain keeps summarizeTurn's never-rejects contract.
+    const finishedContact = getContact(contactId)
+    const summarising = (
+      finishedContact ? reconcileWorktreeBranch(finishedContact) : Promise.resolve(null)
+    ).then(() => summarizeTurn(contactId, prompt, finalText, origin))
 
     // Settled after the lock is released, so a routine writing its own rows in
     // reaction cannot be refused by the very turn it is reacting to. It waits

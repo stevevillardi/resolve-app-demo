@@ -69,6 +69,29 @@ export function insertGroupMessage(draft: GroupMessageDraft): GroupMessage {
 }
 
 /**
+ * Adds a line to a message that already posted.
+ *
+ * Exists for exactly one caller: a routine's `routine_run` row is written by
+ * the summariser at turn end, but the pull request is the scheduler's own
+ * post-turn step — the model has already summarised a push *it* could not do
+ * (the sandbox blocks its network) as a failure by then. Appending the app's
+ * own outcome is what keeps the Group from asserting a PR failed while the PR
+ * sits open on GitHub (Phase 11, F4). The model's sentence is kept: what it
+ * believed is part of the record; the correction is dated by adjacency.
+ */
+export function appendToGroupMessage(id: string, line: string): void {
+  const db = initDb()
+  const existing = db.select().from(groupMessages).where(eq(groupMessages.id, id)).get()
+  if (!existing) return
+
+  db.update(groupMessages)
+    .set({ content: `${existing.content}\n\n${line}` })
+    .where(eq(groupMessages.id, id))
+    .run()
+  emitMessagesChanged()
+}
+
+/**
  * The latest message per group, for ConversationList's preview line.
  *
  * One query rather than one per group, for the same reason messagePreviews()

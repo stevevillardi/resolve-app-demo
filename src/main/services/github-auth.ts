@@ -65,6 +65,26 @@ export function getGitHubToken(): string | null {
   return getSecret('github_token')
 }
 
+export const LOCKED_TOKEN_MESSAGE =
+  "This build can't unlock the stored GitHub credential (the app binary changed). Reconnect once to re-save it."
+
+/**
+ * The sentence to throw when getGitHubToken() came back null.
+ *
+ * Null has two causes with opposite remedies: nothing stored (Connect) and
+ * stored-but-unreadable by this build's keychain identity (Reconnect once).
+ * The features that need a token used to collapse both into "Connect GitHub
+ * first", which told a user whose credential merely predates the current
+ * binary to do the wrong thing — the run that surfaced it is Phase 11's F1.
+ * getGitHubToken() must have been asked before this call for the unreadable
+ * verdict to exist; callers always have, since null is what brought them here.
+ */
+export function missingTokenError(action: string): Error {
+  return new Error(
+    secretUnreadable('github_token') ? LOCKED_TOKEN_MESSAGE : `Connect GitHub first to ${action}.`
+  )
+}
+
 /**
  * `connected` still means "a token is stored" — that is the honest reading of a
  * synchronous function that cannot make a network call. What it no longer does
@@ -93,8 +113,7 @@ export function getGitHubStatus(): GitHubAuthStatus {
       configured,
       tokenState: 'locked',
       login: getAppState('github_account_login') ?? undefined,
-      error:
-        "This build can't unlock the stored GitHub credential (the app binary changed). Reconnect once to re-save it."
+      error: LOCKED_TOKEN_MESSAGE
     }
   }
 

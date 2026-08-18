@@ -30,7 +30,10 @@ let token: string | null = 'gho_test'
 
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
-vi.mock('./github-auth', () => ({ getGitHubToken: () => token }))
+vi.mock('./github-auth', () => ({
+  getGitHubToken: () => token,
+  missingTokenError: (action: string) => new Error(`Connect GitHub first to ${action}.`)
+}))
 
 const pushed: { branch: string; url: string; token?: string | null }[] = []
 vi.mock('./git', async (importOriginal) => ({
@@ -163,6 +166,28 @@ describe('openPullRequest', () => {
       // this exact change.
       title: 'extract the parser'
     })
+  })
+
+  /**
+   * Phase 11, F5: the live run's routine created its own branch inside its
+   * worktree, and the PR opened from that branch (correct — head follows the
+   * working copy) while the *title* was built from the Contact's stale
+   * registered name. Head and title must name the same branch: the one the PR
+   * actually ships.
+   */
+  it('titles the PR after the branch it pushed, not the registered one', async () => {
+    const contact = await writerWithWork()
+    const worktree = contact.worktreePath as string
+    run(['checkout', '-q', '-b', 'fix/readme-typo'], worktree)
+    // A second commit, so the fallback title is in play rather than the
+    // single-commit subject.
+    commitIn(worktree, 'src/c.ts', 'export const c = 3\n', 'another change')
+
+    await openPullRequest(contact.id)
+
+    expect(created[0].head).toBe('fix/readme-typo')
+    expect(created[0].title).toContain('fix/readme-typo')
+    expect(created[0].title).not.toContain(contact.branch as string)
   })
 
   // The check that makes githubScope mean something. The button already hides

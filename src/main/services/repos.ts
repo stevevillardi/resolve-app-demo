@@ -3,7 +3,7 @@ import { existsSync } from 'fs'
 import { basename, join } from 'path'
 import { getAppState, setAppState } from './app-state'
 import { cloneRepo, isGitRepo } from './git'
-import { getGitHubToken } from './github-auth'
+import { getGitHubToken, missingTokenError } from './github-auth'
 import { gitHubClient } from './github-client'
 
 /**
@@ -76,7 +76,7 @@ export async function chooseDirectory(title?: string): Promise<BoundRepo | null>
  */
 export async function listRepos(): Promise<RepoOption[]> {
   const token = getGitHubToken()
-  if (!token) throw new Error('Connect GitHub first to list your repositories.')
+  if (!token) throw missingTokenError('list your repositories')
 
   const repos = await gitHubClient(token).listRepos()
   const root = getWorkspaceRoot()

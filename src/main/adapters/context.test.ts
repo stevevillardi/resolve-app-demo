@@ -253,6 +253,25 @@ describe('working context', () => {
   })
 
   /**
+   * Phase 11, F5: told to "fix it on a branch", a routine's session created
+   * and checked out its own branch inside its worktree — nothing had ever told
+   * it the assigned branch was load-bearing — and every reader of
+   * `contacts.branch` drifted from reality at once. Saying so is the cheap
+   * half of the fix; reconcileWorktreeBranch() is the backstop.
+   */
+  it('tells the session its branch is load-bearing and not to leave it', () => {
+    const composed = composeInstructions({
+      ...spec(persona([]), []),
+      workingContext: working
+    })
+
+    expect(composed).toContain(`Stay on \`${working.branch}\``)
+    expect(composed).toMatch(/never create, switch to, or rename branches/i)
+    // The exact instruction that would have prevented the live-run incident.
+    expect(composed).toMatch(/even when asked to put work "on a branch"/i)
+  })
+
+  /**
    * The other half of the same mistake, found by Phase 9's Journey 3 check: a
    * routine asked for `src/<file>.ts`, a directory that existed in neither
    * checkout, and the model created it in the *repository* — the other path

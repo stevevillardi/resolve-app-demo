@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mentionToken, parseMention, type MentionTarget } from './mention'
+import { matchMentionTargets, mentionQuery, mentionToken, parseMention, type MentionTarget } from './mention'
 
 const TARGETS: MentionTarget[] = [
   { contactId: 'c-reviewer', name: 'Code Reviewer' },
@@ -58,5 +58,62 @@ describe('parseMention', () => {
   it('is empty-safe', () => {
     expect(parseMention('', TARGETS)).toBeNull()
     expect(parseMention('@Code Reviewer hi', [])).toBeNull()
+  })
+})
+
+/**
+ * Phase 11, F3: typing `@` used to give no completion at all — the only
+ * affordances were the icon-button picker and a red hint. These pin the
+ * typeahead's decision half: when suggestions belong on screen and in what
+ * order.
+ */
+describe('mentionQuery', () => {
+  it('is the partial name while the user is still addressing', () => {
+    expect(mentionQuery('@', TARGETS)).toBe('')
+    expect(mentionQuery('@Co', TARGETS)).toBe('Co')
+    expect(mentionQuery('  @Refa', TARGETS)).toBe('Refa')
+  })
+
+  it('closes once the mention is settled with content behind it', () => {
+    expect(mentionQuery('@Code Reviewer look at auth.ts', TARGETS)).toBeNull()
+  })
+
+  it('is null for a draft that is not a mention', () => {
+    expect(mentionQuery('just talking', TARGETS)).toBeNull()
+    expect(mentionQuery('', TARGETS)).toBeNull()
+  })
+
+  it('closes when the token runs onto another line', () => {
+    expect(mentionQuery('@Code\nreview this', TARGETS)).toBeNull()
+  })
+})
+
+describe('matchMentionTargets', () => {
+  it('offers the whole roster on a bare @', () => {
+    expect(matchMentionTargets('', TARGETS).map((t) => t.name)).toEqual([
+      'Code',
+      'Code Reviewer',
+      'Refactor Buddy'
+    ])
+  })
+
+  it('ranks prefix matches ahead of substring ones', () => {
+    const targets: MentionTarget[] = [
+      { contactId: 'a', name: 'Release Manager' },
+      { contactId: 'b', name: 'Reviewer' }
+    ]
+    expect(matchMentionTargets('Re', targets).map((t) => t.name)).toEqual([
+      'Release Manager',
+      'Reviewer'
+    ])
+    // 'view' appears inside Reviewer only.
+    expect(matchMentionTargets('view', targets).map((t) => t.name)).toEqual(['Reviewer'])
+  })
+
+  it('matches case-insensitively and drops non-matches', () => {
+    expect(matchMentionTargets('refactor', TARGETS).map((t) => t.name)).toEqual([
+      'Refactor Buddy'
+    ])
+    expect(matchMentionTargets('zzz', TARGETS)).toEqual([])
   })
 })

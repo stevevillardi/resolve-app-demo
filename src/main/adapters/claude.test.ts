@@ -467,6 +467,53 @@ describe('stream normalization', () => {
     expect(events).toContainEqual({ type: 'error', kind: 'unknown', message: 'boom' })
   })
 
+  /**
+   * The CLI reports some failures as a *successful* result whose text is its
+   * own error prose, flagged only by `is_error: true` — shape captured live
+   * 2026-08-18 by giving a persona a nonexistent model (Phase 11, F6). Left
+   * on the reply path it rendered as an ordinary assistant bubble, became the
+   * sidebar preview, and never offered retry.
+   */
+  it('routes an is_error success down the error path, not the reply path', async () => {
+    const prose =
+      "There's an issue with the selected model (claude-nonexistent-model). It may not exist or " +
+      'you may not have access to it. Run --model to pick a different model.'
+    const events = await collect([
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: true,
+        result: prose,
+        modelUsage: modelUsage()
+      }
+    ])
+
+    const error = events.find((e) => e.type === 'error')
+    expect(error).toMatchObject({ type: 'error', kind: 'unknown' })
+    // The CLI's terminal advice is reworded: there is no --model in this app.
+    expect((error as { message: string }).message).toContain("'claude-nonexistent-model'")
+    expect((error as { message: string }).message).not.toContain('--model')
+    // And the prose never becomes the reply.
+    expect(events.at(-1)).toMatchObject({ type: 'done', finalText: '' })
+  })
+
+  it('passes unrecognised is_error prose through unreworded', async () => {
+    const events = await collect([
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: true,
+        result: 'Something else went wrong.',
+        modelUsage: modelUsage()
+      }
+    ])
+    expect(events).toContainEqual({
+      type: 'error',
+      kind: 'unknown',
+      message: 'Something else went wrong.'
+    })
+  })
+
   it('classifies an assistant-level error code', async () => {
     const events = await collect([
       { type: 'assistant', error: 'rate_limit', message: { content: [] } }

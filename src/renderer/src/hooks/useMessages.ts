@@ -8,6 +8,7 @@ import {
   onRunsChanged
 } from '@/lib/ipc-client'
 import { useRunStore } from '@/store/useRunStore'
+import { staleTurnContacts } from '@/lib/run-reconcile'
 import { contactsKey } from './useConversations'
 import type { PersistedMessage } from '@/types'
 import type { ActiveRun, IpcOutput } from '../../../shared/ipc-contract'
@@ -213,4 +214,58 @@ export function useActiveRuns(): UseQueryResult<ActiveRun[]> {
     queryKey: runsKey,
     queryFn: () => callProcedure('runs.list', undefined)
   })
+}
+
+/**
+ * Sweeps useRunStore against main's active-run list (Phase 11, F7).
+ *
+ * The store's normal exit is the turn's own `done` event, but that only
+ * arrives through a mounted subscriber — a turn finishing while the user is
+ * on another screen can leak its entry, which renders as a "working…" block
+ * that survives navigation and remounts until restart. Main emits
+ * `runs-changed` on every turn boundary whether or not anyone is watching, so
+ * this reconciles on that signal (and on the window becoming visible again,
+ * for pushes lost while it was hidden in the tray), mirroring the done path's
+ * invalidate-then-end order so persisted rows are in place before the stream
+ * bubble is dropped.
+ *
+ * Mounted once, in AppShell.
+ */
+export function useRunReconciliation(): void {
+  const queryClient = useQueryClient()
+  const end = useRunStore((state) => state.end)
+
+  useEffect(() => {
+    const sweep = async (): Promise<void> => {
+      const byContact = useRunStore.getState().byContact
+      if (Object.keys(byContact).length === 0) return
+
+      const runs = await callProcedure('runs.list', undefined)
+      const stale = staleTurnContacts(
+        byContact,
+        runs.map((run) => run.runId)
+      )
+      if (stale.length === 0) return
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: groupMessagesRootKey }),
+        ...stale.map((contactId) =>
+          queryClient.invalidateQueries({ queryKey: messagesKey(contactId) })
+        )
+      ])
+      stale.forEach(end)
+    }
+
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') void sweep()
+    }
+
+    void sweep()
+    document.addEventListener('visibilitychange', onVisible)
+    const unsubscribe = onRunsChanged(() => void sweep())
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      unsubscribe()
+    }
+  }, [queryClient, end])
 }
