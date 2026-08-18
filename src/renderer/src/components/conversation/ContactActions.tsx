@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { Layers, Loader2, Pencil, RefreshCcw, Trash2, UserRoundPen, FolderOpen } from 'lucide-react'
+import {
+  Layers,
+  Loader2,
+  Pencil,
+  RefreshCcw,
+  RotateCcw,
+  Trash2,
+  UserRoundPen,
+  FolderOpen
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -18,7 +27,12 @@ import { Field } from '@/components/common/Field'
 import { toast } from 'sonner'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { ListRow } from '@/components/common/ListRow'
-import { useDeleteContact, useRebindPersona, useRenameContact } from '@/hooks/useConversations'
+import {
+  useDeleteContact,
+  useRebindPersona,
+  useRenameContact,
+  useStartFreshSession
+} from '@/hooks/useConversations'
 import { revealLocalPath } from '@/hooks/useDiffs'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useUiStore } from '@/store/useUiStore'
@@ -35,7 +49,7 @@ import type { Contact, PersonaBackend } from '@/types'
  * (draft name, refusal state) lives here.
  */
 
-export type ContactDialogKind = 'context' | 'rename' | 'rebind' | 'delete'
+export type ContactDialogKind = 'context' | 'rename' | 'rebind' | 'freshSession' | 'delete'
 
 interface ContactActionItemsProps {
   /** Which menu family these items render into — they must match their popup. */
@@ -44,6 +58,12 @@ interface ContactActionItemsProps {
   contactId: string
   /** Where its session actually works — the worktree when isolated. */
   workingPath: string
+  /**
+   * Whether there is a backend session to drop. A contact that has never run a
+   * turn has nothing to start fresh *from*, so the item is disabled rather than
+   * hidden — its absence would read as the feature not existing.
+   */
+  hasSession: boolean
   onOpen: (dialog: ContactDialogKind) => void
 }
 
@@ -51,6 +71,7 @@ export function ContactActionItems({
   kind,
   contactId,
   workingPath,
+  hasSession,
   onOpen
 }: ContactActionItemsProps): React.JSX.Element {
   const Item = kind === 'dropdown' ? DropdownMenuItem : ContextMenuItem
@@ -75,6 +96,12 @@ export function ContactActionItems({
       <Item onClick={() => onOpen('rebind')}>
         <UserRoundPen />
         Change persona…
+      </Item>
+      {/* Beside Change persona because that is where this used to hide: until
+          Phase 22 a rebind's resume-key clear was the only way to get one. */}
+      <Item disabled={!hasSession} onClick={() => onOpen('freshSession')}>
+        <RotateCcw />
+        Start a fresh session…
       </Item>
       {/* Not one of the parent's dialogs: recreate routes into the
           new-contact flow, prefilled. The flow clears the marker on close. */}
@@ -116,6 +143,7 @@ export function ContactActionDialogs({
           remember to reset. */}
       {open === 'rename' && <RenameContactDialog contact={contact} onClose={onClose} />}
       {open === 'rebind' && <RebindPersonaDialog contact={contact} onClose={onClose} />}
+      {open === 'freshSession' && <FreshSessionDialog contact={contact} onClose={onClose} />}
       {open === 'delete' && <DeleteContactDialog contact={contact} onClose={onClose} />}
       <ContextPanel
         contactId={contact.id}
@@ -171,6 +199,61 @@ function RenameContactDialog({
             onClick={() => rename(contact.id, draftName, onClose)}
           >
             {saving ? 'Saving…' : 'Rename'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * The one lever over what a turn costs, and the copy is most of the feature.
+ *
+ * Two things have to land or the action is frightening rather than useful:
+ * that nothing visible is lost — the transcript is ours, the backend's memory
+ * of it is not — and *why anyone would want this*, which is that every turn is
+ * billed for the whole conversation the session can still see. Neither is
+ * guessable from the words "fresh session", so both are said.
+ */
+function FreshSessionDialog({
+  contact,
+  onClose
+}: {
+  contact: Contact
+  onClose: () => void
+}): React.JSX.Element {
+  const { startFresh, isPending, error } = useStartFreshSession()
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Start a fresh session?</DialogTitle>
+          <DialogDescription>
+            Everything you can see stays. {contact.displayName} keeps this repository, its working
+            folder and this whole conversation — it just stops <em>remembering</em> the messages
+            above, so the next one starts from its instructions and nothing else.
+          </DialogDescription>
+        </DialogHeader>
+        <p className="text-muted-foreground text-row">
+          That is also what makes the next message cheap again: a turn is billed for the entire
+          conversation its session can still see.
+        </p>
+        {error && <p className="text-destructive text-row">{error}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={isPending}
+            onClick={() =>
+              startFresh(contact.id, () => {
+                toast('Fresh session — the next message starts with nothing in memory')
+                onClose()
+              })
+            }
+          >
+            {isPending ? 'Starting…' : 'Start fresh'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -28,7 +28,8 @@ const {
   renameContact,
   markContactRead,
   setBackendSessionId,
-  setRepoTrust
+  setRepoTrust,
+  startFreshSession
 } = await import('./contacts')
 const { ensureGroupForRepo, listGroups, markGroupRead } = await import('./groups')
 const { acquire, resetRunLocks } = await import('./run-lock')
@@ -465,6 +466,57 @@ describe('rebindPersona', () => {
   it('rejects an unknown contact', () => {
     seedOtherPersona()
     expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/No such contact/)
+  })
+})
+
+describe('startFreshSession', () => {
+  it('drops the resume key and keeps everything else', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setBackendSessionId(contact.id, 'session-abc123')
+
+    const after = startFreshSession(contact.id)
+
+    expect(after.backendSessionId).toBeNull()
+    // The point of the action is what it does NOT change: the conversation is
+    // ours, and only the backend's memory of it is being dropped.
+    expect(after).toEqual({ ...getContact(contact.id), backendSessionId: null })
+    expect(after.repoPath).toBe(contact.repoPath)
+    expect(after.personaTemplateId).toBe(contact.personaTemplateId)
+    expect(after.worktreePath).toBe(contact.worktreePath)
+    expect(after.branch).toBe(contact.branch)
+  })
+
+  // A contact that has never run a turn already has what this offers, so
+  // asking again is not an error — the menu item is disabled there anyway.
+  it('is a no-op on a contact with no session', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    expect(startFreshSession(contact.id).backendSessionId).toBeNull()
+  })
+
+  // Same race as the persona backend switch: a turn finishing a moment later
+  // writes its own session id back over the clear, so without this the request
+  // would report success and silently not happen.
+  it('refuses while that contact is mid-turn, and clears nothing', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setBackendSessionId(contact.id, 'session-abc123')
+    const release = acquire({
+      runId: 'run-1',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    expect(() => startFreshSession(contact.id)).toThrow(/working right now/)
+    expect(getContact(contact.id)?.backendSessionId).toBe('session-abc123')
+
+    release?.()
+    expect(startFreshSession(contact.id).backendSessionId).toBeNull()
+  })
+
+  it('rejects an unknown contact', () => {
+    expect(() => startFreshSession('contact-invented')).toThrow(/No such contact/)
   })
 })
 

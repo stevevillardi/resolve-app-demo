@@ -690,6 +690,20 @@ export const ipcContract = {
     output: contactSchema
   },
   /**
+   * Drops the resume key on purpose (Phase 22), so the next turn starts the
+   * backend over while the conversation on screen stays exactly as it is.
+   *
+   * Its own procedure rather than a flag on anything above, because it is the
+   * one act whose entire point is what it does *not* change. Every turn is
+   * billed for the whole conversation the session can see, and until now the
+   * only way to reset that was the side effect of rebindPersona — the lever
+   * over session cost reachable only by pretending to want something else.
+   */
+  'contacts.startFreshSession': {
+    input: z.object({ id: z.string() }),
+    output: contactSchema
+  },
+  /**
    * What this contact lets its repository say to it (blueprint §4, Phase 14).
    *
    * Separate from `contacts.update` on purpose. A rename and a grant of trust

@@ -201,6 +201,34 @@ export function useRebindPersona(): {
 }
 
 /**
+ * Drops the backend's memory of the thread, and keeps the thread (Phase 22).
+ *
+ * Only `contactsKey` is invalidated, and that is the whole shape of the
+ * feature: nothing about the messages, the routines or the spend has changed —
+ * one column on one contact has. The thread still repaints, because
+ * `backendSessionId` is what `awaitingFreshSession` reads.
+ */
+export function useStartFreshSession(): {
+  startFresh: (id: string, onDone?: () => void) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: ({ id }: { id: string }) => callProcedure('contacts.startFreshSession', { id }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+    }
+  })
+
+  return {
+    startFresh: (id, onDone) => mutation.mutate({ id }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
  * Deletes a contact, its thread and its worktree.
  *
  * Invalidates well beyond contacts, because the cascade reaches further than

@@ -287,3 +287,33 @@ export function rebindContactPersona(id: string, personaTemplateId: string): Con
 export function clearBackendSessionId(id: string): void {
   initDb().update(contacts).set({ backendSessionId: null }).where(eq(contacts.id, id)).run()
 }
+
+/**
+ * The user asking for the same thing on purpose (Phase 22).
+ *
+ * Until now a fresh session was only ever a side effect — of a dead key
+ * healing, or of changing persona — which left the one lever over session cost
+ * reachable only by pretending to want something else. Every turn is billed for
+ * the whole conversation it can see (this repo measured a Codex thread going
+ * 12k → 25k → 39k input tokens across three one-word turns), and this is the
+ * remedy for that, so it has to be askable directly.
+ *
+ * Exactly one column changes. The thread, the worktree, the branch, the spend
+ * and the persona all stay — the visible conversation is ours and is not what
+ * the backend is forgetting. Idempotent, because a contact with no session has
+ * already got what this offers.
+ *
+ * Refused mid-turn for the same reason the backend switch is: a turn finishing
+ * a moment later writes its own session id back over the clear, so the request
+ * would appear to succeed and silently not happen.
+ */
+export function startFreshSession(id: string): Contact {
+  const contact = getContact(id)
+  if (!contact) throw new Error(`No such contact: ${id}`)
+  if (!contact.backendSessionId) return contact
+
+  assertNoActiveRun([id], 'starting a fresh session')
+  clearBackendSessionId(id)
+
+  return getContact(id) as Contact
+}

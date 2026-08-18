@@ -122,6 +122,7 @@ function ContactRow({
               kind="context"
               contactId={contact.id}
               workingPath={contact.worktreePath ?? contact.repoPath}
+              hasSession={contact.backendSessionId !== null}
               onOpen={setDialog}
             />
           </ContextMenuContent>
