@@ -15,7 +15,14 @@ import { RoutineRunNotice } from './RoutineRunNotice'
 import { MentionPicker } from './MentionPicker'
 import { Composer } from './Composer'
 import { groupName, isSameDay } from '@/lib/format'
-import { mentionToken, parseMention } from '@/lib/mention'
+import {
+  matchMentionTargets,
+  mentionQuery,
+  mentionToken,
+  parseMention,
+  type MentionTarget
+} from '@/lib/mention'
+import { ScopeChip } from '@/components/common/ScopeChip'
 import { streamText } from '@/lib/stream'
 import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
@@ -201,6 +208,43 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
   }))
   const parsed = parseMention(draft, mentionTargets)
 
+  // The typeahead every messaging app trains people to expect at the `@`
+  // keystroke (Phase 11, F3). The icon-button picker stays as the clickable
+  // route; this is the same roster surfacing under the caret. Escape dismisses
+  // until the draft changes again. Adjusted during render rather than in an
+  // effect — the same prefill pattern NewContactFlow uses — so a draft change
+  // resets the highlight and un-dismisses in the same pass that shows it.
+  const [suggestState, setSuggestState] = useState({ draft, index: 0, dismissed: false })
+  if (suggestState.draft !== draft) setSuggestState({ draft, index: 0, dismissed: false })
+  const typeaheadQuery = mentionQuery(draft, mentionTargets)
+  const suggestions =
+    typeaheadQuery !== null && !suggestState.dismissed
+      ? matchMentionTargets(typeaheadQuery, mentionTargets)
+      : []
+  const suggestIndex = Math.min(suggestState.index, Math.max(suggestions.length - 1, 0))
+  const setSuggestIndex = (next: number): void =>
+    setSuggestState((state) => ({ ...state, index: next }))
+  const acceptSuggestion = (target: MentionTarget): void => setDraft(mentionToken(target.name))
+  // Capture-phase, so a selection's Enter never reaches the composer as a
+  // send. Only intercepts while suggestions are actually on screen.
+  const onComposerKeyDownCapture = (event: React.KeyboardEvent): void => {
+    if (suggestions.length === 0) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setSuggestIndex((suggestIndex + 1) % suggestions.length)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setSuggestIndex((suggestIndex - 1 + suggestions.length) % suggestions.length)
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault()
+      event.stopPropagation()
+      acceptSuggestion(suggestions[suggestIndex])
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      setSuggestState((state) => ({ ...state, dismissed: true }))
+    }
+  }
+
   // @file completes against the *mentioned* contact's tree — the session the
   // message is going to — and only once a mention resolves; before that an @
   // is still the address, not a path. minStart puts the mention token itself
@@ -368,41 +412,88 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
         </div>
       </ScrollArea>
 
-      <Composer
-        placeholder={`Message the ${name} group…`}
-        value={draft}
-        onValueChange={setDraft}
-        onSend={handleSend}
-        files={files}
-        fileMinStart={fileMinStart}
-        busy={isRunning}
-        onStop={() => live?.turn && cancel(live.turn.runId)}
-        // A draft addressed to nobody has nowhere to go: the Group has no
-        // session of its own (§4), so an unaddressed message is not a message
-        // this thread can send.
-        disabled={!parsed}
-        hint={<span>Mention a persona with @ to route this to its own session.</span>}
-        notice={
-          mentionError ??
-          retryError ??
-          (draft.trim() && !parsed ? 'Start with @ to choose who answers.' : null)
-        }
-        leadingAction={
-          <MentionPicker
-            contacts={repoContacts}
-            personaTemplates={personaTemplates}
-            onSelect={(contact) => {
-              const persona = personaOf(contact)
-              setDraft(`${draft}${mentionToken(persona?.name ?? contact.displayName)}`)
-            }}
-            trigger={
-              <Button variant="ghost" size="icon-sm" aria-label="Mention a persona">
-                <AtSign className="size-4" />
-              </Button>
-            }
-          />
-        }
-      />
+      <div className="relative" onKeyDownCapture={onComposerKeyDownCapture}>
+        {suggestions.length > 0 && (
+          <div
+            role="listbox"
+            aria-label="Mention a persona"
+            className="bg-popover text-popover-foreground absolute bottom-full left-4 z-10 mb-1 w-72 overflow-hidden rounded-md border shadow-md"
+          >
+            {suggestions.map((target, index) => {
+              const contact = contactById.get(target.contactId)
+              const persona = contact ? personaById.get(contact.personaTemplateId) : undefined
+              return (
+                <button
+                  key={target.contactId}
+                  type="button"
+                  role="option"
+                  aria-selected={index === suggestIndex}
+                  className={cnSuggestion(index === suggestIndex)}
+                  // preventDefault keeps focus in the composer, so accepting a
+                  // suggestion never costs the caret.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => acceptSuggestion(target)}
+                  onMouseEnter={() => setSuggestIndex(index)}
+                >
+                  <AvatarColorSwatch
+                    name={target.name}
+                    color={persona?.avatarColor ?? 'var(--muted)'}
+                    seed={persona?.id}
+                    size="sm"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-left">{target.name}</span>
+                  {persona && <ScopeChip axis="sandbox" value={persona.sandbox} compact />}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        <Composer
+          placeholder={`Message the ${name} group…`}
+          value={draft}
+          onValueChange={setDraft}
+          onSend={handleSend}
+          files={files}
+          fileMinStart={fileMinStart}
+          busy={isRunning}
+          onStop={() => live?.turn && cancel(live.turn.runId)}
+          // A draft addressed to nobody has nowhere to go: the Group has no
+          // session of its own (§4), so an unaddressed message is not a message
+          // this thread can send.
+          disabled={!parsed}
+          hint={<span>Mention a persona with @ to route this to its own session.</span>}
+          notice={
+            mentionError ??
+            retryError ??
+            (draft.trim() && !parsed ? 'Start with @ to choose who answers.' : null)
+          }
+          leadingAction={
+            <MentionPicker
+              contacts={repoContacts}
+              personaTemplates={personaTemplates}
+              onSelect={(contact) => {
+                const persona = personaOf(contact)
+                setDraft(`${draft}${mentionToken(persona?.name ?? contact.displayName)}`)
+              }}
+              trigger={
+                <Button variant="ghost" size="icon-sm" aria-label="Mention a persona">
+                  <AtSign className="size-4" />
+                </Button>
+              }
+            />
+          }
+        />
+      </div>
     </div>
   )
+}
+
+/** The suggestion row's classes, split out only to keep the JSX readable. */
+function cnSuggestion(highlighted: boolean): string {
+  return [
+    'flex w-full items-center gap-2 px-2.5 py-1.5 text-sm outline-none',
+    highlighted ? 'bg-accent text-accent-foreground' : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
 }

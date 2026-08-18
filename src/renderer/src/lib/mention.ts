@@ -25,6 +25,42 @@ export function mentionToken(name: string): string {
 }
 
 /**
+ * The partial name being typed at the head of the draft — what a typeahead
+ * filters by — or null when no suggestions belong on screen (Phase 11, F3).
+ *
+ * Null in three cases: the draft is not a mention at all, the mention is
+ * already settled (a resolved name followed by content — parseMention says
+ * so), or the token has run onto another line, at which point the user is
+ * plainly writing a message rather than an address.
+ */
+export function mentionQuery(draft: string, targets: MentionTarget[]): string | null {
+  const trimmed = draft.trimStart()
+  if (!trimmed.startsWith('@')) return null
+  if (parseMention(draft, targets)) return null
+
+  const token = trimmed.slice(1)
+  if (token.includes('\n')) return null
+  return token
+}
+
+/**
+ * Targets matching a typeahead query, prefix matches ahead of substring ones.
+ *
+ * Everything matches the empty query — a bare `@` should offer the whole
+ * roster, which is also what the picker button shows.
+ */
+export function matchMentionTargets(query: string, targets: MentionTarget[]): MentionTarget[] {
+  const q = query.trim().toLowerCase()
+  return targets
+    .filter((target) => target.name.toLowerCase().includes(q))
+    .sort((a, b) => {
+      const aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1
+      const bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1
+      return aStarts - bStarts || a.name.localeCompare(b.name)
+    })
+}
+
+/**
  * Finds which Contact a draft is addressed to, and strips the token.
  *
  * Matches only at the start of the draft. A mention is a routing instruction
