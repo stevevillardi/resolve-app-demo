@@ -222,6 +222,13 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
 - **Evidence:** `git worktree list` showing the worktree on
   `fix/readme-typo-receive`, Branches panel screenshot
   (`shots/31-branch-detail.png`), PR #3 title/head mismatch.
+- **Fixed** on `phase-11-demo-journeys`, both layers: the working-context
+  block now says the branch is load-bearing (stay on it, never create or
+  switch, "even when asked to put work on a branch"), and
+  `reconcileWorktreeBranch()` runs at turn end before the summariser
+  reads the row — git's answer wins over the registration. The PR title's
+  fallback names the branch actually pushed. Tested against real git
+  worktrees plus a real `:memory:` db.
 
 ### F6 — model-failure copy is a leaked vendor string, and the bubble isn't visibly an error (degraded)
 
@@ -273,6 +280,14 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
 - **Evidence:** `shots/35-dark-group.png` (stale block),
   `shots/36-group-after-restart.png` (cleared), `runs.list` + tool-call
   status dumps in the run transcript.
+- **Fixed** on `phase-11-demo-journeys`: root cause confirmed as the
+  store's only exit being the turn's own `done` event, which reaches it
+  solely through a *mounted* subscriber — both thread views unsubscribe on
+  unmount, so a turn finishing on another screen leaked its entry.
+  `useRunReconciliation` (mounted once in AppShell) now sweeps the store
+  against `runs.list` on every `runs-changed` push and on the window
+  becoming visible, invalidate-then-end like the done path, making the
+  class impossible rather than merely rarer.
 
 ### O1 — session summaries run on a different model than the persona (observation — resolved, deliberate)
 
