@@ -426,7 +426,33 @@ export const usageEvents = sqliteTable(
      * is exact from then on. Cheaper than a backfill that would have to guess
      * which historical rows were deltas and which were cumulative readings.
      */
-    sessionId: text('session_id')
+    sessionId: text('session_id'),
+    /**
+     * The assistant message this turn produced, so the thread can show what a
+     * single turn cost (review §G6). Until now only aggregates were reachable:
+     * the data was per-event all along, but nothing tied an event to the reply
+     * it paid for.
+     *
+     * Written in `finish()`, where the id is already in hand — the same place
+     * and moment the turn's tool rows and session stamp are written.
+     * Correlating by timestamp instead was rejected: usage rows are written
+     * *after* the message, but a turn that produces no final text writes a
+     * usage row and no message at all, compaction records `summary` spend with
+     * neither message nor session, and a mention writes two message rows for
+     * one usage row. Each of those is a case where a positional pairing
+     * silently attributes a cost to the wrong reply.
+     *
+     * `set null` on delete rather than `cascade`, and this is the load-bearing
+     * half: `messages` cascades from `contacts`, so a cascading FK here would
+     * delete the spend record whenever a contact is deleted. Phase 10's rule is
+     * that spend outlives what spent it — `contact_id` is `set null` for
+     * exactly this reason, and this column has to match, or the usage
+     * dashboard's history quietly loses a month every time someone tidies up.
+     *
+     * Null means "not recorded": every row written before this column existed,
+     * and every turn that legitimately has no reply to point at.
+     */
+    messageId: text('message_id').references(() => messages.id, { onDelete: 'set null' })
   },
   (table) => [index('usage_events_contact_timestamp_idx').on(table.contactId, table.timestamp)]
 )

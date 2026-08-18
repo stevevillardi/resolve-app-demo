@@ -326,7 +326,16 @@ export const usageEventSchema = z.object({
    * subtract Codex's cumulative token reading back down to one turn — see the
    * column comment in db/schema.ts.
    */
-  sessionId: z.string().optional()
+  sessionId: z.string().optional(),
+  /**
+   * The assistant message this turn produced (§G6), so a thread can put a
+   * cost beside a reply rather than only in a total.
+   *
+   * Absent on rows written before the column existed, on compaction's own
+   * spend, and on a turn that was billable but produced no text — all three of
+   * which are honestly "no reply to point at" rather than a missing link.
+   */
+  messageId: z.string().optional()
 })
 
 // --- Write shapes -----------------------------------------------------------

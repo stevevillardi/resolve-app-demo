@@ -233,3 +233,24 @@ export function contextFill(tokens: ContextTokens): ContextFill | null {
     windowSource: window.source
   }
 }
+
+/**
+ * Usage rows indexed by the reply they paid for (review §G6).
+ *
+ * The thread already holds every usage event for the contact, so putting a cost
+ * beside a turn needs no new query — only the link that migration 0020 added.
+ * Rows with no `messageId` are simply absent from the map, which is the right
+ * answer for all three kinds that have none: written before the column existed,
+ * compaction's own `summary` spend, and a billable turn that produced no text.
+ *
+ * First row wins on a duplicate. One turn writes one usage row, so a collision
+ * would mean something upstream is wrong; picking the first at least keeps the
+ * rendering stable across refetches rather than flickering between two figures.
+ */
+export function usageByMessage(events: UsageEvent[]): Map<string, UsageEvent> {
+  const byMessage = new Map<string, UsageEvent>()
+  for (const event of events) {
+    if (event.messageId && !byMessage.has(event.messageId)) byMessage.set(event.messageId, event)
+  }
+  return byMessage
+}

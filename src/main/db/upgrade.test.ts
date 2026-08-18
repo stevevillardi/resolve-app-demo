@@ -320,3 +320,104 @@ describe('migrating a populated database', () => {
     ).toEqual({ n: 3 })
   })
 })
+
+/**
+ * Migration 0020's referential action, executed rather than read (review §G6).
+ *
+ * `usage_events.message_id` points at a table that itself cascades from
+ * `contacts`, so the action on this FK decides whether a contact can be deleted
+ * at all. drizzle-kit emits an ADD COLUMN with no action — its snapshot records
+ * `set null` correctly, only the SQL emitter drops it — and SQLite defaults to
+ * NO ACTION, under which the usage row *blocks* the cascading message delete
+ * and the whole deletion throws. So the clause in the migration file is
+ * hand-written, and this is what stops a regeneration quietly removing it.
+ *
+ * It is checked against the real `drizzle/` folder through `createDb`, which
+ * sets the `foreign_keys` pragma. Without that pragma every assertion below
+ * would pass for the wrong reason.
+ */
+describe('usage_events.message_id on delete', () => {
+  function populated(): ReturnType<typeof createDb> {
+    const db = createDb(scratchDbPath(), DRIZZLE)
+    db.run(
+      `INSERT INTO persona_templates (id, name, avatar_color, backend, system_prompt, skill_ids, sandbox, github_scope)
+       VALUES ('p1', 'Reviewer', '#2a78d6', 'claude', 'Review.', '[]', 'read_only', 'read_only')` as never
+    )
+    db.run(
+      `INSERT INTO contacts (id, persona_template_id, repo_path, display_name)
+       VALUES ('c1', 'p1', '/repo', 'Reviewer · repo')` as never
+    )
+    db.run(
+      `INSERT INTO messages (id, contact_id, role, content, timestamp)
+       VALUES ('m1', 'c1', 'assistant', 'Nothing landed.', 1786800000000)` as never
+    )
+    db.run(
+      `INSERT INTO usage_events (id, contact_id, timestamp, source, input_tokens, output_tokens, cost_usd, message_id)
+       VALUES ('u1', 'c1', 1786800000000, 'message', 120, 45, 0.0031, 'm1')` as never
+    )
+    return db
+  }
+
+  /**
+   * The failure the hand-written clause exists to prevent, and the one that
+   * matters most: with NO ACTION this throws `FOREIGN KEY constraint failed`,
+   * which would make `deleteContact` — and `clearAppData` with it — fail for
+   * any contact that had ever run a turn.
+   */
+  it('lets a contact be deleted even though a usage row names its reply', () => {
+    const db = populated()
+    expect(() => db.run(`DELETE FROM contacts WHERE id = 'c1'` as never)).not.toThrow()
+  })
+
+  /**
+   * And the spend survives it. Phase 10's rule is that spend outlives what
+   * spent it, which is why `contact_id` is `set null`; a CASCADE here would
+   * have deleted a month of cost history along with a tidied-up contact, and
+   * the delete above would still have "passed".
+   */
+  it('keeps the spend, with the links nulled rather than the row removed', () => {
+    const db = populated()
+    db.run(`DELETE FROM contacts WHERE id = 'c1'` as never)
+
+    const usage = db.get(
+      `SELECT contact_id, message_id, cost_usd, input_tokens FROM usage_events WHERE id = 'u1'` as never
+    ) as Record<string, unknown>
+    expect(usage).toBeDefined()
+    expect(usage.cost_usd).toBe(0.0031)
+    expect(usage.input_tokens).toBe(120)
+    expect(usage.contact_id).toBeNull()
+    expect(usage.message_id).toBeNull()
+  })
+
+  // The narrower case, without the cascade in the way: deleting the message
+  // alone must not take the spend with it either.
+  it('keeps the spend when only the message is deleted', () => {
+    const db = populated()
+    db.run(`DELETE FROM messages WHERE id = 'm1'` as never)
+
+    const usage = db.get(
+      `SELECT contact_id, message_id FROM usage_events WHERE id = 'u1'` as never
+    ) as Record<string, unknown>
+    expect(usage.message_id).toBeNull()
+    // Still attributed to the contact, which is still there.
+    expect(usage.contact_id).toBe('c1')
+  })
+
+  // Nothing is backfilled: an upgraded profile's existing spend has no reply to
+  // point at, and claiming one would put a cost under an unrelated message.
+  it('adds the column to existing rows as null', () => {
+    const path = scratchDbPath()
+    const old = createDb(path, migrationsThrough('0019_add_contact_model'))
+    old.run(
+      `INSERT INTO usage_events (id, contact_id, timestamp, source, input_tokens, output_tokens, cost_usd)
+       VALUES ('u-old', NULL, 1786800000000, 'message', 10, 5, 0.001)` as never
+    )
+
+    const upgraded = createDb(path, DRIZZLE)
+    const usage = upgraded.get(
+      `SELECT message_id, cost_usd FROM usage_events WHERE id = 'u-old'` as never
+    ) as Record<string, unknown>
+    expect(usage.message_id).toBeNull()
+    expect(usage.cost_usd).toBe(0.001)
+  })
+})

@@ -164,6 +164,7 @@ export function toUsageEvent(row: UsageEventRow): UsageEvent {
     ...optional('reasoningOutputTokens', row.reasoningOutputTokens),
     ...optional('model', row.model),
     ...optional('costSource', row.costSource),
-    ...optional('sessionId', row.sessionId)
+    ...optional('sessionId', row.sessionId),
+    ...optional('messageId', row.messageId)
   }
 }

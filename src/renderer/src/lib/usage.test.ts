@@ -8,6 +8,7 @@ import {
   formatCost,
   formatCostSummary,
   formatTokens,
+  usageByMessage,
   usageForContact,
   usageForContacts
 } from './usage'
@@ -411,5 +412,53 @@ describe('formatTokens', () => {
     [2_500_000, '2.5M']
   ])('renders %i as "%s"', (input, expected) => {
     expect(formatTokens(input)).toBe(expected)
+  })
+})
+
+/**
+ * Which usage row paid for which reply (review §G6).
+ *
+ * The rule that matters is what happens to a row with no link. Three kinds have
+ * none — written before migration 0020, compaction's own `summary` spend, and a
+ * billable turn that produced no text — and all three must be *absent* rather
+ * than attached to something nearby. A per-turn cost under the wrong reply is
+ * worse than no cost at all, because there is nothing on screen to say it is
+ * guessing.
+ */
+describe('usageByMessage', () => {
+  it('indexes a row by the reply it paid for', () => {
+    const map = usageByMessage([
+      event({ messageId: 'm1', costUsd: 0.02 }),
+      event({ messageId: 'm2', costUsd: 0.05 })
+    ])
+    expect(map.get('m1')?.costUsd).toBe(0.02)
+    expect(map.get('m2')?.costUsd).toBe(0.05)
+  })
+
+  it('leaves out a row that names no message', () => {
+    // Compaction's spend is the live example: `summary` source, no message and
+    // no session. It belongs in the dashboard's totals and nowhere in a thread.
+    const map = usageByMessage([event({ source: 'summary' }), event({ messageId: 'm1' })])
+    expect(map.size).toBe(1)
+    expect(map.has('m1')).toBe(true)
+  })
+
+  it('has nothing to say about a message with no usage row', () => {
+    expect(usageByMessage([event({ messageId: 'm1' })]).get('m-unknown')).toBeUndefined()
+  })
+
+  // Stability rather than correctness: one turn writes one usage row, so a
+  // duplicate means something upstream is wrong. Picking the first at least
+  // keeps the figure from flickering between two values across refetches.
+  it('keeps the first row when two name the same message', () => {
+    const map = usageByMessage([
+      event({ messageId: 'm1', costUsd: 0.02 }),
+      event({ messageId: 'm1', costUsd: 0.09 })
+    ])
+    expect(map.get('m1')?.costUsd).toBe(0.02)
+  })
+
+  it('is empty for no events at all', () => {
+    expect(usageByMessage([]).size).toBe(0)
   })
 })
