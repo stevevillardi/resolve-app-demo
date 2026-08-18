@@ -73,11 +73,29 @@ vi.mock('../notifications', () => ({
       contactId: input.contactId,
       originKind: input.origin.kind,
       error: input.error
-    })
+    }),
+  // Consumed by the approvals registry messaging pulls in; the copy is
+  // notification-text's business, this file only cares the turn loop wired it.
+  notifyApprovalRequested: () => {}
 }))
 
+/**
+ * Captures the per-turn options so the Phase 24 plumbing can be asserted: the
+ * approval route the turn loop hands the adapter is what connects a held
+ * `canUseTool` call to this run's registry entry, and nothing but this capture
+ * can see it.
+ */
+const adapterHostOptions: {
+  onApprovalRequest?: (request: {
+    toolName: string
+    detail: string
+  }) => Promise<{ approved: boolean; reason: string }>
+}[] = []
 vi.mock('./adapter-host', () => ({
-  adapterForBackend: () => harness.adapter
+  adapterForBackend: (_backend: string, options?: (typeof adapterHostOptions)[number]) => {
+    adapterHostOptions.push(options ?? {})
+    return harness.adapter
+  }
 }))
 
 /**
@@ -122,6 +140,7 @@ const {
 const { resetRunLocks } = await import('./run-lock')
 const { listGroupMessages } = await import('./group-messages')
 const { INACTIVITY_TIMEOUT_MS, setInactivityTimeoutForTests } = await import('./inactivity')
+const { approvalFor, resolveApproval } = await import('./approvals')
 
 beforeEach(() => {
   db = createTestDb()
@@ -133,6 +152,7 @@ beforeEach(() => {
   messagesChangedCount = 0
   turnNotified.length = 0
   summarized.length = 0
+  adapterHostOptions.length = 0
 
   seedSkill(db)
   seedPersona(db, 'persona-read', 'read_only')
@@ -1328,5 +1348,55 @@ describe('work records (Phase 19)', () => {
     const reply = listMessages('contact-a').find((message) => message.role === 'assistant')
     expect(reply).toBeDefined()
     expect(reply?.work).toBeUndefined()
+  })
+})
+
+describe('the ask_writes approval plumbing (Phase 24)', () => {
+  // The claim under test is the wiring, not the registry (approvals.test.ts)
+  // or the classifier (sandbox.test.ts): a hold the adapter raises mid-turn is
+  // keyed to *this* run, visible on runs.list, answerable over the IPC path,
+  // and denied by the teardown if the turn ends first.
+  it('routes an adapter ask into the registry under this run and answers it', async () => {
+    harness.gate = openableGate()
+    const { runId } = sendMessage('contact-a', 'rename the helper')
+
+    const ask = adapterHostOptions.at(-1)?.onApprovalRequest
+    expect(ask).toBeDefined()
+
+    // What the Claude adapter does inside canUseTool when the verdict is ask.
+    const held = ask!({ toolName: 'Write', detail: 'src/helper.ts' })
+
+    const run = listActiveRuns().find((candidate) => candidate.runId === runId)
+    expect(run?.approval).toMatchObject({ toolName: 'Write', detail: 'src/helper.ts' })
+
+    expect(resolveApproval(runId, run!.approval!.id, true)).toBe(true)
+    await expect(held).resolves.toEqual({ approved: true, reason: '' })
+    expect(listActiveRuns().find((candidate) => candidate.runId === runId)?.approval).toBeNull()
+
+    harness.gate.open()
+    harness.gate = null
+    await settle()
+  })
+
+  it('denies whatever the turn left unanswered when it ends', async () => {
+    harness.gate = openableGate()
+    const { runId } = sendMessage('contact-a', 'rename the helper')
+
+    const held = adapterHostOptions.at(-1)!.onApprovalRequest!({
+      toolName: 'Bash',
+      detail: 'npm version patch'
+    })
+    expect(approvalFor(runId)).not.toBeNull()
+
+    // The turn finishes with the ask still open — a stop, a throw, or simply
+    // a stream that ended. The teardown must settle the adapter's promise.
+    harness.gate.open()
+    harness.gate = null
+    await settle()
+
+    const outcome = await held
+    expect(outcome.approved).toBe(false)
+    expect(approvalFor(runId)).toBeNull()
+    expect(listActiveRuns()).toEqual([])
   })
 })

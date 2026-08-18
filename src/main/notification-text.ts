@@ -85,3 +85,16 @@ export function budgetNotification(
     )
   }
 }
+
+/**
+ * An `ask_writes` persona waiting on a write (Phase 24). The imperative title
+ * carries the one fact that separates this from every other toast: the turn
+ * is *paused* until someone answers, and it will answer itself with a no if
+ * nobody does.
+ */
+export function approvalNotification(contactName: string, detail: string): NotificationText {
+  return {
+    title: `${contactName} is asking to write`,
+    body: previewLine(`Waiting for your approval: ${detail}`)
+  }
+}

@@ -7,6 +7,7 @@ import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
 import { notifyTurnFinished } from '../notifications'
 import { emitAgentEvent, emitMessagesChanged, emitRunsChanged } from './agent-events'
+import { approvalFor, cancelApprovalsFor, requestApproval } from './approvals'
 import { inactivityTimeoutMs, withInactivityTimeout } from './inactivity'
 import { summarizeTurn } from './compaction'
 import { clearBackendSessionId, getContact, setBackendSessionId } from './contacts'
@@ -55,6 +56,13 @@ export interface ActiveRun {
   workingPath: string
   mode: 'shared' | 'exclusive'
   startedAt: number
+  /**
+   * The write this turn is paused on, when it is paused on one (Phase 24).
+   * On the run row rather than its own query so the approval card costs no
+   * new wiring: `runs.list` already refetches on every `runs-changed`, and a
+   * pending ask emits exactly that.
+   */
+  approval: { id: string; toolName: string; detail: string; requestedAt: number } | null
 }
 
 export interface MentionResult {
@@ -161,14 +169,25 @@ export function messagePreviews(): PersistedMessage[] {
 }
 
 export function listActiveRuns(): ActiveRun[] {
-  return activeRuns().map((holder) => ({
-    runId: holder.runId,
-    contactId: holder.contactId,
-    contactName: holder.contactName,
-    workingPath: holder.workingPath,
-    mode: holder.mode,
-    startedAt: holder.startedAt
-  }))
+  return activeRuns().map((holder) => {
+    const approval = approvalFor(holder.runId)
+    return {
+      runId: holder.runId,
+      contactId: holder.contactId,
+      contactName: holder.contactName,
+      workingPath: holder.workingPath,
+      mode: holder.mode,
+      startedAt: holder.startedAt,
+      approval: approval
+        ? {
+            id: approval.id,
+            toolName: approval.toolName,
+            detail: approval.detail,
+            requestedAt: approval.requestedAt
+          }
+        : null
+    }
+  })
 }
 
 // --- Writes -----------------------------------------------------------------
@@ -407,7 +426,14 @@ function startTurn(
     // The token reaches the subprocess only when this session actually holds
     // the server, rather than whenever an account is connected somewhere.
     const adapter = adapterForBackend(persona.backend, {
-      needsGithubToken: (spec.mcpServers ?? []).some((server) => server.id === GITHUB_MCP_SERVER_ID)
+      needsGithubToken: (spec.mcpServers ?? []).some(
+        (server) => server.id === GITHUB_MCP_SERVER_ID
+      ),
+      // The ask_writes hold (Phase 24): the Claude adapter awaits this inside
+      // canUseTool, and the registry answers with the user's click or its own
+      // timeout. Bound to this runId here because the adapter must not know
+      // whose turn it is running.
+      onApprovalRequest: (request) => requestApproval(runId, contactId, request)
     })
     const session = contact.backendSessionId
       ? adapter.resume(spec, contact.backendSessionId)
@@ -697,6 +723,10 @@ function finish(
       }
     }
   } finally {
+    // Before the lock is handed back: a turn that ends mid-ask (Stop, a
+    // watchdog abort, an adapter throw) must not leave the adapter's promise
+    // pending forever or the card on screen for a run that no longer exists.
+    cancelApprovalsFor(runId)
     runs.get(runId)?.release()
     runs.delete(runId)
     emitAgentEvent(runId, done ?? { type: 'done', finalText, usage: null })

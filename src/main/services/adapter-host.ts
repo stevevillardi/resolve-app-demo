@@ -3,6 +3,7 @@ import { GITHUB_MCP_TOKEN_ENV } from '../adapters/github-mcp-tools'
 import { resolveCodexBinary } from './codex-auth'
 import { getGitHubToken } from './github-auth'
 import { getSecret, secretsPathForDenyList } from './secrets'
+import type { ApprovalOutcome, ApprovalRequest } from '../adapters/types'
 import type { PersonaBackend } from '../../shared/domain'
 
 /**
@@ -75,9 +76,20 @@ function backendEnv(backend: PersonaBackend, needsGithubToken: boolean): NodeJS.
  * resolver needs `electron` to find it, which is exactly why the adapters take
  * it as config instead of importing it.
  */
+export interface AdapterHostOptions {
+  needsGithubToken?: boolean
+  /**
+   * The turn's route into the pending-approval registry (Phase 24). Carried
+   * per adapter construction rather than resolved here because an approval
+   * belongs to a *run* — the registry needs the runId and contactId, and only
+   * the caller starting the turn has them.
+   */
+  onApprovalRequest?: (request: ApprovalRequest) => Promise<ApprovalOutcome>
+}
+
 export function adapterConfig(
   backend: PersonaBackend,
-  options: { needsGithubToken?: boolean } = {}
+  options: AdapterHostOptions = {}
 ): AdapterConfig {
   return {
     codexBinaryPath: resolveCodexBinary(),
@@ -86,7 +98,8 @@ export function adapterConfig(
     // Claude OS sandbox, and until now nothing ever filled it — so the one
     // directory its own doc comment names was reachable by every persona. A
     // declared guard with no producer reads as a guard.
-    denyReadPaths: [secretsPathForDenyList()]
+    denyReadPaths: [secretsPathForDenyList()],
+    ...(options.onApprovalRequest ? { onApprovalRequest: options.onApprovalRequest } : {})
   }
 }
 
@@ -97,7 +110,7 @@ export function adapterConfig(
  */
 export function adapterForBackend(
   backend: PersonaBackend,
-  options: { needsGithubToken?: boolean } = {}
+  options: AdapterHostOptions = {}
 ): AgentAdapter {
   return adapterFor(backend, adapterConfig(backend, options))
 }

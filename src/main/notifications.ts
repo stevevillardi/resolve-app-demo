@@ -1,6 +1,11 @@
 import { Notification } from 'electron'
 import { isWindowAttended, navigateTo } from './main-window'
-import { previewLine, routineNotification, turnNotification } from './notification-text'
+import {
+  approvalNotification,
+  previewLine,
+  routineNotification,
+  turnNotification
+} from './notification-text'
 import { getAppState } from './services/app-state'
 import { getContact } from './services/contacts'
 import { groupForRepo } from './services/group-messages'
@@ -90,6 +95,31 @@ export function notifyRoutineOutcome(
  * Routine turns never pass through here — the scheduler notifies those with
  * the run's summary and PR context this function cannot see.
  */
+/**
+ * An `ask_writes` persona has a write waiting on a human (Phase 24).
+ *
+ * Attention-gated like notifyTurnFinished: with the window frontmost the
+ * approval card is already the loudest thing on screen. Unattended is the case
+ * this exists for — the ask auto-denies in minutes, so a toast the user sees
+ * an hour later would be pure noise if it were the only delivery, but it is
+ * the difference between catching the ask and losing it for anyone merely in
+ * another app. The click lands on the contact's thread, where the card is.
+ */
+export function notifyApprovalRequested(
+  contactId: string,
+  request: { toolName: string; detail: string }
+): void {
+  if (isWindowAttended()) return
+
+  const contact = getContact(contactId)
+  if (!contact) return
+
+  sendNotification(approvalNotification(contact.displayName, request.detail || request.toolName), {
+    kind: 'contact',
+    contactId
+  })
+}
+
 export function notifyTurnFinished(input: {
   contactId: string
   origin: { kind: 'message' } | { kind: 'mention'; groupId: string }

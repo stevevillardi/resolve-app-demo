@@ -282,9 +282,26 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
             return { behavior: 'deny', message: shell.reason ?? 'Denied by GitHub scope.' }
           }
           const decision = evaluateToolUse(spec.persona.sandbox, toolName, input, spec.repoPath)
-          return decision.allowed
-            ? { behavior: 'allow', updatedInput: input }
-            : { behavior: 'deny', message: decision.reason ?? 'Denied by sandbox policy.' }
+          if (decision.allowed) return { behavior: 'allow', updatedInput: input }
+          // The ask_writes hold (Phase 24): a would-be denial waits for a
+          // human instead. The SDK is already awaiting this callback, so the
+          // wait is just a promise — no handler means no one to ask, and the
+          // only safe reading of silence is no.
+          if (decision.ask) {
+            const outcome = config.onApprovalRequest
+              ? await config.onApprovalRequest({
+                  toolName,
+                  detail: toolDetail(input) || toolName
+                })
+              : {
+                  approved: false,
+                  reason: 'This persona asks before writing, and nothing here can ask.'
+                }
+            return outcome.approved
+              ? { behavior: 'allow', updatedInput: input }
+              : { behavior: 'deny', message: outcome.reason }
+          }
+          return { behavior: 'deny', message: decision.reason ?? 'Denied by sandbox policy.' }
         },
         ...(agentSession.sessionId ? { resume: agentSession.sessionId } : {}),
         ...(spec.model ? { model: spec.model } : {}),
@@ -412,8 +429,14 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
                 // The target is named because without it the message is not
                 // actionable by anyone — the user cannot tell a persona that
                 // reached outside its repo from one whose own working directory
-                // was not granted, and those want opposite fixes.
-                message: `Blocked ${denial.tool_name}: this persona's sandbox does not allow it.${deniedTarget(denial.tool_input)}`
+                // was not granted, and those want opposite fixes. At
+                // ask_writes most denials are answered asks, so the wording
+                // says "not approved" — "does not allow" would tell the user
+                // their own click was a sandbox malfunction.
+                message:
+                  spec.persona.sandbox === 'ask_writes'
+                    ? `${denial.tool_name} was not approved, so it did not run.${deniedTarget(denial.tool_input)}`
+                    : `Blocked ${denial.tool_name}: this persona's sandbox does not allow it.${deniedTarget(denial.tool_input)}`
               }
             }
 
