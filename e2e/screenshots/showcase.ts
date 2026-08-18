@@ -377,6 +377,33 @@ export async function seedShowcase(launched: LaunchedApp, profile: string): Prom
         `session-${row.contact}`
       )
     })
+    // --- Phase 22 chrome ---
+    // The resume key has to name the session the spend rows do, or the header's
+    // context meter has nothing to measure and the thread announces that the
+    // next message starts a new one. Both are correct readings of a profile
+    // with usage but no live session — they are just not the state this sweep
+    // exists to photograph.
+    for (const contact of [reviewer, refactorer, billing]) {
+      db.prepare(`update contacts set backend_session_id = ? where id = ?`).run(
+        `session-${contact.id}`,
+        contact.id
+      )
+    }
+    // A session boundary partway down the reviewer's thread, so the divider is
+    // photographed too: everything above it was answered by a session that has
+    // since ended, which is exactly what the line claims.
+    const reviewerThread = db
+      .prepare(`select id from messages where contact_id = ? order by timestamp`)
+      .all(reviewer.id) as { id: string }[]
+    reviewerThread.forEach((row, index) => {
+      db.prepare(`update messages set session_id = ? where id = ?`).run(
+        index < reviewerThread.length - 2
+          ? `session-${reviewer.id}-earlier`
+          : `session-${reviewer.id}`,
+        row.id
+      )
+    })
+
     // --- Phase 20 chrome, all under review by the sweep ---
     // Backdated read boundaries put an unread badge on the reviewer's row and
     // the repo group, and the "New messages" divider into their threads —

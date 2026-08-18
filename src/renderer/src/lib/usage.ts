@@ -1,3 +1,4 @@
+import { contextWindowFor } from '../../../shared/context-windows'
 import type { PersonaBackend, UsageEvent, UsageSummary } from '@/types'
 
 /**
@@ -100,41 +101,60 @@ export function formatTokens(tokens: number): string {
 }
 
 export interface ContextTokens {
-  /** input + cached + cache-write: the whole prompt the backend was handed. */
-  promptTokens: number
-  /** How many recorded turns went into that figure. */
+  /**
+   * What the newest request handed the model: input + cached + cache-write.
+   *
+   * The occupancy figure — how full the window is *now*. Approximate on both
+   * backends, because a turn reports one usage total covering every model
+   * request it made, and a tool-heavy turn makes several. See `contextFill`.
+   */
+  lastPromptTokens: number
+  /**
+   * Every input token this session has been billed for, added up.
+   *
+   * A different number from the one above, and the distinction is the whole
+   * point of the forever-thread problem: the prompt stops growing when the
+   * conversation does, while this keeps climbing for as long as you keep
+   * talking, because each turn re-bills the history.
+   */
+  billedInputTokens: number
+  /** How many recorded turns went into these figures. */
   turns: number
   /** The newest turn counted, so the panel can say how fresh this is. */
   at: number
   model: string | null
-  /** Which arithmetic was used, so the UI can say which — see below. */
+  /** Which arithmetic produced them, so the UI can say which — see below. */
   reading: 'last-turn' | 'session-sum'
 }
 
 /**
- * How large this contact's prompt currently is, read from what was billed.
+ * Two figures about this contact's session, read from what was billed.
  *
- * The two backends record incompatible things and the difference is not
- * cosmetic — it is the whole reason this branches rather than summing.
+ * They used to be one, called `promptTokens`, and that was wrong on Codex in a
+ * way that only mattered once something divided by it. The repo's own measured
+ * numbers make it concrete (`00-progress.md`, Phase 6/7 close-out): cumulative
+ * input `12122 → 25610 → 39114`, so the stored deltas are `12122 / 13488 /
+ * 13504`. The **sum** — 39,114 — is what the session has cost in input. The
+ * newest **delta** — 13,504 — is roughly what the last request actually held.
+ * Reporting the sum as "how large the prompt is" overstates by 3× after three
+ * turns and grows without bound; as a bill it is exactly right. Two claims, so
+ * two names.
  *
- * **Claude** re-sends the entire conversation every turn, so one row's
- * `inputTokens` *is* the prompt. Summing rows would count the same prompt once
- * per turn and produce a figure several times too large.
+ * The backends record incompatible things, and that is why this branches:
  *
- * **Codex** reports cumulatively across a thread, and `recordUsage` stores the
- * delta — see `deltaFrom` and `usageBaseline` in src/main/adapters/codex.ts. So
- * one row is that turn's increment, and only the sum is the prompt.
+ * **Claude** re-sends the entire conversation every turn, so one row's input
+ * *is* that turn's prompt, and the session's cost is the rows added up.
  *
- * Scoped to `sessionId`, because a prompt belongs to a session: rows from a
+ * **Codex** reports cumulatively across a thread and `recordUsage` stores the
+ * delta (see `deltaFrom` and `usageBaseline` in adapters/codex.ts) — so one row
+ * is that turn's increment, which approximates its prompt, and the sum is the
+ * running total the backend itself reported.
+ *
+ * Scoped to `sessionId`, because both figures belong to a session: rows from a
  * session that has ended describe a conversation the backend has forgotten.
  * Returns null when there is no session yet — nothing is in context until a
  * turn has run, and rendering that as 0 would suggest an empty prompt rather
  * than no prompt at all.
- *
- * Deliberately returns **no percentage**. There is no per-model context-window
- * table anywhere in this app, and inventing one to divide by would be a guess
- * presented as a measurement. (`LONG_CONTEXT_THRESHOLD` in pricing.ts is a
- * Codex pricing tier boundary, not a limit.)
  */
 export function contextTokens(
   events: UsageEvent[],
@@ -156,19 +176,60 @@ export function contextTokens(
     event.timestamp >= latest.timestamp ? event : latest
   )
 
-  return backend === 'codex'
-    ? {
-        promptTokens: forSession.reduce((total, event) => total + promptOf(event), 0),
-        turns: forSession.length,
-        at: newest.timestamp,
-        model: newest.model ?? null,
-        reading: 'session-sum'
-      }
-    : {
-        promptTokens: promptOf(newest),
-        turns: forSession.length,
-        at: newest.timestamp,
-        model: newest.model ?? null,
-        reading: 'last-turn'
-      }
+  // The same sum means different things per backend — Claude's rows are each a
+  // whole prompt, Codex's are increments — which is exactly what `reading` is
+  // for. As a *bill* it is right either way, and that is what this is.
+  const billedInputTokens = forSession.reduce((total, event) => total + promptOf(event), 0)
+
+  return {
+    lastPromptTokens: promptOf(newest),
+    billedInputTokens,
+    turns: forSession.length,
+    at: newest.timestamp,
+    model: newest.model ?? null,
+    reading: backend === 'codex' ? 'session-sum' : 'last-turn'
+  }
+}
+
+/** How full the window is, once both halves are known. */
+export interface ContextFill {
+  /** 0–1, clamped: a session may legitimately exceed a stale table's figure. */
+  fraction: number
+  window: number
+  /** Whether the denominator was read off a vendor page or inferred. */
+  windowSource: 'published' | 'inferred'
+}
+
+/** Above this the meter warns; above CONTEXT_FULL it says so plainly. */
+export const CONTEXT_ELEVATED = 0.7
+export const CONTEXT_FULL = 0.9
+
+/**
+ * The occupancy fraction, or null when this app cannot honestly compute one.
+ *
+ * Null whenever the model has no row in `context-windows.ts`, and null is a
+ * supported answer all the way to the screen — the meter falls back to the bare
+ * token count, which is what the app showed before the table existed. That
+ * fallback is the reason the reversal is defensible: a percentage appears where
+ * there is a denominator to divide by, and nowhere else.
+ *
+ * The numerator is approximate on **both** backends, which is why the meter
+ * renders `≈`. A turn reports one usage figure covering every model request it
+ * made, so a turn that ran ten tools reports their prompts added together and
+ * this over-reads. It errs high, which is the safer direction for a gauge whose
+ * remedy — starting a fresh session — costs the model's memory of the thread.
+ *
+ * Clamped at 1: the table can be stale, or a model can be served with a larger
+ * window than the one published, and a meter reading 130% would look like a bug
+ * rather than like the honest "at least full" it means.
+ */
+export function contextFill(tokens: ContextTokens): ContextFill | null {
+  const window = contextWindowFor(tokens.model)
+  if (!window) return null
+
+  return {
+    fraction: Math.min(1, tokens.lastPromptTokens / window.tokens),
+    window: window.tokens,
+    windowSource: window.source
+  }
 }

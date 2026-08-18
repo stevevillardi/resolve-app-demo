@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { UsageEvent } from '@/types'
+import type { PersonaBackend, UsageEvent } from '@/types'
 import {
   aggregateUsage,
+  contextFill,
   contextTokens,
+  type ContextTokens,
   formatCost,
   formatCostSummary,
   formatTokens,
@@ -209,13 +211,15 @@ describe('formatCostSummary', () => {
 
 describe('contextTokens', () => {
   /**
-   * The claim: the same rows mean different things depending on which backend
-   * wrote them, so the same input must produce different answers.
+   * Two figures, because they are two claims — and conflating them is what this
+   * function used to do.
    *
-   * Claude re-sends the whole conversation each turn, so the newest row *is*
-   * the prompt. Codex reports cumulatively and recordUsage stores the delta, so
-   * only the sum is. Getting this backwards yields a number that is plausible,
-   * wrong by a multiple, and impossible to spot on screen.
+   * `lastPromptTokens` is how full the window is now; `billedInputTokens` is
+   * what the session has cost. On Claude they are near enough the same shape;
+   * on Codex they diverge without bound, because every row is an increment and
+   * the sum is a running total. Reporting the sum as "the prompt" — which is
+   * what `promptTokens` did — overstates threefold by turn three and keeps
+   * going.
    */
   const turn = (
     timestamp: number,
@@ -223,17 +227,37 @@ describe('contextTokens', () => {
     extra: Partial<UsageEvent> = {}
   ): UsageEvent => event({ timestamp, inputTokens, sessionId: 'session-1', model: 'm', ...extra })
 
-  it('takes the newest turn alone for Claude', () => {
+  it('takes the newest turn as the prompt on Claude', () => {
     const result = contextTokens([turn(1, 1000), turn(2, 5000)], 'session-1', 'claude')
-    expect(result?.promptTokens).toBe(5000)
+    expect(result?.lastPromptTokens).toBe(5000)
     expect(result?.reading).toBe('last-turn')
     expect(result?.turns).toBe(2)
   })
 
-  it('sums every turn for Codex', () => {
-    const result = contextTokens([turn(1, 1000), turn(2, 5000)], 'session-1', 'codex')
-    expect(result?.promptTokens).toBe(6000)
+  /**
+   * The repo's own measurement, from the Phase 6/7 close-out: three one-word
+   * Codex turns reported cumulative input 12122 → 25610 → 39114, so the stored
+   * deltas are 12122 / 13488 / 13504.
+   *
+   * The bill is 39,114 — that really is what the session cost. The prompt is
+   * about 13,504 — that really is what the last request held. A meter dividing
+   * 39,114 by the window would read 3× high and climb for as long as the
+   * conversation continued, which is the failure this split exists to prevent.
+   */
+  it('separates the running bill from the last prompt on Codex', () => {
+    const result = contextTokens(
+      [turn(1, 12_122), turn(2, 13_488), turn(3, 13_504)],
+      'session-1',
+      'codex'
+    )
+    expect(result?.billedInputTokens).toBe(39_114)
+    expect(result?.lastPromptTokens).toBe(13_504)
     expect(result?.reading).toBe('session-sum')
+  })
+
+  it('adds every turn up for the bill on Claude too', () => {
+    const result = contextTokens([turn(1, 1000), turn(2, 5000)], 'session-1', 'claude')
+    expect(result?.billedInputTokens).toBe(6000)
   })
 
   it('finds the newest turn regardless of array order', () => {
@@ -242,7 +266,7 @@ describe('contextTokens', () => {
     // and a number that still looked reasonable.
     const ascending = contextTokens([turn(1, 1000), turn(2, 5000)], 'session-1', 'claude')
     const descending = contextTokens([turn(2, 5000), turn(1, 1000)], 'session-1', 'claude')
-    expect(descending?.promptTokens).toBe(ascending?.promptTokens)
+    expect(descending?.lastPromptTokens).toBe(ascending?.lastPromptTokens)
     expect(descending?.at).toBe(2)
   })
 
@@ -255,12 +279,12 @@ describe('contextTokens', () => {
       'session-1',
       'claude'
     )
-    expect(result?.promptTokens).toBe(19_500)
+    expect(result?.lastPromptTokens).toBe(19_500)
   })
 
   it('treats missing cached figures as zero rather than NaN', () => {
     const result = contextTokens([turn(1, 100)], 'session-1', 'claude')
-    expect(result?.promptTokens).toBe(100)
+    expect(result?.lastPromptTokens).toBe(100)
   })
 
   it('ignores rows from a session that has ended', () => {
@@ -271,7 +295,8 @@ describe('contextTokens', () => {
       'session-1',
       'claude'
     )
-    expect(result?.promptTokens).toBe(100)
+    expect(result?.lastPromptTokens).toBe(100)
+    expect(result?.billedInputTokens).toBe(100)
     expect(result?.turns).toBe(1)
   })
 
@@ -293,6 +318,69 @@ describe('contextTokens', () => {
       'claude'
     )
     expect(result?.model).toBe('new')
+  })
+})
+
+describe('contextFill', () => {
+  /**
+   * The reversal of the no-percentage stance, tested at the point it could go
+   * wrong: a fraction is shown where there is a real denominator, and *nothing*
+   * is shown where there is not. The second half is what makes the first half
+   * honest, so it gets as many cases as the arithmetic does.
+   */
+  const session = (
+    inputTokens: number,
+    model?: string,
+    backend: PersonaBackend = 'claude'
+  ): ContextTokens =>
+    contextTokens(
+      [event({ timestamp: 1, inputTokens, sessionId: 'session-1', ...(model ? { model } : {}) })],
+      'session-1',
+      backend
+    ) as ContextTokens
+
+  it('divides the last prompt by the model’s window', () => {
+    // 50k of a Claude model's 200k.
+    expect(contextFill(session(50_000, 'claude-opus-5'))?.fraction).toBeCloseTo(0.25)
+    // 100k of a GPT-5 400k.
+    expect(contextFill(session(100_000, 'gpt-5.5'))?.fraction).toBeCloseTo(0.25)
+  })
+
+  // The whole basis of the reversal: where there is no table row there is no
+  // percentage, and the meter falls back to what the app showed before.
+  it('is null for a model with no published window', () => {
+    expect(contextFill(session(50_000, 'gpt-9-imaginary'))).toBeNull()
+    // No model recorded at all — an older row, or a backend that did not say.
+    expect(contextFill(session(50_000))).toBeNull()
+  })
+
+  it('carries where the denominator came from', () => {
+    expect(contextFill(session(1000, 'claude-haiku-4-5'))?.windowSource).toBe('published')
+    expect(contextFill(session(1000, 'claude-opus-5'))?.windowSource).toBe('inferred')
+  })
+
+  // A stale table, or a model served with a bigger window than the one
+  // published, would otherwise render "130% full" — which reads as a bug rather
+  // than as the honest "at least full" it actually means.
+  it('clamps at full rather than reporting over 100%', () => {
+    expect(contextFill(session(500_000, 'claude-opus-5'))?.fraction).toBe(1)
+  })
+
+  // The numerator is the last prompt, never the running bill. On Codex those
+  // diverge without bound, and using the bill would make a long cheap
+  // conversation look full when it is not.
+  it('measures the last request, not everything the session has been billed', () => {
+    const tokens = contextTokens(
+      [
+        event({ timestamp: 1, inputTokens: 100_000, sessionId: 's', model: 'claude-opus-5' }),
+        event({ timestamp: 2, inputTokens: 20_000, sessionId: 's', model: 'claude-opus-5' })
+      ],
+      's',
+      'codex'
+    ) as ContextTokens
+
+    expect(tokens.billedInputTokens).toBe(120_000)
+    expect(contextFill(tokens)?.fraction).toBeCloseTo(0.1)
   })
 })
 

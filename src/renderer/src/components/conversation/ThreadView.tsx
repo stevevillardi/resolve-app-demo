@@ -7,6 +7,7 @@ import { BackendBadge } from '@/components/common/BackendBadge'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { UsageBadge } from '@/components/usage/UsageBadge'
+import { ContextMeter } from '@/components/usage/ContextMeter'
 import { OpenPRButton } from '@/components/github/OpenPRButton'
 import { ContactMenu } from './ContactMenu'
 import { ThreadHeader } from './ThreadHeader'
@@ -39,7 +40,7 @@ import { slashCommands } from '@/lib/slash'
 import { hasUnansweredTail } from '@/lib/turn-tail'
 import { firstUnreadIndex } from '@/lib/unread'
 import { awaitingFreshSession, sessionBoundaries } from '@/lib/session'
-import { usageForContact } from '@/lib/usage'
+import { contextTokens, usageForContact } from '@/lib/usage'
 import { isSameDay, repoName } from '@/lib/format'
 
 interface ThreadViewProps {
@@ -81,6 +82,15 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   const { open: openPr, isPending: opening, error: prError, reset: resetPr } = useOpenPullRequest()
 
   const usage = useMemo(() => usageForContact(usageEvents, contactId), [usageEvents, contactId])
+
+  // The session's own figures, from rows this view already has — no new query.
+  // Read off `contact.backendSessionId` rather than contacts.context, which
+  // stats the filesystem and is deliberately only fetched on demand.
+  const context = useMemo(
+    () =>
+      contextTokens(usageEvents, contact?.backendSessionId ?? null, persona?.backend ?? 'claude'),
+    [usageEvents, contact?.backendSessionId, persona?.backend]
+  )
 
   // What main would say if this send were made right now, decided by the rule
   // main itself uses (src/shared/locking.ts) rather than by a second reading of
@@ -160,7 +170,12 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   )
 
   return (
-    <div className="bg-background flex h-full min-h-0 flex-col">
+    // `@container/pane` declared here rather than inherited: this view does not
+    // use PaneBody, which is where every other pane gets it, so a `@…/pane:`
+    // class in the header would silently never fire. That is the same defect
+    // Phase 16 found across the whole renderer — a responsive class measuring a
+    // container nobody declared.
+    <div className="@container/pane bg-background flex h-full min-h-0 flex-col">
       {/*
         The repo's name, not its path. The full path is often 60+ characters —
         a macOS temp checkout is over 80 — and it was taking the entire header
@@ -183,6 +198,12 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
         actions={
           <>
             <BackendBadge backend={persona.backend} />
+            {/*
+              Beside the spend, and deliberately: one answers what this has
+              cost, the other how much room is left, and the second is the one
+              that changes what you do next.
+            */}
+            <ContextMeter tokens={context} />
             <UsageBadge summary={usage} />
             <OpenPRButton
               githubScope={persona.githubScope}
