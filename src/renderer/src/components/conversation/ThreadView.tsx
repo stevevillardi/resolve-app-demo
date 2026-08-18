@@ -12,6 +12,7 @@ import { ContactMenu } from './ContactMenu'
 import { ThreadHeader } from './ThreadHeader'
 import { DaySeparator } from './DaySeparator'
 import { UnreadSeparator } from './UnreadSeparator'
+import { SessionSeparator } from './SessionSeparator'
 import { MessageBubble } from './MessageBubble'
 import { WorkChips } from './WorkChips'
 import { WorkDiffDialog } from './WorkDiffDialog'
@@ -37,6 +38,7 @@ import { streamText } from '@/lib/stream'
 import { slashCommands } from '@/lib/slash'
 import { hasUnansweredTail } from '@/lib/turn-tail'
 import { firstUnreadIndex } from '@/lib/unread'
+import { awaitingFreshSession, sessionBoundaries } from '@/lib/session'
 import { usageForContact } from '@/lib/usage'
 import { isSameDay, repoName } from '@/lib/format'
 
@@ -108,6 +110,11 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
     setBoundary({ id: contactId, at: contact.lastReadAt })
   }
   const unreadIndex = firstUnreadIndex(thread, boundary?.id === contactId ? boundary.at : null)
+
+  // Where the backend session changed under the conversation. Unlike the unread
+  // boundary this needs no captured-at-open value: it is a property of the rows
+  // themselves, so it cannot move while the thread is on screen.
+  const boundaries = useMemo(() => sessionBoundaries(thread), [thread])
 
   // Read on open, and on arrival while open. Both views force-scroll to the
   // bottom, so on-screen ≡ read; there is no scroll tracking to say otherwise.
@@ -234,6 +241,11 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               return (
                 <Fragment key={message.id}>
                   {newDay && <DaySeparator timestamp={message.timestamp} />}
+                  {/*
+                    Above the unread line when both land on one row: the session
+                    boundary is the older fact, and the two read in that order.
+                  */}
+                  {boundaries.has(index) && <SessionSeparator />}
                   {index === unreadIndex && <UnreadSeparator />}
                   <MessageBubble
                     role={message.role}
@@ -291,6 +303,16 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
               backend={persona.backend}
               onRetry={doRetry}
             />
+          )}
+
+          {/*
+            The same line before the fact. A cleared resume key IS the durable
+            trace of a fresh session, so this appears the moment it is asked for
+            rather than only after a turn has been paid for to prove it — and it
+            sits at the tail, which is exactly where the boundary will be drawn.
+          */}
+          {awaitingFreshSession(contact.backendSessionId, thread.length) && (
+            <SessionSeparator pending />
           )}
         </div>
       </ScrollArea>
