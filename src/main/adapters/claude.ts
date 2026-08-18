@@ -121,6 +121,25 @@ export function classifyClaudeError(code: string | undefined): AgentErrorKind {
   }
 }
 
+/**
+ * Rewords CLI error prose whose advice only works in a terminal.
+ *
+ * The unknown-model sentence ends "Run --model to pick a different model" —
+ * there is no `--model` anywhere in this app; the model lives on the persona.
+ * Phase 17 set the precedent for not surfacing raw vendor strings (the dead
+ * resume key); this closes the same gap for the error the CLI reports as a
+ * successful result (captured live 2026-08-18, Phase 11 F6). Anything
+ * unrecognised passes through untouched — a wrong rewording is worse than
+ * vendor wording.
+ */
+export function rewordCliErrorProse(text: string): string {
+  const model = /issue with the selected model \(([^)]+)\)/i.exec(text)
+  if (model) {
+    return `The model '${model[1]}' isn't available on this account. Pick a different model in this persona's settings.`
+  }
+  return text
+}
+
 interface ResultLike {
   total_cost_usd?: number
   modelUsage?: Record<
@@ -418,7 +437,21 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
             }
 
             if (message.subtype === 'success') {
-              if (message.result) finalText = message.result
+              // The CLI reports some failures as a *successful* result whose
+              // text is its own error prose — a model this account cannot use,
+              // most visibly. Left on the reply path it renders as an ordinary
+              // bubble, becomes the sidebar preview, and never offers retry
+              // (Phase 11, F6) — so it goes down the error path instead.
+              if (message.is_error) {
+                emittedError = true
+                yield {
+                  type: 'error',
+                  kind: classifyErrorMessage(message.result),
+                  message: rewordCliErrorProse(message.result)
+                }
+              } else if (message.result) {
+                finalText = message.result
+              }
             } else if (!emittedError) {
               yield {
                 type: 'error',
