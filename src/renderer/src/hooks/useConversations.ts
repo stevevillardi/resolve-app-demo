@@ -3,7 +3,7 @@ import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
 import { branchesKey } from './useBranches'
 import { messagePreviewsKey, runsKey, usageRootKey } from './useMessages'
 import { routinesKey } from './useRoutines'
-import type { Contact, ContactDraft, Group, RepoTrust } from '@/types'
+import type { Contact, ContactDraft, Group, Isolation, RepoTrust } from '@/types'
 import type { ContactContext, RepoOffers } from '../../../shared/ipc-contract'
 
 /**
@@ -223,6 +223,41 @@ export function useStartFreshSession(): {
 
   return {
     startFresh: (id, onDone) => mutation.mutate({ id }, { onSuccess: onDone }),
+    isPending: mutation.isPending,
+    error: mutation.error ? ipcErrorMessage(mutation.error) : null
+  }
+}
+
+/**
+ * Moves a contact between your checkout and its own (Phase 22).
+ *
+ * Invalidates contacts and branches: de-isolating removes a checkout while
+ * keeping the branch, so the Branches panel's view of what exists on disk has
+ * genuinely changed.
+ */
+export function useSetIsolation(): {
+  setIsolation: (
+    id: string,
+    isolation: Isolation,
+    discardUncommitted: boolean,
+    onDone?: () => void
+  ) => void
+  isPending: boolean
+  error: string | null
+} {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (input: { id: string; isolation: Isolation; discardUncommitted: boolean }) =>
+      callProcedure('contacts.setIsolation', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contactsKey })
+      void queryClient.invalidateQueries({ queryKey: branchesKey })
+    }
+  })
+
+  return {
+    setIsolation: (id, isolation, discardUncommitted, onDone) =>
+      mutation.mutate({ id, isolation, discardUncommitted }, { onSuccess: onDone }),
     isPending: mutation.isPending,
     error: mutation.error ? ipcErrorMessage(mutation.error) : null
   }

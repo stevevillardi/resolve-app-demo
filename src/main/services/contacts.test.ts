@@ -1,3 +1,4 @@
+import { existsSync } from 'fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
 import { groups, personaTemplates } from '../db/schema'
@@ -28,6 +29,7 @@ const {
   renameContact,
   markContactRead,
   setBackendSessionId,
+  setContactIsolation,
   setRepoTrust,
   startFreshSession
 } = await import('./contacts')
@@ -466,6 +468,116 @@ describe('rebindPersona', () => {
   it('rejects an unknown contact', () => {
     seedOtherPersona()
     expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/No such contact/)
+  })
+})
+
+describe('setContactIsolation', () => {
+  /**
+   * The claim this reverses: isolation was documented as immutable in four
+   * places because "a real checkout on disk points at it". ensureWorktree makes
+   * that false — the checkout is created on the first writing turn, not at bind
+   * time — so the row is the durable thing and the disk follows it.
+   */
+  it('plans a worktree when a shared contact becomes isolated', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    expect(contact.worktreePath).toBeNull()
+
+    const isolated = await setContactIsolation(contact.id, 'worktree')
+
+    expect(isolated.isolation).toBe('worktree')
+    expect(isolated.worktreePath).toContain('worktrees')
+    expect(isolated.branch).toMatch(/^persona\//)
+  })
+
+  // Nothing is created on disk here, and that is the point: ensureWorktree
+  // materialises it on the next writing turn, exactly as it does for a contact
+  // that was isolated at bind time.
+  it('creates nothing on disk — the next turn does that', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    const isolated = await setContactIsolation(contact.id, 'worktree')
+    expect(existsSync(isolated.worktreePath as string)).toBe(false)
+  })
+
+  it('keeps the branch when a contact stops being isolated', async () => {
+    const contact = createContact({
+      ...draft('~/code/app', 'Reviewer · app'),
+      isolation: 'worktree'
+    })
+    const branch = contact.branch
+
+    const shared = await setContactIsolation(contact.id, 'shared')
+
+    expect(shared.isolation).toBe('shared')
+    expect(shared.worktreePath).toBeNull()
+    // git worktree remove leaves the commits, and the Branches panel matches a
+    // branch to its Contact by this column — nulling it would orphan that
+    // Contact's own committed work the moment it de-isolated.
+    expect(shared.branch).toBe(branch)
+  })
+
+  // plannedWorktree is deterministic from (repo, persona, contact id) and
+  // worktreeAdd reuses an existing branch, so a round trip lands back on the
+  // same work rather than stranding it on a branch nobody points at.
+  it('returns to the same branch on a round trip', async () => {
+    const contact = createContact({
+      ...draft('~/code/app', 'Reviewer · app'),
+      isolation: 'worktree'
+    })
+    const original = { path: contact.worktreePath, branch: contact.branch }
+
+    await setContactIsolation(contact.id, 'shared')
+    const again = await setContactIsolation(contact.id, 'worktree')
+
+    expect(again.worktreePath).toBe(original.path)
+    expect(again.branch).toBe(original.branch)
+  })
+
+  // The session was opened against a working directory that no longer applies.
+  // Same reasoning as rebindContactPersona — and since Phase 22 the thread
+  // draws a divider where it happens, so the consequence is visible.
+  it('clears the resume key in both directions', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    setBackendSessionId(contact.id, 'session-abc')
+    expect((await setContactIsolation(contact.id, 'worktree')).backendSessionId).toBeNull()
+
+    setBackendSessionId(contact.id, 'session-def')
+    expect((await setContactIsolation(contact.id, 'shared')).backendSessionId).toBeNull()
+  })
+
+  it('is a no-op when the isolation already matches', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    setBackendSessionId(contact.id, 'session-abc')
+
+    // Not even the session is cleared: nothing moved, so nothing was invalidated.
+    expect((await setContactIsolation(contact.id, 'shared')).backendSessionId).toBe('session-abc')
+  })
+
+  // Load-bearing rather than defensive: the run lock is keyed on
+  // workingPathFor(contact), so moving that under a holder leaves its release
+  // looking for a slot that no longer exists.
+  it('refuses while that contact is mid-turn, and moves nothing', async () => {
+    const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
+    const release = acquire({
+      runId: 'run-1',
+      contactId: contact.id,
+      contactName: contact.displayName,
+      workingPath: '~/code/app',
+      mode: 'exclusive',
+      startedAt: 0
+    })
+
+    await expect(setContactIsolation(contact.id, 'worktree')).rejects.toThrow(/working right now/)
+    expect(getContact(contact.id)?.worktreePath).toBeNull()
+    expect(getContact(contact.id)?.isolation).toBe('shared')
+
+    release?.()
+    expect((await setContactIsolation(contact.id, 'worktree')).isolation).toBe('worktree')
+  })
+
+  it('rejects an unknown contact', async () => {
+    await expect(setContactIsolation('contact-invented', 'worktree')).rejects.toThrow(
+      /No such contact/
+    )
   })
 })
 

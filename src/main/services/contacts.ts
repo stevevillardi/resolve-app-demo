@@ -8,8 +8,8 @@ import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
 import { assertNoActiveRun } from './run-lock'
 import { plannedWorktree } from './worktrees'
-import { defaultIsolation } from '../../shared/domain'
-import type { Contact, ContactDraft, RepoTrust } from '../../shared/domain'
+import { defaultIsolation, isolationOf } from '../../shared/domain'
+import type { Contact, ContactDraft, Isolation, RepoTrust } from '../../shared/domain'
 
 /**
  * Contact records (blueprint §4): one persona template bound to one repo.
@@ -132,21 +132,22 @@ export async function deleteContact(id: string, discardUncommitted = false): Pro
  * Renames a Contact. Deliberately nothing else.
  *
  * `displayName` is the only column here a human ever wants to change after the
- * fact, and it is also the only one nothing derives from. The three obvious
- * candidates for a general `updateContact` are all load-bearing:
+ * fact *and* that nothing derives from. Of the rest:
  *
  * - `repoPath` is the Group key (§4's one Group per repo), the run-lock key via
  *   workingPathFor(), and the directory the backend session was opened against.
- * - `worktreePath` and `branch` are derived from the repo and persona at bind
- *   time and are pointed at by a real checkout on disk.
+ *   Still immutable; its remedy is still delete-and-recreate.
  * - `personaTemplateId` decides the backend, so changing it would strand
- *   `backendSessionId` on an SDK that has never heard of it.
+ *   `backendSessionId` on an SDK that has never heard of it — which is why it
+ *   has its own procedure, `rebindContactPersona`, that clears the key.
+ * - `isolation`, and with it `worktreePath`/`branch`, was on this list until
+ *   Phase 22 and is now `setContactIsolation` below. The argument that put it
+ *   here — a real checkout on disk points at it — turned out to be weaker than
+ *   it sounded, because the checkout is created lazily on the first writing
+ *   turn rather than at bind time.
  *
- * Changing any of them would silently orphan a live worktree and a live
- * session. A Contact bound to the wrong thing is deleted and made again, which
- * is what deleteContact's worktree cleanup exists for. Keeping the input at
- * `{ id, displayName }` puts that constraint at the Zod boundary rather than in
- * a service-level check somebody can forget to write.
+ * Keeping this input at `{ id, displayName }` puts the remaining constraints at
+ * the Zod boundary rather than in a service check somebody can forget to write.
  */
 export function renameContact(id: string, displayName: string): Contact {
   const trimmed = displayName.trim()
@@ -163,6 +164,90 @@ export function renameContact(id: string, displayName: string): Contact {
   // Re-read rather than patching the caller's copy: listContacts orders by
   // display_name, so the row's place in the list has just moved and the caller
   // should be looking at what is actually stored.
+  return getContact(id) as Contact
+}
+
+/**
+ * Moves a Contact between working in the repo and working in its own checkout
+ * (Phase 22).
+ *
+ * This was documented as immutable in four places, and the argument was that a
+ * real checkout on disk points at these columns. `ensureWorktree` is why that
+ * turned out to be weaker than it sounded: the directory is created on the
+ * first *writing turn*, not at bind time, so the row is the only durable thing
+ * and the disk follows it.
+ *
+ * **shared/exclusive → worktree** writes the planned path and branch and stops.
+ * `plannedWorktree` is deterministic from (repo, persona, contact id), so a
+ * Contact that has been isolated before gets its own path and branch back, and
+ * `worktreeAdd` reuses an existing branch rather than failing — so a round trip
+ * lands back on the same work rather than stranding it. Uncommitted work in the
+ * main tree stays in the main tree: the new branch is cut from HEAD, and
+ * anything half-finished is left where the user can still see it.
+ *
+ * **worktree → shared/exclusive** has to remove a real directory, so it takes
+ * `deleteContact`'s posture rather than inventing a second one: refused when
+ * the worktree is dirty unless the caller explicitly discards. `branch` is kept
+ * on purpose even though `worktreePath` goes — `git worktree remove` leaves the
+ * branch and its commits, and the Branches panel attributes a branch to a
+ * Contact by matching this column, so nulling it would turn the Contact's own
+ * committed work into an orphan the moment it de-isolated. That makes `branch`
+ * outlive `worktreePath`, which the schema comment used to say was impossible;
+ * both comments are updated.
+ *
+ * Both directions clear the resume key. The session was opened against a
+ * working directory that no longer applies, which is the same reasoning
+ * `rebindContactPersona` uses — and since Phase 22 the thread draws a divider
+ * where that happens, so the consequence is visible rather than mysterious.
+ */
+export async function setContactIsolation(
+  id: string,
+  isolation: Isolation,
+  discardUncommitted = false
+): Promise<Contact> {
+  const contact = getContact(id)
+  if (!contact) throw new Error(`No such contact: ${id}`)
+  if (isolationOf(contact.isolation) === isolation) return contact
+
+  // Load-bearing rather than defensive: the run lock is keyed on
+  // workingPathFor(contact), so moving it under a holder would leave that
+  // holder's release looking for a slot that no longer exists.
+  assertNoActiveRun([id], 'changing where it works')
+
+  if (isolation === 'worktree') {
+    const persona = initDb()
+      .select()
+      .from(personaTemplates)
+      .where(eq(personaTemplates.id, contact.personaTemplateId))
+      .get()
+    if (!persona) throw new Error(`No such persona: ${contact.personaTemplateId}`)
+
+    const planned = plannedWorktree(contact.repoPath, persona.name, contact.id)
+    initDb()
+      .update(contacts)
+      .set({
+        isolation,
+        worktreePath: planned.path,
+        branch: planned.branch,
+        backendSessionId: null
+      })
+      .where(eq(contacts.id, id))
+      .run()
+
+    return getContact(id) as Contact
+  }
+
+  // Leaving a worktree. The directory goes; the branch does not.
+  if (contact.worktreePath && existsSync(contact.worktreePath)) {
+    await worktreeRemove(contact.repoPath, contact.worktreePath, discardUncommitted)
+  }
+
+  initDb()
+    .update(contacts)
+    .set({ isolation, worktreePath: null, backendSessionId: null })
+    .where(eq(contacts.id, id))
+    .run()
+
   return getContact(id) as Contact
 }
 

@@ -5,6 +5,7 @@ import {
   githubScopeSchema,
   groupMessageSchema,
   groupSchema,
+  isolationSchema,
   messageSchema,
   personaBackendSchema,
   personaTemplateDraftSchema,
@@ -682,8 +683,9 @@ export const ipcContract = {
    * message history all stay. Refused while a turn is running — rebinding
    * under a live stream would change who is speaking mid-sentence.
    *
-   * repoPath and isolation remain immutable; their remedy is still
-   * delete-and-recreate, now guided by the prefilled NewContactFlow.
+   * repoPath remains immutable; its remedy is still delete-and-recreate, now
+   * guided by the prefilled NewContactFlow. Isolation joined the mutable side
+   * in Phase 22 — see `contacts.setIsolation`.
    */
   'contacts.rebindPersona': {
     input: z.object({ id: z.string(), personaTemplateId: z.string() }),
@@ -701,6 +703,27 @@ export const ipcContract = {
    */
   'contacts.startFreshSession': {
     input: z.object({ id: z.string() }),
+    output: contactSchema
+  },
+  /**
+   * Moves a Contact between the repo itself and its own checkout (Phase 22).
+   *
+   * Its own procedure rather than a widened `contacts.update`, for the reason
+   * `setRepoTrust` gives below: a rename and a relocation are different
+   * decisions, and one permissive update is how the second becomes a side
+   * effect of the first.
+   *
+   * `discardUncommitted` only matters when leaving a worktree that has
+   * uncommitted changes — main refuses without it, and that refusal is a
+   * decision to put in front of a human rather than an error to render red.
+   * The same two-step `contacts.delete` uses.
+   */
+  'contacts.setIsolation': {
+    input: z.object({
+      id: z.string(),
+      isolation: isolationSchema,
+      discardUncommitted: z.boolean().optional()
+    }),
     output: contactSchema
   },
   /**

@@ -4,6 +4,8 @@ import {
   Loader2,
   Pencil,
   RefreshCcw,
+  Check,
+  FolderTree,
   RotateCcw,
   Trash2,
   UserRoundPen,
@@ -26,17 +28,19 @@ import { ContextPanel } from './ContextPanel'
 import { Field } from '@/components/common/Field'
 import { toast } from 'sonner'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { ISOLATION_OPTIONS } from '@/lib/isolation'
 import { ListRow } from '@/components/common/ListRow'
 import {
   useDeleteContact,
   useRebindPersona,
   useRenameContact,
+  useSetIsolation,
   useStartFreshSession
 } from '@/hooks/useConversations'
 import { revealLocalPath } from '@/hooks/useDiffs'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useUiStore } from '@/store/useUiStore'
-import type { Contact, PersonaBackend } from '@/types'
+import type { Contact, Isolation, PersonaBackend } from '@/types'
 
 /**
  * The contact actions, shared between the thread header's ⋯ menu and the
@@ -49,7 +53,8 @@ import type { Contact, PersonaBackend } from '@/types'
  * (draft name, refusal state) lives here.
  */
 
-export type ContactDialogKind = 'context' | 'rename' | 'rebind' | 'freshSession' | 'delete'
+export type ContactDialogKind =
+  'context' | 'rename' | 'rebind' | 'freshSession' | 'isolation' | 'delete'
 
 interface ContactActionItemsProps {
   /** Which menu family these items render into — they must match their popup. */
@@ -103,6 +108,10 @@ export function ContactActionItems({
         <RotateCcw />
         Start a fresh session…
       </Item>
+      <Item onClick={() => onOpen('isolation')}>
+        <FolderTree />
+        Change where it works…
+      </Item>
       {/* Not one of the parent's dialogs: recreate routes into the
           new-contact flow, prefilled. The flow clears the marker on close. */}
       <Item
@@ -144,6 +153,7 @@ export function ContactActionDialogs({
       {open === 'rename' && <RenameContactDialog contact={contact} onClose={onClose} />}
       {open === 'rebind' && <RebindPersonaDialog contact={contact} onClose={onClose} />}
       {open === 'freshSession' && <FreshSessionDialog contact={contact} onClose={onClose} />}
+      {open === 'isolation' && <ChangeIsolationDialog contact={contact} onClose={onClose} />}
       {open === 'delete' && <DeleteContactDialog contact={contact} onClose={onClose} />}
       <ContextPanel
         contactId={contact.id}
@@ -254,6 +264,91 @@ function FreshSessionDialog({
             }
           >
             {isPending ? 'Starting…' : 'Start fresh'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * Moves a Contact between working in your checkout and its own (Phase 22).
+ *
+ * The options are `NewContactFlow`'s own list, imported rather than restated,
+ * so the screen that sets this at bind time and the screen that changes it
+ * later cannot describe the same three modes differently.
+ *
+ * Two-step for the same reason DeleteContactDialog is: leaving a worktree with
+ * uncommitted work is refused by main, and that refusal is a decision to put in
+ * front of a human rather than an error to render red and leave them stuck on.
+ */
+function ChangeIsolationDialog({
+  contact,
+  onClose
+}: {
+  contact: Contact
+  onClose: () => void
+}): React.JSX.Element {
+  const current = contact.isolation ?? 'shared'
+  const [chosen, setChosen] = useState<Isolation>(current)
+  const { setIsolation, isPending, error } = useSetIsolation()
+
+  // Main refused, and the only refusal it issues here is the dirty-worktree
+  // one. Nothing in this component reads git — main's check is authoritative,
+  // and a status read from the renderer could only disagree with it under a
+  // race.
+  const refused = error !== null
+
+  const apply = (discardUncommitted: boolean): void =>
+    setIsolation(contact.id, chosen, discardUncommitted, () => {
+      toast(
+        `${contact.displayName} now works in ${chosen === 'worktree' ? 'its own checkout' : 'your checkout'}`
+      )
+      onClose()
+    })
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Where {contact.displayName} works</DialogTitle>
+          <DialogDescription>
+            The repository does not change, and neither does this conversation. What changes is the
+            directory the next session opens in — so it starts a fresh session, and anything
+            uncommitted stays in whichever checkout it is already in.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-1.5">
+          {ISOLATION_OPTIONS.map((option) => (
+            <ListRow
+              key={option.value}
+              active={chosen === option.value}
+              bordered
+              onSelect={() => setChosen(option.value)}
+              trailing={
+                chosen === option.value ? <Check className="mt-0.5 size-4 shrink-0" /> : undefined
+              }
+            >
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                {option.label}
+                {option.value === current && (
+                  <span className="text-muted-foreground text-meta font-normal">Now</span>
+                )}
+              </p>
+              <p className="text-muted-foreground text-meta">{option.description}</p>
+            </ListRow>
+          ))}
+        </div>
+
+        {refused && <p className="text-destructive text-row">{error}</p>}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={chosen === current || isPending} onClick={() => apply(refused)}>
+            {isPending ? 'Moving…' : refused ? 'Discard those changes and move' : 'Move it'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -16,6 +16,7 @@ import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyState } from '@/components/common/EmptyState'
 import { CheckRow } from '@/components/common/CheckRow'
 import { ListRow } from '@/components/common/ListRow'
+import { ISOLATION_OPTIONS } from '@/lib/isolation'
 import { Github } from '@/components/github/GithubMark'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { useAuthStatus, useVerifyGitHubNow } from '@/hooks/useAuth'
@@ -65,42 +66,6 @@ const STEP_COPY: Record<Step, { title: string; description: string }> = {
   },
   confirm: { title: 'Confirm', description: 'Check the scope before creating the contact.' }
 }
-
-/**
- * The three modes, in the order they are worth considering.
- *
- * Written out here rather than derived, because each one's cost is the thing
- * that decides it and none of those costs are inferable from the name.
- */
-const ISOLATION_OPTIONS: {
-  value: Isolation
-  label: string
-  description: string
-  /** Needs a git repo to be possible at all. */
-  needsGit: boolean
-}[] = [
-  {
-    value: 'worktree',
-    label: 'Its own checkout',
-    description:
-      'Works on its own branch in a separate directory, so it never waits for another persona and never touches your files. It starts from the last commit — your uncommitted work and node_modules are not there.',
-    needsGit: true
-  },
-  {
-    value: 'shared',
-    label: 'Your checkout',
-    description:
-      'Works directly in the repo, seeing your uncommitted changes and everything already installed. Writers take turns here: one runs at a time.',
-    needsGit: false
-  },
-  {
-    value: 'exclusive',
-    label: 'Your checkout, alone',
-    description:
-      'The same directory, but held for the whole turn so nothing else can read it mid-write. For work that needs the repo to itself.',
-    needsGit: false
-  }
-]
 
 function StepDots({ current }: { current: Step }): React.JSX.Element {
   const index = STEPS.indexOf(current)

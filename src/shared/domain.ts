@@ -155,7 +155,12 @@ export const contactSchema = z.object({
    * front rather than at first use.
    */
   worktreePath: z.string().nullable(),
-  /** The branch that worktree is on. Null whenever worktreePath is. */
+  /**
+   * The branch that worktree is on — and it outlives the worktree. A Contact
+   * that stops being isolated keeps its branch, so its committed work stays
+   * attributed to it in the Branches panel. See the column comment in
+   * src/main/db/schema.ts.
+   */
   branch: z.string().nullable(),
   /** Null reads as `shared` — that is what every pre-0007 row means. */
   isolation: isolationSchema.nullable(),

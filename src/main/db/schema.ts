@@ -100,7 +100,19 @@ export const contacts = sqliteTable(
      * key stable from the very first turn.
      */
     worktreePath: text('worktree_path'),
-    /** The branch its worktree is on. Null whenever worktree_path is. */
+    /**
+     * The branch its worktree is on.
+     *
+     * Outlives `worktree_path`, which it did not before Phase 22: de-isolating
+     * a Contact removes the checkout and keeps the branch, because
+     * `git worktree remove` leaves the commits and the Branches panel
+     * attributes a branch to a Contact by matching this column. Nulling it
+     * would turn that Contact's own committed work into an orphan branch with
+     * no owner. Every reader gates on `worktree_path` or on
+     * `isolationOf(...) === 'worktree'` first, so a branch with no checkout is
+     * inert until the Contact is isolated again — at which point it is
+     * deliberately the same branch.
+     */
     branch: text('branch'),
     /**
      * Where the session runs, chosen per Contact at bind time (§4) — the same
