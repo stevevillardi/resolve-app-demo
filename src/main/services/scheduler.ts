@@ -1,4 +1,5 @@
 import { notifyRoutineOutcome } from '../notifications'
+import { appendToGroupMessage } from './group-messages'
 import { runRoutineTurn } from './messaging'
 import { openPullRequest, pullRequestState } from './pull-requests'
 import {
@@ -218,6 +219,12 @@ export function fireRoutine(routineId: string): RoutineFire {
     const pr = await raisePullRequest(routine.contactId, result)
     if (pr) {
       recordRunOutcome(routineId, `${result.summary} ${pr}`.trim())
+      // The `routine_run` row was written by the summariser before this step
+      // existed to report on, and the model has usually already described its
+      // own blocked `git push` as a failure — while the PR this opened sits
+      // on GitHub (Phase 11, F4). The row is amended rather than left to
+      // contradict the truth the app itself established.
+      if (outcome.summary) appendToGroupMessage(outcome.summary.id, pr)
       onChange?.()
     }
 

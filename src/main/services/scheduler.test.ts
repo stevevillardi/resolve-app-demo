@@ -605,6 +605,50 @@ describe('a routine that made changes ends by opening a pull request', () => {
     expect(getRoutine('routine-1')?.lastRunSummary).toContain('Opened PR #12.')
   })
 
+  /**
+   * The `routine_run` row is written by the summariser before the PR step
+   * runs, and the model has usually already described its own sandbox-blocked
+   * `git push` as "could not open a pull request" — while the PR the app then
+   * opened sits on GitHub. Phase 11's live run read exactly that contradiction
+   * in the Group (F4); the row must end up carrying the app's own outcome.
+   */
+  it('amends the group row so it cannot claim the PR failed while the PR is open', async () => {
+    db.insert(groupMessages)
+      .values({
+        id: 'gm-run',
+        groupId: 'group-1',
+        type: 'routine_run',
+        contactId: 'contact-writer',
+        content: 'A pull request could not be opened because network access prevented pushing.',
+        timestamp: new Date(),
+        durable: false
+      })
+      .run()
+    summaryResult = {
+      id: 'gm-run',
+      summary: 'A pull request could not be opened because network access prevented pushing.',
+      category: 'routine',
+      durable: false
+    }
+    prAvailable = true
+    prResult = {
+      number: 3,
+      url: 'https://github.com/acme/app/pull/3',
+      title: 'Fix the typo',
+      action: 'created'
+    }
+    seedRoutine('routine-1', 'contact-writer')
+    startScheduler(engine)
+
+    await fireRoutine('routine-1').completed
+
+    const row = db.select().from(groupMessages).all().find((r) => r.id === 'gm-run')
+    // The model's account is kept — what it believed is part of the record —
+    // and the app's outcome lands after it, so the last word is the true one.
+    expect(row?.content).toContain('could not be opened')
+    expect(row?.content).toContain('Opened PR #3.')
+  })
+
   it('comments instead when the branch already had one open', async () => {
     prAvailable = true
     prResult = {
