@@ -124,6 +124,17 @@ async function sweep(page: Page, app: ElectronApplication, profileName: string):
       await goTo(page, 'Home')
       await shoot(page, `${stem}-home`)
 
+      // The guide sits under everything Home has to report, so on a profile
+      // with content it is always below the fold — and a region no shot reaches
+      // is a region that rots. Absent on a fresh install, where the guide *is*
+      // the whole pane and the shot above already has it.
+      const guideToggle = page.getByRole('button', { name: /^(Hide|Show) the guide$/ })
+      if (await guideToggle.isVisible().catch(() => false)) {
+        await guideToggle.scrollIntoViewIfNeeded()
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        await shoot(page, `${stem}-home-guide`)
+      }
+
       for (const section of SECTIONS) {
         await goTo(page, section)
         await shoot(page, `${stem}-${section.toLowerCase()}-list`)

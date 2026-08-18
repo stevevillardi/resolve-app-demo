@@ -1,5 +1,5 @@
 import type { MenuItemConstructorOptions } from 'electron'
-import type { MenuActionId } from '../shared/menu'
+import { MENU_ACCELERATORS, type MenuActionId } from '../shared/menu'
 
 /**
  * The application menu, as data (Phase 17).
@@ -37,7 +37,7 @@ export function buildAppMenuTemplate({ platform, isDev }: AppMenuTemplateOptions
 
   const settingsItem: AppMenuItem = {
     label: 'Settings…',
-    accelerator: 'CmdOrCtrl+,',
+    accelerator: MENU_ACCELERATORS['open-settings'],
     action: 'open-settings'
   }
 
@@ -61,7 +61,11 @@ export function buildAppMenuTemplate({ platform, isDev }: AppMenuTemplateOptions
   const fileMenu: AppMenuItem = {
     label: 'File',
     submenu: [
-      { label: 'New Contact…', accelerator: 'CmdOrCtrl+N', action: 'new-contact' },
+      {
+        label: 'New Contact…',
+        accelerator: MENU_ACCELERATORS['new-contact'],
+        action: 'new-contact'
+      },
       // Settings belongs to the app menu on macOS and to File everywhere else.
       ...(darwin ? [] : [{ type: 'separator' as const }, settingsItem]),
       { type: 'separator' },
@@ -85,7 +89,11 @@ export function buildAppMenuTemplate({ platform, isDev }: AppMenuTemplateOptions
   const viewMenu: AppMenuItem = {
     label: 'View',
     submenu: [
-      { label: 'Command Palette', accelerator: 'CmdOrCtrl+K', action: 'command-palette' },
+      {
+        label: 'Command Palette',
+        accelerator: MENU_ACCELERATORS['command-palette'],
+        action: 'command-palette'
+      },
       { type: 'separator' },
       { role: 'resetZoom' },
       { role: 'zoomIn' },

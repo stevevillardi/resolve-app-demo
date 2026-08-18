@@ -47,6 +47,17 @@ interface UiState {
   navExpanded: boolean
   setNavExpanded: (expanded: boolean) => void
 
+  /**
+   * Whether Home keeps the guide open once there is a summary to show.
+   *
+   * Persisted, because "I have read the tour" is a fact about the person, not
+   * about this launch. It does not gate the guide on an empty Home — with
+   * nothing to summarise, collapsing it would leave a blank pane, which is the
+   * screen this whole thing exists to replace.
+   */
+  homeGuideOpen: boolean
+  setHomeGuideOpen: (open: boolean) => void
+
   selectedConversation: ConversationSelection
   setSelectedConversation: (selection: ConversationSelection) => void
 
@@ -85,7 +96,7 @@ interface UiState {
   setThemePreference: (preference: ThemePreference) => void
 }
 
-// Local-only UI state — never touches IPC. Only the two chrome preferences are
+// Local-only UI state — never touches IPC. Only the chrome preferences are
 // persisted; selection stays ephemeral per blueprint §10 (a relaunch should
 // land on the empty state, not resurrect a stale conversation id). Pane widths
 // are persisted separately by react-resizable-panels' own autoSaveId.
@@ -100,6 +111,9 @@ export const useUiStore = create<UiState>()(
 
       navExpanded: false,
       setNavExpanded: (navExpanded) => set({ navExpanded }),
+
+      homeGuideOpen: true,
+      setHomeGuideOpen: (homeGuideOpen) => set({ homeGuideOpen }),
 
       selectedConversation: null,
       setSelectedConversation: (selectedConversation) => set({ selectedConversation }),
@@ -133,7 +147,8 @@ export const useUiStore = create<UiState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         themePreference: state.themePreference,
-        navExpanded: state.navExpanded
+        navExpanded: state.navExpanded,
+        homeGuideOpen: state.homeGuideOpen
       })
     }
   )

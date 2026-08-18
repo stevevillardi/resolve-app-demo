@@ -17,6 +17,7 @@ import { PaneBody } from '@/components/common/PaneBody'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { RunPulse } from '@/components/common/RunIndicator'
 import { Section } from '@/components/common/Section'
+import { GuideStrip, WorkspaceGuide } from './WorkspaceGuide'
 import { useAuthStatus, useRefreshAuth } from '@/hooks/useAuth'
 import { useBudget } from '@/hooks/useSettings'
 import { useBranches } from '@/hooks/useBranches'
@@ -118,20 +119,12 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   const waiting = variant === 'home' ? branches.filter((b) => b.files.length > 0 && !b.merged) : []
 
   // A fresh install is a different screen, not an emptier version of this one:
-  // there is nothing to summarise and exactly one thing to do.
+  // there is nothing to summarise, and what the person on the other side needs
+  // is not a report but the app explained. Both variants get it — with no
+  // contacts there is nothing for Chats to offer either, and a first launch
+  // clicking into Chats should not be answered with a shorter apology.
   if (!contactsPending && contacts.length === 0) {
-    return (
-      <EmptyPane
-        icon={MessagesSquare}
-        title="No contacts yet"
-        description="A contact is one persona bound to one repository. Make one and it can start work in it."
-        action={
-          <Button variant="outline" size="sm" onClick={() => setDialog('newContact')}>
-            New contact
-          </Button>
-        }
-      />
-    )
+    return <WorkspaceGuide />
   }
 
   // Missed fires and a crossed budget both keep the summary on screen even
@@ -145,6 +138,10 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
     missed.length === 0 &&
     budgetBanner === null
   if (nothingToShow) {
+    // Chats keeps its one sentence. There is a list panel beside it holding the
+    // contacts that exist, so the answer to "why is this pane blank" is two
+    // inches to the left — and the point of splitting these two screens was to
+    // stop each of them being everything.
     return variant === 'chats' ? (
       <EmptyPane
         icon={MessagesSquare}
@@ -152,18 +149,11 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
         description="Pick a contact to message one persona, or a repo group to see everything working in that repository."
       />
     ) : (
-      <EmptyPane
-        icon={MessagesSquare}
-        title="Nothing has run yet"
-        // Contacts exist, so the fresh-install branch above did not fire. What
-        // is missing is not setup, it is a first message.
-        description="Your contacts are set up. Send one a message and this screen starts reporting what the fleet is doing."
-        action={
-          <Button variant="outline" size="sm" onClick={() => setSection('chats')}>
-            Go to chats
-          </Button>
-        }
-      />
+      // Contacts exist, so the fresh-install branch above did not fire — but
+      // Home has no list panel and nothing to report, so it is still a blank
+      // pane, and the guide is still the most useful thing to put in it. The
+      // checklist reads the same live state, so the first step arrives ticked.
+      <WorkspaceGuide />
     )
   }
 
@@ -466,6 +456,14 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
             </div>
           </Section>
         )}
+
+        {/*
+          Last, and Home only. The summary above is why you are on this screen;
+          the guide is the reference you want on week one and not on week five,
+          so it sits under everything and remembers having been folded away.
+          Chats does not get it — see the empty branch above.
+        */}
+        {variant === 'home' && <GuideStrip />}
       </PaneBody>
     </div>
   )
