@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { MessageSquare } from 'lucide-react'
+import { blockingRun, lockModeFor, lockRefusal, workingPathFor } from '../../../../shared/locking'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { BackendBadge } from '@/components/common/BackendBadge'
@@ -79,11 +80,19 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
   const usage = useMemo(() => usageForContact(usageEvents, contactId), [usageEvents, contactId])
 
-  // A turn on *another* contact bound to the same repo is what blocks this one
-  // (blueprint §15D), so the check is by working path, not by contact.
-  const blocker = runs.find(
-    (run) => run.contactId !== contactId && run.workingPath === contact?.repoPath
-  )
+  // What main would say if this send were made right now, decided by the rule
+  // main itself uses (src/shared/locking.ts) rather than by a second reading of
+  // it. Both of this contact's own facts matter: a `read_only` persona is
+  // refused by nobody, and an isolated one is locked on its worktree rather
+  // than on the repo — the composer used to ignore both.
+  const blocker =
+    contact && persona
+      ? blockingRun(
+          runs.filter((run) => run.contactId !== contactId),
+          workingPathFor(contact),
+          lockModeFor(persona, contact.isolation)
+        )
+      : null
 
   const contentRef = useRef<HTMLDivElement>(null)
   const streamed = turn ? streamText(turn.stream) : ''
@@ -314,9 +323,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
           sendError ??
           retryError ??
           prError ??
-          (blocker
-            ? `${blocker.contactName} is working in this repo. Wait for it to finish, or stop it from that conversation.`
-            : undefined)
+          (blocker ? lockRefusal(blocker.contactName) : undefined)
         }
         hint={
           // Scope lives beside the send button rather than buried in the

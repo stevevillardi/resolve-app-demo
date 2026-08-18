@@ -17,6 +17,7 @@ import {
   activeRuns,
   blockingHolder,
   lockModeFor,
+  lockRefusal,
   workingPathFor,
   type Release
 } from './run-lock'
@@ -337,15 +338,9 @@ function startTurn(
   })
 
   if (!release) {
-    // "Here" rather than "in this repo": since Phase 12 a refusal means the two
-    // share a working directory, which is now a narrower thing than sharing a
-    // repo — two Contacts in their own worktrees never reach this at all.
-    const holder = blockingHolder(workingPath, mode)
-    throw new Error(
-      holder
-        ? `${holder.contactName} is already working here. Wait for it to finish, or stop it from that conversation.`
-        : 'This working copy is busy.'
-    )
+    // One wording, shared with the composer's own prediction of this refusal —
+    // see lockRefusal() for why it says "here" rather than "in this repo".
+    throw new Error(lockRefusal(blockingHolder(workingPath, mode)?.contactName ?? null))
   }
 
   // Everything from here to the point the turn is running has to hand the lock
