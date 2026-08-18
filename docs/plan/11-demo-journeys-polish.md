@@ -135,6 +135,9 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   real users on every rebuilt dev binary, so the surfaces that discard it are
   a real defect regardless.
 - **Evidence:** `shots/08-repo-picker-error.png`, `auth.getStatus` capture.
+- **Fixed** on `phase-11-demo-journeys`: both throws now route through
+  `missingTokenError()` in `github-auth.ts`, which consults
+  `secretUnreadable()` and single-sources the locked wording.
 
 ### F2 — first clone's workspace-root ask hides behind a "Cloning…" label (degraded)
 
@@ -155,6 +158,10 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   Cloning…) would fix it.
 - **Evidence:** `shots/13-after-create.png` (dialog stuck on Cloning…),
   `workspace.getRoot` returning `{path: null}` at that moment.
+- **Fixed** on `phase-11-demo-journeys`: the confirm step warns the ask is
+  coming when the root is known-unset, and Create asks first — its own
+  'Choosing a folder…' state, cancel returning to confirm untouched —
+  before the clone starts. The mid-clone ask stays as the fallback.
 
 ### F3 — typing `@` in the Group composer gives no typeahead (cosmetic)
 
@@ -184,6 +191,10 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   the PR outcome line to the `routine_run` content app-side (the app knows
   the PR number), or run the PR step before summarize().
 - **Evidence:** `routine_run` group message vs `gh pr view 3`.
+- **Fixed** on `phase-11-demo-journeys`: the scheduler amends the
+  `routine_run` row with its own PR line via `appendToGroupMessage()`,
+  re-announcing on the messages-changed chokepoint. The model's account is
+  kept; the app's outcome lands after it.
 
 ### F5 — a model switching branches inside its worktree breaks branch bookkeeping (degraded)
 
@@ -232,6 +243,11 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   got the same treatment. Phase 6's error-bubble styling may also not be
   applied on this path.
 - **Evidence:** `shots/33-error-bubble.png`.
+- **Fixed** on `phase-11-demo-journeys`: the adapter now reads `is_error`
+  on success results and yields an error event, which puts the existing
+  §15C error bubble and Phase 21 retry in front of it with no renderer
+  change; the known unknown-model sentence is reworded to name the
+  persona's model picker, anything else passes through untouched.
 
 ### F7 — a finished turn can stay rendered as "working…" in the Group view until app restart (degraded)
 
@@ -258,12 +274,14 @@ mid-run. Severity: **blocking** (journey cannot proceed) / **degraded**
   `shots/36-group-after-restart.png` (cleared), `runs.list` + tool-call
   status dumps in the run transcript.
 
-### O1 — session summaries run on a different model than the persona (observation, verify intent)
+### O1 — session summaries run on a different model than the persona (observation — resolved, deliberate)
 
 - Refactor Buddy is pinned to `gpt-5.4-mini`, but its end-of-session
   summary was billed to `gpt-5.6-luna`; Claude personas' summaries run on
-  `claude-haiku-4-5`. Claude-side that reads as a deliberate cheap-summarizer
-  choice; Codex-side `gpt-5.6-luna` is the *newest* model in the picker, so
-  if the intent was "backend default", the default drifted expensive. Cost
-  was trivial here ($0.0025), but a summary on a model the persona owner
-  never chose is worth an explicit decision either way.
+  `claude-haiku-4-5`. **Resolved at triage by reading
+  `SUMMARY_MODELS` (`src/main/adapters/models.ts`): both choices are
+  deliberate cheap-summarizer picks.** `gpt-5.6-luna` is the *cheapest*
+  entry the price table knows (0.20/1.20 per 1M — it took over from
+  gpt-5.4-mini on 2026-08-17 precisely because it is 3.75× cheaper), and
+  the comment already names the quality risk to watch. The live run's
+  numbers agree ($0.0025 for the summary). No change needed.
