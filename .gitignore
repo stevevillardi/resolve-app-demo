@@ -21,6 +21,11 @@ coverage/
 playwright-report/
 test-results/
 .playwright-mcp/
+# The screenshot sweep's output (`npm run screens`). Deliberately NOT under
+# test-results/, which Playwright wipes at the start of every run — see the
+# OUT constant in e2e/screenshots/sweep.sweep.ts. ~110 PNGs plus an
+# index.html contact sheet: a review instrument, regenerated on demand.
+screens/
 
 # Logs / caches
 *.log*

@@ -45,7 +45,7 @@ Landed on `main` before this doc was written; recorded so the reasoning isn't lo
 
 `npm run screens` builds the app and walks it: two profiles (seeded and fresh), both themes, 1100
 and 1600 wide, every section in both its list and selected states, plus the command palette, the
-new-contact dialog and a search that matches nothing. ~105 PNGs into `test-results/screens/`.
+new-contact dialog and a search that matches nothing. ~105 PNGs into `screens/` (was `test-results/screens/` until Phase 23 moved it out of the directory Playwright wipes).
 
 It lives in `e2e/screenshots/` so it can use `e2e/fixtures.ts`, and runs as its own Playwright
 **project** so it can never join `npm run test:e2e` — it asserts almost nothing on purpose. There
@@ -202,7 +202,7 @@ observe the failure it is named after is not a check.
 ## Notes for whoever picks this up
 
 - **Iteration loop.** `npm run screens` builds the app and photographs every screen into
-  `test-results/screens/` — two profiles, both themes, two widths, ~110 PNGs. Its own Playwright
+  `screens/` — two profiles, both themes, two widths, ~130 PNGs plus an `index.html` contact sheet. Its own Playwright
   project, so it never joins `npm run test:e2e`. Compare the directory before a change against the
   same directory after; there are deliberately no golden baselines, because relative timestamps and
   the live clock would make them permanently red.
