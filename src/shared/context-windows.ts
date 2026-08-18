@@ -19,6 +19,13 @@
  *
  * Like `models.ts` and `pricing.ts`, this WILL go stale. LAST_VERIFIED is how
  * the next person finds out.
+ *
+ * **Two open items ride on this file**, both in `docs/plan/00-progress.md` under
+ * "Cross-cutting open items": the Claude 5 rows are `inferred` and want
+ * confirming, and the Claude SDK reports a window per turn that this app is not
+ * yet reading — which would retire the first item for that backend. Recorded
+ * there rather than only here so they are found by someone reading the plan,
+ * not only by someone already editing this table.
  */
 
 /** ISO date this table was last checked against vendor documentation. */
