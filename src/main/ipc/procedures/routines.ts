@@ -70,9 +70,15 @@ registerProcedure('routines.validateSchedule', ({ schedule }) => {
  */
 registerProcedure('routines.runNow', ({ id }) => {
   const fire = fireRoutine(id)
-  if (fire.runId) return { runId: fire.runId, skipped: null }
+  if (fire.runId) {
+    return { runId: fire.runId, skipped: null, contactId: getRoutine(id)?.contactId ?? null }
+  }
 
   // Already settled whenever runId is null — a refusal or a missing routine is
   // decided before any turn starts, so this resolves immediately.
-  return fire.completed.then((result) => ({ runId: null, skipped: result.summary }))
+  return fire.completed.then((result) => ({
+    runId: null,
+    skipped: result.summary,
+    contactId: null
+  }))
 })

@@ -635,7 +635,16 @@ export const ipcContract = {
    */
   'routines.runNow': {
     input: z.object({ id: z.string() }),
-    output: z.object({ runId: z.string().nullable(), skipped: z.string().nullable() })
+    output: z.object({
+      runId: z.string().nullable(),
+      skipped: z.string().nullable(),
+      /**
+       * The contact the routine runs as, when the turn started. Returned so
+       * the renderer can enter the run store immediately (live bubble, busy
+       * composer) instead of waiting for a push round-trip. Null on skip.
+       */
+      contactId: z.string().nullable()
+    })
   },
 
   /**
