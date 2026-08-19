@@ -336,7 +336,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                   <AvatarColorSwatch
                     name={template.name}
                     color={template.avatarColor}
-                    seed={template.id}
+                    seed={template.avatarSeed}
                   />
                 }
                 trailing={
@@ -567,7 +567,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               <AvatarColorSwatch
                 name={persona.name}
                 color={persona.avatarColor}
-                seed={persona.id}
+                seed={persona.avatarSeed}
                 size="lg"
               />
               <div className="min-w-0">

@@ -89,7 +89,7 @@ export function CommandPalette(): React.JSX.Element {
           <AvatarColorSwatch
             name={persona?.name ?? contact.displayName}
             color={persona?.avatarColor ?? 'var(--muted)'}
-            seed={persona?.id}
+            seed={persona?.avatarSeed}
             size="xs"
           />
           <span className="truncate">{persona?.name ?? contact.displayName}</span>
@@ -144,7 +144,7 @@ export function CommandPalette(): React.JSX.Element {
           <AvatarColorSwatch
             name={persona.name}
             color={persona.avatarColor}
-            seed={persona.id}
+            seed={persona.avatarSeed}
             size="xs"
           />
           <span className="truncate">{persona.name}</span>

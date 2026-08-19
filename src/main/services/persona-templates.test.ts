@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { contacts, groups } from '../db/schema'
+import { contacts, groups, personaTemplates } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 import type { PersonaTemplateDraft } from '../../shared/domain'
 
@@ -69,6 +69,27 @@ describe('create and read', () => {
     expect(getPersonaTemplate(persona.id)?.skillIds).toEqual(['a', 'b', 'c'])
   })
 
+  it('defaults the avatar seed to the minted id', () => {
+    // The robot every persona wore before the seed became a choice.
+    const persona = createPersonaTemplate(DRAFT)
+    expect(persona.avatarSeed).toBe(persona.id)
+    expect(getPersonaTemplate(persona.id)?.avatarSeed).toBe(persona.id)
+  })
+
+  it('round-trips an explicit avatar seed', () => {
+    const persona = createPersonaTemplate({ ...DRAFT, avatarSeed: 'robot-7' })
+    expect(getPersonaTemplate(persona.id)?.avatarSeed).toBe('robot-7')
+  })
+
+  it('reads a pre-column row as wearing its id', () => {
+    // Rows from before migration 0022 hold avatar_seed = null; the mapper
+    // coalesces to the id, so an upgrade changes nobody's robot.
+    db.insert(personaTemplates)
+      .values({ id: 'legacy', ...DRAFT })
+      .run()
+    expect(getPersonaTemplate('legacy')?.avatarSeed).toBe('legacy')
+  })
+
   it('returns null for an unknown id', () => {
     expect(getPersonaTemplate('nope')).toBeNull()
   })
@@ -110,6 +131,13 @@ describe('update', () => {
 
     updatePersonaTemplate({ ...persona, model: null })
     expect(getPersonaTemplate(persona.id)?.model).toBeNull()
+  })
+
+  // The same debt for avatar_seed, paid on the way in.
+  it('persists a re-rolled avatar seed', () => {
+    const persona = createPersonaTemplate(DRAFT)
+    updatePersonaTemplate({ ...persona, avatarSeed: 'robot-9' })
+    expect(getPersonaTemplate(persona.id)?.avatarSeed).toBe('robot-9')
   })
 
   // The debt the comment above asks for, paid on the way in rather than after
@@ -175,7 +203,9 @@ describe('update', () => {
   })
 
   it('throws for a persona that no longer exists', () => {
-    expect(() => updatePersonaTemplate({ id: 'missing', ...DRAFT })).toThrow(/No such persona/)
+    expect(() => updatePersonaTemplate({ id: 'missing', avatarSeed: 'missing', ...DRAFT })).toThrow(
+      /No such persona/
+    )
   })
 
   // The clear above and a finishing turn's own setBackendSessionId write the

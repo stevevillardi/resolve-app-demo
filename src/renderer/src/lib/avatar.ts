@@ -3,10 +3,10 @@ import * as bottts from '@dicebear/bottts'
 
 /**
  * Bot avatars (Phase 17). A persona is rendered as a DiceBear "bottts" robot:
- * the persona template's id seeds which robot it is, and the user-chosen
- * avatarColor tints the robot's body — so the color input in the persona
- * editor remains the single personality knob, and the same persona looks the
- * same on every surface and every launch.
+ * its avatarSeed picks which robot it is (historically the template's id, now
+ * re-rollable in the persona editor), and the user-chosen avatarColor tints
+ * the robot's body — so the same persona looks the same on every surface and
+ * every launch.
  *
  * Generation is local and synchronous (no network; CSP already allows
  * `img-src data:`), but not free — an SVG is composed per call — so results
@@ -45,4 +45,22 @@ export function botttsDataUri(seed: string, color: string): string {
 
   cache.set(key, uri)
   return uri
+}
+
+/**
+ * A fresh seed for the robot picker. A UUID, like the ids that seeded every
+ * robot before the seed was a choice — same entropy, same aesthetic space.
+ */
+export function randomAvatarSeed(): string {
+  return crypto.randomUUID()
+}
+
+/** `count` fresh candidate seeds for the picker grid, none equal to `exclude`. */
+export function rollSeedCandidates(count: number, exclude: string): string[] {
+  const seeds: string[] = []
+  while (seeds.length < count) {
+    const seed = randomAvatarSeed()
+    if (seed !== exclude) seeds.push(seed)
+  }
+  return seeds
 }

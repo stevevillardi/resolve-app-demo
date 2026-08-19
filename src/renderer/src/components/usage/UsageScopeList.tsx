@@ -93,7 +93,7 @@ export function UsageScopeList(): React.JSX.Element {
               <AvatarColorSwatch
                 name={persona.name}
                 color={persona.avatarColor}
-                seed={persona.id}
+                seed={persona.avatarSeed}
               />
             }
             trailing={cost(contactIds)}

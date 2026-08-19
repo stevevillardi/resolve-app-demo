@@ -10,6 +10,7 @@ function skill(id: string, name: string, content: string): Skill {
 function persona(skillIds: string[], systemPrompt = 'You review code.'): PersonaTemplate {
   return {
     id: 'p1',
+    avatarSeed: 'p1',
     name: 'Reviewer',
     avatarColor: '#000',
     backend: 'claude',

@@ -143,7 +143,7 @@ export function PersonaList({ query }: { query: string }): React.JSX.Element {
               <AvatarColorSwatch
                 name={persona.name}
                 color={persona.avatarColor}
-                seed={persona.id}
+                seed={persona.avatarSeed}
               />
             }
             contextMenu={<PersonaRowMenu persona={persona} boundCount={boundCount} />}

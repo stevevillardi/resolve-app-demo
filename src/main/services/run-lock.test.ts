@@ -33,6 +33,7 @@ function holder(mode: LockMode, workingPath = REPO, contactName = 'Code Reviewer
 function persona(sandbox: SandboxLevel): PersonaTemplate {
   return {
     id: 'persona-1',
+    avatarSeed: 'persona-1',
     name: 'Code Reviewer',
     avatarColor: 'blue',
     backend: 'claude',

@@ -108,7 +108,7 @@ function GroupEntry({
           timestamp={message.timestamp}
           senderName={authorPersona?.name}
           senderColor={authorPersona?.avatarColor}
-          senderSeed={authorPersona?.id}
+          senderSeed={authorPersona?.avatarSeed}
           backend={authorPersona?.backend}
         />
       )
@@ -320,7 +320,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
                     key={contact.id}
                     name={persona?.name ?? contact.displayName}
                     color={persona?.avatarColor ?? 'var(--muted)'}
-                    seed={persona?.id}
+                    seed={persona?.avatarSeed}
                     size="xs"
                   />
                 )
@@ -375,7 +375,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               toolCalls={live.turn.stream.toolCalls}
               senderName={personaFor(live.contactId)?.name}
               senderColor={personaFor(live.contactId)?.avatarColor}
-              senderSeed={personaFor(live.contactId)?.id}
+              senderSeed={personaFor(live.contactId)?.avatarSeed}
               backend={personaFor(live.contactId)?.backend}
             />
           )}
@@ -387,7 +387,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
               error={live.turn.stream.error}
               senderName={personaFor(live.contactId)?.name}
               senderColor={personaFor(live.contactId)?.avatarColor}
-              senderSeed={personaFor(live.contactId)?.id}
+              senderSeed={personaFor(live.contactId)?.avatarSeed}
               onRetry={() => {
                 resetRetry()
                 retry(live.contactId, groupId)
@@ -438,7 +438,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
                   <AvatarColorSwatch
                     name={target.name}
                     color={persona?.avatarColor ?? 'var(--muted)'}
-                    seed={persona?.id}
+                    seed={persona?.avatarSeed}
                     size="sm"
                   />
                   <span className="min-w-0 flex-1 truncate text-left">{target.name}</span>

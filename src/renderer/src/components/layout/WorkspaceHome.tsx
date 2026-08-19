@@ -287,7 +287,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
                         <AvatarColorSwatch
                           name={item.name}
                           color={item.color}
-                          seed={item.personaId}
+                          seed={item.avatarSeed}
                         />
                       }
                       trailing={

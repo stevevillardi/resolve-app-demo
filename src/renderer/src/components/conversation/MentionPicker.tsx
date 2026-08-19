@@ -60,7 +60,7 @@ export function MentionPicker({
                     <AvatarColorSwatch
                       name={persona?.name ?? contact.displayName}
                       color={persona?.avatarColor ?? 'var(--muted)'}
-                      seed={persona?.id}
+                      seed={persona?.avatarSeed}
                       size="sm"
                     />
                     <span className="min-w-0 flex-1 truncate">

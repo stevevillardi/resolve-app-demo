@@ -42,6 +42,7 @@ function persona(id: string, name: string): PersonaTemplate {
     id,
     name,
     avatarColor: '#2a78d6',
+    avatarSeed: id,
     backend: 'claude',
     model: null,
     systemPrompt: '',
@@ -115,6 +116,11 @@ describe('recentActivity', () => {
     const [row] = recentActivity([preview('c1', 'hello', 5_000)], CONTACTS, PERSONAS, 10)
     expect(row.name).toBe('Code Reviewer')
     expect(row.repo).toBe('checkout-service')
+  })
+
+  it("carries the persona's chosen robot seed", () => {
+    const [row] = recentActivity([preview('c1', 'hello', 5_000)], CONTACTS, PERSONAS, 10)
+    expect(row.avatarSeed).toBe('p1')
   })
 
   it('keeps a contact whose persona is missing rather than hiding it', () => {

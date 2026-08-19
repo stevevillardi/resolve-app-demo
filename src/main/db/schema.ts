@@ -37,6 +37,13 @@ export const personaTemplates = sqliteTable('persona_templates', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   avatarColor: text('avatar_color').notNull(),
+  /**
+   * DiceBear bottts seed — which robot. Nullable rather than `notNull` so the
+   * migration needs no backfill: null reads as "seed = this row's id", which
+   * is exactly the robot every persona rendered before the column existed
+   * (coalesced in toPersonaTemplate). Same posture as `mcpServerIds` below.
+   */
+  avatarSeed: text('avatar_seed'),
   backend: text('backend', { enum: ['claude', 'codex'] }).notNull(),
   /**
    * Null means "whatever this backend defaults to", which is what every

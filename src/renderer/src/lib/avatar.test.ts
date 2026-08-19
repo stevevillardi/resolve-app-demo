@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { botttsDataUri, normalizeHex } from './avatar'
+import { botttsDataUri, normalizeHex, rollSeedCandidates } from './avatar'
 
 /**
  * The property the whole feature rests on: the same persona renders the same
@@ -54,5 +54,25 @@ describe('normalizeHex', () => {
     expect(normalizeHex('var(--muted)')).toBeNull()
     expect(normalizeHex('rebeccapurple')).toBeNull()
     expect(normalizeHex('')).toBeNull()
+  })
+})
+
+describe('rollSeedCandidates', () => {
+  it('returns the asked-for number of distinct, non-empty seeds', () => {
+    const seeds = rollSeedCandidates(7, 'current')
+    expect(seeds).toHaveLength(7)
+    expect(new Set(seeds).size).toBe(7)
+    expect(seeds.every((seed) => seed.length > 0)).toBe(true)
+  })
+
+  it('never offers the seed being replaced', () => {
+    // The picker pins the current robot in tile 1; a candidate equal to it
+    // would render the same robot twice.
+    expect(rollSeedCandidates(7, 'current')).not.toContain('current')
+  })
+
+  it('yields a different robot per candidate', () => {
+    const [a, b] = rollSeedCandidates(2, 'current')
+    expect(botttsDataUri(a, '#2a78d6')).not.toBe(botttsDataUri(b, '#2a78d6'))
   })
 })

@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { botttsDataUri, rollSeedCandidates } from '@/lib/avatar'
 import { ClaudeMark, CodexMark } from '@/components/brand/BrandMarks'
 import { CheckRow } from '@/components/common/CheckRow'
 import { ListRow } from '@/components/common/ListRow'
@@ -106,6 +107,11 @@ function PersonaForm({
 }): React.JSX.Element {
   const [name, setName] = useState(persona.name)
   const [avatarColor, setAvatarColor] = useState(persona.avatarColor)
+  const [avatarSeed, setAvatarSeed] = useState(persona.avatarSeed)
+  // Initializer, not a plain call: candidates must survive re-renders (typing
+  // in any field) and reshuffle only on an explicit roll. The form remounts
+  // per persona (key={persona.id}), which is what resets them on selection.
+  const [seedChoices, setSeedChoices] = useState(() => rollSeedCandidates(7, persona.avatarSeed))
   const [backend, setBackend] = useState<PersonaBackend>(persona.backend)
   const [model, setModel] = useState<string | null>(persona.model)
   const availableModels = useModels(backend)
@@ -139,6 +145,7 @@ function PersonaForm({
     ...persona,
     name,
     avatarColor,
+    avatarSeed,
     backend,
     model,
     systemPrompt,
@@ -159,7 +166,7 @@ function PersonaForm({
           <AvatarColorSwatch
             name={name || persona.name}
             color={avatarColor}
-            seed={persona.id}
+            seed={avatarSeed}
             size="sm"
           />
         }
@@ -254,6 +261,45 @@ function PersonaForm({
                   className="border-input h-8 w-12 cursor-pointer rounded-lg border bg-transparent p-1"
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Robot</Label>
+            <div className="flex items-center gap-1.5">
+              {/* Tile 1 is pinned to the current seed so a roll can never lose
+                  the robot you have; the die replaces only the candidates.
+                  Tiles tint with the in-form colour live — the (seed, color)
+                  memo in botttsDataUri keeps that cheap. */}
+              {[avatarSeed, ...seedChoices.filter((seed) => seed !== avatarSeed)].map((seed) => (
+                <button
+                  key={seed}
+                  type="button"
+                  aria-label="Choose this robot"
+                  aria-pressed={seed === avatarSeed}
+                  onClick={() => setAvatarSeed(seed)}
+                  className={cn(
+                    'size-8 shrink-0 overflow-hidden rounded-lg border transition-transform hover:scale-110',
+                    seed === avatarSeed ? 'border-foreground' : 'border-transparent'
+                  )}
+                  style={{ backgroundColor: `color-mix(in srgb, ${avatarColor} 16%, transparent)` }}
+                >
+                  <img
+                    src={botttsDataUri(seed, avatarColor)}
+                    alt=""
+                    draggable={false}
+                    className="size-full p-0.5"
+                  />
+                </button>
+              ))}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Roll new robots"
+                onClick={() => setSeedChoices(rollSeedCandidates(7, avatarSeed))}
+              >
+                <Dices className="size-4" />
+              </Button>
             </div>
           </div>
 

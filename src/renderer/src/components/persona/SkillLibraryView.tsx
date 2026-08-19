@@ -134,7 +134,7 @@ function SkillForm({
               <AvatarColorSwatch
                 name={persona.name}
                 color={persona.avatarColor}
-                seed={persona.id}
+                seed={persona.avatarSeed}
                 size="xs"
               />
               <span className="text-xs">{persona.name}</span>

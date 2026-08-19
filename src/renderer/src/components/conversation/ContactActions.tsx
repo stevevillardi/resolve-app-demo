@@ -566,7 +566,7 @@ function RebindPersonaDialog({
                   <AvatarColorSwatch
                     name={persona.name}
                     color={persona.avatarColor}
-                    seed={persona.id}
+                    seed={persona.avatarSeed}
                   />
                 }
               >

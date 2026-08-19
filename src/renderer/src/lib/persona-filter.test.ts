@@ -6,6 +6,7 @@ function persona(overrides: Partial<PersonaTemplate> & { name: string }): Person
   return {
     id: overrides.name.toLowerCase().replace(/\s+/g, '-'),
     avatarColor: '#2a78d6',
+    avatarSeed: overrides.name.toLowerCase().replace(/\s+/g, '-'),
     backend: 'claude',
     model: null,
     systemPrompt: 'Do the thing.',

@@ -24,6 +24,7 @@ const PERSONA = {
   id: 'p1',
   name: 'Code Reviewer',
   avatarColor: '#2a78d6',
+  avatarSeed: 'p1',
   backend: 'claude',
   model: null,
   systemPrompt: 'Review carefully.',

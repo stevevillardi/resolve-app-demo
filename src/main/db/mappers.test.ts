@@ -102,6 +102,32 @@ describe('toPersonaTemplate', () => {
     const persona = toPersonaTemplate(db.select().from(personaTemplates).all()[0])
     expect(persona.skillIds).toEqual([])
   })
+
+  it('coalesces a null avatar seed to the row id', () => {
+    // Null is the pre-0022 state, when the robot was derived from the id —
+    // coalescing keeps those rows' robots exactly as they were.
+    seedContact()
+    const persona = toPersonaTemplate(db.select().from(personaTemplates).all()[0])
+    expect(persona.avatarSeed).toBe('p1')
+  })
+
+  it('passes a chosen avatar seed through untouched', () => {
+    db.insert(personaTemplates)
+      .values({
+        id: 'p2',
+        name: 'Re-rolled',
+        avatarColor: '#000000',
+        avatarSeed: 'robot-7',
+        backend: 'codex',
+        systemPrompt: '',
+        skillIds: [],
+        sandbox: 'full_access',
+        githubScope: 'open_pr'
+      })
+      .run()
+    const persona = toPersonaTemplate(db.select().from(personaTemplates).all()[0])
+    expect(persona.avatarSeed).toBe('robot-7')
+  })
 })
 
 describe('toContact', () => {

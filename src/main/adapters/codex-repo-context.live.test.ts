@@ -38,6 +38,7 @@ let scratch: string
 
 const PERSONA: PersonaTemplate = {
   id: 'persona-seal',
+  avatarSeed: 'persona-seal',
   name: 'Seal',
   avatarColor: '#888888',
   backend: 'codex',

@@ -57,6 +57,9 @@ export function toPersonaTemplate(row: PersonaTemplateRow): PersonaTemplate {
     id: row.id,
     name: row.name,
     avatarColor: row.avatarColor,
+    // Null is the pre-column state: the robot used to be derived from the id,
+    // so coalescing to it renders those rows' robots exactly as before.
+    avatarSeed: row.avatarSeed ?? row.id,
     backend: row.backend,
     // Nullable rather than optional: "use the backend default" is a choice the
     // user can make, not an absent value.

@@ -84,7 +84,7 @@ function GroupAvatarCluster({
           style={{ backgroundColor: `color-mix(in srgb, ${persona.avatarColor} 16%, transparent)` }}
         >
           <img
-            src={botttsDataUri(persona.id, persona.avatarColor)}
+            src={botttsDataUri(persona.avatarSeed, persona.avatarColor)}
             alt=""
             draggable={false}
             className="size-full object-contain"
@@ -359,7 +359,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
               <AvatarColorSwatch
                 name={persona?.name ?? contact.displayName}
                 color={persona?.avatarColor ?? 'var(--muted)'}
-                seed={persona?.id}
+                seed={persona?.avatarSeed}
               />
             }
           />

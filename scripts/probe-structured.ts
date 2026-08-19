@@ -79,6 +79,7 @@ async function main(): Promise<void> {
 
   const persona: PersonaTemplate = {
     id: 'probe-summariser',
+    avatarSeed: 'probe-summariser',
     name: 'Probe summariser',
     avatarColor: '#2a78d6',
     backend: flags.backend,

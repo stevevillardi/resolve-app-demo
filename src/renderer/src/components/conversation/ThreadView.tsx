@@ -199,7 +199,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
           <AvatarColorSwatch
             name={persona.name}
             color={persona.avatarColor}
-            seed={persona.id}
+            seed={persona.avatarSeed}
             size="sm"
           />
         }
@@ -401,7 +401,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
             <AvatarColorSwatch
               name={persona.name}
               color={persona.avatarColor}
-              seed={persona.id}
+              seed={persona.avatarSeed}
               size="xs"
             />
             <span className="text-foreground font-medium">{persona.name}</span>

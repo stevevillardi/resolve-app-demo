@@ -41,6 +41,7 @@ function write(relative: string, content: string): void {
 function persona(overrides: Partial<PersonaTemplate> = {}): PersonaTemplate {
   return {
     id: 'p1',
+    avatarSeed: 'p1',
     name: 'Code Reviewer',
     avatarColor: '#2a78d6',
     backend: 'claude',

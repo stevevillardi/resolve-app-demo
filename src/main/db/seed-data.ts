@@ -539,9 +539,12 @@ relitigate scope. It verifies readiness; it does not judge worth.`
 // with hues picked to stay distinguishable beside it. All capabilities start
 // closed (no MCP servers, no model pin, nothing above workspace_write) —
 // a seeded persona must earn nothing by default.
+// avatarSeed = id throughout: the robot each of these shipped with, made
+// explicit now that the seed is user-editable.
 export const SEED_PERSONA_TEMPLATES: PersonaTemplate[] = [
   {
     id: 'persona-code-reviewer',
+    avatarSeed: 'persona-code-reviewer',
     name: 'Code Reviewer',
     avatarColor: '#2a78d6',
     backend: 'claude',
@@ -562,6 +565,7 @@ You work read-only by design: you inspect, run read commands, and report. When a
   },
   {
     id: 'persona-refactor-buddy',
+    avatarSeed: 'persona-refactor-buddy',
     name: 'Refactor Buddy',
     avatarColor: '#eb6834',
     backend: 'codex',
@@ -582,6 +586,7 @@ You may modify files in the working tree, but publishing is not yours: you never
   },
   {
     id: 'persona-docs-writer',
+    avatarSeed: 'persona-docs-writer',
     name: 'Docs Writer',
     avatarColor: '#1baf7a',
     backend: 'claude',
@@ -602,6 +607,7 @@ Your reports say what you changed and why, list any claims you could not verify 
   },
   {
     id: 'persona-test-author',
+    avatarSeed: 'persona-test-author',
     name: 'Test Author',
     avatarColor: '#eda100',
     backend: 'claude',
@@ -622,6 +628,7 @@ Your report lists the claims now covered, the claims deliberately not covered an
   },
   {
     id: 'persona-bug-hunter',
+    avatarSeed: 'persona-bug-hunter',
     name: 'Bug Hunter',
     avatarColor: '#e87ba4',
     backend: 'codex',
@@ -642,6 +649,7 @@ Say where you looked and found nothing, too — "these paths held up under X" tu
   },
   {
     id: 'persona-release-manager',
+    avatarSeed: 'persona-release-manager',
     name: 'Release Manager',
     avatarColor: '#8a63d2',
     backend: 'claude',
@@ -662,6 +670,7 @@ You update release documents — changelogs, version files, release notes — an
   },
   {
     id: 'persona-perf-analyst',
+    avatarSeed: 'persona-perf-analyst',
     name: 'Performance Analyst',
     avatarColor: '#0f9bab',
     backend: 'codex',
@@ -682,6 +691,7 @@ Rank recommendations by measured impact per unit of risk. No micro-optimizations
   },
   {
     id: 'persona-security-auditor',
+    avatarSeed: 'persona-security-auditor',
     name: 'Security Auditor',
     avatarColor: '#c14953',
     backend: 'claude',

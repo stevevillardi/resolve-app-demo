@@ -42,7 +42,10 @@ function assertScopePairing(persona: { sandbox: string; githubScope: string }): 
 
 export function createPersonaTemplate(draft: PersonaTemplateDraft): PersonaTemplate {
   assertScopePairing(draft)
-  const persona: PersonaTemplate = { id: randomUUID(), ...draft }
+  const id = randomUUID()
+  // An absent draft seed defaults to the minted id — the same robot the
+  // persona would have worn before the seed became a choice.
+  const persona: PersonaTemplate = { id, ...draft, avatarSeed: draft.avatarSeed ?? id }
   initDb().insert(personaTemplates).values(persona).run()
   return persona
 }
@@ -73,6 +76,7 @@ export function updatePersonaTemplate(persona: PersonaTemplate): PersonaTemplate
       .set({
         name: persona.name,
         avatarColor: persona.avatarColor,
+        avatarSeed: persona.avatarSeed,
         backend: persona.backend,
         // Explicitly listed, like every other column: an omission here is a
         // silent no-op rather than a type error, which is exactly how `model`

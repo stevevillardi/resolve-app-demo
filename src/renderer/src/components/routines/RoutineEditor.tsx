@@ -167,7 +167,7 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
                       <AvatarColorSwatch
                         name={optionPersona?.name ?? option.displayName}
                         color={optionPersona?.avatarColor ?? 'var(--muted)'}
-                        seed={optionPersona?.id}
+                        seed={optionPersona?.avatarSeed}
                         size="xs"
                       />
                       {option.displayName}

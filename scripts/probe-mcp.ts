@@ -169,6 +169,7 @@ async function probeList(): Promise<void> {
 function persona(overrides: Partial<PersonaTemplate> = {}): PersonaTemplate {
   return {
     id: 'probe',
+    avatarSeed: 'probe',
     name: 'Probe',
     avatarColor: '#888888',
     backend: 'claude',

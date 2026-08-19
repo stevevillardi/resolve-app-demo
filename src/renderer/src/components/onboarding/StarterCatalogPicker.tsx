@@ -39,7 +39,11 @@ export function PersonaCatalogGrid({
           checked={isSelected(entry.id)}
           onToggle={() => onToggle(entry.id)}
           leading={
-            <AvatarColorSwatch name={entry.name} color={entry.avatarColor} seed={entry.id} />
+            <AvatarColorSwatch
+              name={entry.name}
+              color={entry.avatarColor}
+              seed={entry.avatarSeed}
+            />
           }
           title={entry.name}
           description={

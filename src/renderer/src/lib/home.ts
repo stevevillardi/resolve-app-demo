@@ -23,8 +23,8 @@ export interface RecentItem {
   /** The persona's name, which is what the conversation list shows. */
   name: string
   color: string
-  /** The persona's id — the avatar seed. Absent when the persona is gone. */
-  personaId?: string
+  /** The persona's chosen robot seed. Absent when the persona is gone. */
+  avatarSeed?: string
   repo: string
   preview: string
   timestamp: number
@@ -65,7 +65,7 @@ export function recentActivity(
         contactId: contact.id,
         name: persona?.name ?? contact.displayName,
         color: persona?.avatarColor ?? 'var(--muted)',
-        ...(persona ? { personaId: persona.id } : {}),
+        ...(persona ? { avatarSeed: persona.avatarSeed } : {}),
         repo: repoName(contact.repoPath),
         preview: previewLine(preview.content),
         timestamp: preview.timestamp,

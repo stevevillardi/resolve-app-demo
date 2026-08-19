@@ -52,6 +52,7 @@ function commentCount(issue: number): number {
 function persona(overrides: Partial<PersonaTemplate> = {}): PersonaTemplate {
   return {
     id: 'live-mcp',
+    avatarSeed: 'live-mcp',
     name: 'Live',
     avatarColor: '#888888',
     backend: 'claude',

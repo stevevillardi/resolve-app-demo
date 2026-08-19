@@ -51,6 +51,12 @@ export const personaTemplateSchema = z.object({
   id: z.string(),
   name: z.string(),
   avatarColor: z.string(),
+  /**
+   * DiceBear bottts seed — which robot this persona wears. Distinct from
+   * `avatarColor`, which is only its tint. Historically the persona id;
+   * user-editable since the robot picker.
+   */
+  avatarSeed: z.string(),
   backend: personaBackendSchema,
   /**
    * Null means the backend's own default. Free text, not an enum — model
@@ -354,7 +360,12 @@ export const usageEventSchema = z.object({
 // minus nothing — the editors are whole-form saves, not partial patches.
 
 export const skillDraftSchema = skillSchema.omit({ id: true })
-export const personaTemplateDraftSchema = personaTemplateSchema.omit({ id: true })
+// `avatarSeed` is optional on the draft: quick-create flows don't ask for a
+// robot, and createPersonaTemplate defaults it to the minted id — the exact
+// robot those personas rendered before the seed became a choice.
+export const personaTemplateDraftSchema = personaTemplateSchema
+  .omit({ id: true })
+  .partial({ avatarSeed: true })
 /**
  * `worktreePath` and `branch` are omitted alongside the ids because main derives
  * them from the repo and persona — a renderer-supplied working path would be a

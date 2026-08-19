@@ -31,6 +31,7 @@ const { classifyClaudeError, createClaudeAdapter, toolDetail, usageFromResult } 
 
 const PERSONA: PersonaTemplate = {
   id: 'p1',
+  avatarSeed: 'p1',
   name: 'Reviewer',
   avatarColor: '#000',
   backend: 'claude',

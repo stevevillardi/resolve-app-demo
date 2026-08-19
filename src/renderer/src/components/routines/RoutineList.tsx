@@ -158,7 +158,7 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
                 <AvatarColorSwatch
                   name={persona?.name ?? 'Routine'}
                   color={persona?.avatarColor ?? 'var(--muted)'}
-                  seed={persona?.id}
+                  seed={persona?.avatarSeed}
                 />
                 {/* Disabled routines are dimmed rather than hidden — a routine
                     that exists but isn't running is worth seeing. */}
