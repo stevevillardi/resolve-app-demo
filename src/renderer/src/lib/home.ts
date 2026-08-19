@@ -290,6 +290,30 @@ export function dailySpend(events: UsageEvent[], now: number, days: number): Dai
   return points
 }
 
+/**
+ * Each day's bar height, as a percentage of the tallest day in the window.
+ *
+ * Two rules that a bare `cost / max` does not give you. A day that spent
+ * *something* never draws as nothing: below the floor a real turn is
+ * indistinguishable from a quiet day, which is the one comparison the strip
+ * exists to make. And a day that spent nothing draws nothing at all — its
+ * track is still there, so seven days always read as seven days.
+ *
+ * All zeros when the window has no priced spend in it: turns on a model with
+ * no published price report `costUsd: null`, and scaling those to full height
+ * would invent a week out of an absence of prices.
+ */
+export function spendBarPercents(points: DailySpendPoint[]): number[] {
+  const max = Math.max(0, ...points.map((point) => point.cost))
+  if (max <= 0) return points.map(() => 0)
+  return points.map((point) =>
+    point.cost <= 0 ? 0 : Math.max(SPEND_BAR_FLOOR, (point.cost / max) * 100)
+  )
+}
+
+/** Percent of the track below which a bar stops reading as a bar. */
+const SPEND_BAR_FLOOR = 8
+
 // --- Budget banner (Phase 20) ------------------------------------------------
 
 export interface BudgetBanner {

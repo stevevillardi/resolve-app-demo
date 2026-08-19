@@ -155,7 +155,7 @@ function StepRow({
 function ConceptGrid(): React.JSX.Element {
   const setSection = useUiStore((state) => state.setSection)
   return (
-    <div className="grid gap-1.5 @3xl/pane:grid-cols-2">
+    <div className="grid gap-1.5 @3xl/pane:grid-cols-2 @6xl/pane:grid-cols-3">
       {guideConcepts().map((concept) => (
         <ListRow
           key={concept.section}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FileX2 } from 'lucide-react'
 import { EmptyPane } from '@/components/common/EmptyPane'
-import { languageForPath, unrenderableReason } from '@/lib/diff-view'
+import { languageForPath, noVisibleChangeNote, unrenderableReason } from '@/lib/diff-view'
 import { loadMonaco } from '@/lib/monaco-host'
 import type { FileDiff } from '../../../../shared/ipc-contract'
 import type * as MonacoModule from 'monaco-editor'
@@ -28,7 +28,23 @@ export function DiffPane({
   if (reason) {
     return <EmptyPane icon={FileX2} title={file.path} description={reason} />
   }
-  return <MonacoDiff file={file} sideBySide={sideBySide} />
+
+  // Said above the editor, not instead of it. A renamed file's contents are
+  // still worth reading, and replacing a mode change with a message would hide
+  // the file to explain it — the direction unrenderableReason exists to avoid.
+  const note = noVisibleChangeNote(file)
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {note && (
+        <p className="border-border text-muted-foreground shrink-0 border-b px-3 py-1.5 text-xs">
+          {note}
+        </p>
+      )}
+      <div className="min-h-0 flex-1">
+        <MonacoDiff file={file} sideBySide={sideBySide} />
+      </div>
+    </div>
+  )
 }
 
 function MonacoDiff({
@@ -70,12 +86,25 @@ function MonacoDiff({
           readOnly: true,
           originalEditable: false,
           renderSideBySide: sideBySide,
+          // The segmented control above this pane is the only thing that
+          // decides the layout. Monaco otherwise drops to inline below 900px,
+          // and the branch pane hands this editor roughly 800px on a normal
+          // window (pane width less the 224px file rail) — so "Split" had been
+          // rendering inline, with two adjacent line-number gutters, for every
+          // window narrower than about 1900px. A control that silently does
+          // the other thing is worse than one that is cramped.
+          useInlineViewWhenSpaceIsLimited: false,
           automaticLayout: true,
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
           renderOverviewRuler: false,
           hideUnchangedRegions: { enabled: true },
           diffAlgorithm: 'advanced',
+          // Monaco defaults this to true, which drops leading and trailing
+          // whitespace edits entirely: git reports an insertion and a
+          // deletion, the pane shows an unmarked file. A viewer for reviewing
+          // what a persona committed cannot hide a change git reported.
+          ignoreTrimWhitespace: false,
           contextmenu: false,
           // Hover and lightbulbs are what would wake the language services
           // whose workers are deliberately not shipped — see monaco-host.ts.

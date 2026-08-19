@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process'
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -82,6 +82,30 @@ describe('diffNameStatus', () => {
       oldPath: 'src/old.ts',
       status: 'renamed'
     })
+  })
+
+  /**
+   * The evidence behind `noVisibleChangeNote` in the renderer. git reports `M`
+   * for a mode-only change, so a file with byte-identical blobs reaches the
+   * diff pane as an ordinary modified pair — which Monaco then renders with
+   * every line unchanged. Proven against real git rather than assumed, because
+   * the note the viewer prints is a claim about git's behaviour.
+   */
+  it('calls a mode-only change modified, with both sides identical', async () => {
+    const base = run(['rev-parse', 'HEAD'])
+    run(['checkout', '-q', '-b', 'persona/chmod'])
+    // On disk rather than `update-index --chmod`, which moves the index alone
+    // and leaves the checkout looking dirty against its own commit.
+    chmodSync(join(repo, 'src/a.ts'), 0o755)
+    commit('make it executable')
+    run(['checkout', '-q', 'main'])
+
+    const entries = await diffNameStatus(repo, base, 'persona/chmod')
+    expect(entries).toEqual([{ path: 'src/a.ts', status: 'modified' }])
+
+    const before = await fileAtRev(repo, base, 'src/a.ts', 1_000)
+    const after = await fileAtRev(repo, 'persona/chmod', 'src/a.ts', 1_000)
+    expect(after.text).toBe(before.text)
   })
 
   it('throws a legible error for an unknown revision', async () => {

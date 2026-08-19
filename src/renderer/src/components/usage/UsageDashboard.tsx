@@ -16,6 +16,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { PaneBody } from '@/components/common/PaneBody'
 import { Section } from '@/components/common/Section'
+import { StatTile } from '@/components/common/StatTile'
 import { useContacts } from '@/hooks/useConversations'
 import { useSaveExport } from '@/hooks/useExport'
 import { exportFileName, usageToCsv } from '@/lib/export'
@@ -83,24 +84,6 @@ const BREAKDOWNS = [
   { value: 'repo', label: 'Repo' }
 ] as const
 type Breakdown = (typeof BREAKDOWNS)[number]['value']
-
-function StatTile({
-  label,
-  value,
-  note
-}: {
-  label: string
-  value: string
-  note?: string
-}): React.JSX.Element {
-  return (
-    <div className="border-border rounded-lg border p-3">
-      <p className="text-muted-foreground text-meta font-medium tracking-wide uppercase">{label}</p>
-      <p className="mt-1 font-mono text-xl tabular-nums">{value}</p>
-      {note && <p className="text-muted-foreground mt-0.5 text-meta">{note}</p>}
-    </div>
-  )
-}
 
 /**
  * One breakdown, as labelled bars.

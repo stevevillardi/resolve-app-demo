@@ -7,6 +7,7 @@ import {
   formatUpcoming,
   missedRuns,
   recentActivity,
+  spendBarPercents,
   spendWindow,
   upcomingRuns
 } from './home'
@@ -295,6 +296,32 @@ describe('dailySpend', () => {
   it('excludes events older than the window', () => {
     const points = dailySpend([usage(noon2 - 30 * dayMs2, 9)], noon2, 7)
     expect(points.every((point) => point.cost === 0)).toBe(true)
+  })
+})
+
+describe('spendBarPercents', () => {
+  function points(...costs: number[]) {
+    return costs.map((cost, i) => ({ day: i, label: `d${i}`, cost }))
+  }
+
+  it('scales to the tallest day in the window', () => {
+    expect(spendBarPercents(points(0, 10, 5))).toEqual([0, 100, 50])
+  })
+
+  it('keeps a day that spent something visible against the day beside it', () => {
+    // 0.01 of 100 is a tenth of a percent — a real turn drawn as nothing, and
+    // indistinguishable from the quiet day next to it. The floor is the whole
+    // reason this is not `cost / max`.
+    const [quiet, tiny, big] = spendBarPercents(points(0, 0.01, 100))
+    expect(quiet).toBe(0)
+    expect(tiny).toBeGreaterThanOrEqual(8)
+    expect(big).toBe(100)
+  })
+
+  it('draws nothing at all for a window with no priced spend', () => {
+    // Every turn on a model with no published price. Scaling those to full
+    // height would invent a week out of an absence of prices.
+    expect(spendBarPercents(points(0, 0, 0))).toEqual([0, 0, 0])
   })
 })
 
