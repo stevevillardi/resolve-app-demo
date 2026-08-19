@@ -64,3 +64,12 @@ export function rollSeedCandidates(count: number, exclude: string): string[] {
   }
   return seeds
 }
+
+/**
+ * Replaces every tile except `keep`, in place. The picker's tiles never
+ * reorder — a selection that jumped to slot 1 read as the click not working —
+ * so the die refreshes the tiles around the chosen robot instead.
+ */
+export function rerollOtherSeeds(tiles: string[], keep: string): string[] {
+  return tiles.map((tile) => (tile === keep ? tile : randomAvatarSeed()))
+}

@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select'
 import { SegmentedControl } from '@/components/common/SegmentedControl'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
-import { botttsDataUri, rollSeedCandidates } from '@/lib/avatar'
+import { botttsDataUri, rerollOtherSeeds, rollSeedCandidates } from '@/lib/avatar'
 import { ClaudeMark, CodexMark } from '@/components/brand/BrandMarks'
 import { CheckRow } from '@/components/common/CheckRow'
 import { ListRow } from '@/components/common/ListRow'
@@ -108,10 +108,14 @@ function PersonaForm({
   const [name, setName] = useState(persona.name)
   const [avatarColor, setAvatarColor] = useState(persona.avatarColor)
   const [avatarSeed, setAvatarSeed] = useState(persona.avatarSeed)
-  // Initializer, not a plain call: candidates must survive re-renders (typing
-  // in any field) and reshuffle only on an explicit roll. The form remounts
-  // per persona (key={persona.id}), which is what resets them on selection.
-  const [seedChoices, setSeedChoices] = useState(() => rollSeedCandidates(7, persona.avatarSeed))
+  // Initializer, not a plain call: tiles must survive re-renders (typing in
+  // any field) and refresh only on an explicit roll. The form remounts per
+  // persona (key={persona.id}), which is what resets them on selection change.
+  // The list is stable — picking a robot moves the ring, never the tiles.
+  const [seedTiles, setSeedTiles] = useState(() => [
+    persona.avatarSeed,
+    ...rollSeedCandidates(7, persona.avatarSeed)
+  ])
   const [backend, setBackend] = useState<PersonaBackend>(persona.backend)
   const [model, setModel] = useState<string | null>(persona.model)
   const availableModels = useModels(backend)
@@ -209,11 +213,11 @@ function PersonaForm({
         )}
 
         <section className="flex flex-col gap-4">
-          {/* Capped rather than stretched. A persona name is a dozen
-              characters; giving it the full pane put its colour swatch a
-              thousand pixels from the field it belongs to. */}
-          <div className="flex max-w-md items-end gap-3">
-            <div className="flex flex-1 flex-col gap-1.5">
+          {/* One row, wrapping on narrow panes. The name is capped rather
+              than stretched — a persona name is a dozen characters, and
+              letting it flex put the swatches a thousand pixels away. */}
+          <div className="flex flex-wrap items-end gap-x-5 gap-y-4">
+            <div className="flex w-64 flex-col gap-1.5">
               <Label htmlFor="persona-name">Name</Label>
               <Input
                 id="persona-name"
@@ -262,44 +266,46 @@ function PersonaForm({
                 />
               </div>
             </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>Robot</Label>
-            <div className="flex items-center gap-1.5">
-              {/* Tile 1 is pinned to the current seed so a roll can never lose
-                  the robot you have; the die replaces only the candidates.
-                  Tiles tint with the in-form colour live — the (seed, color)
-                  memo in botttsDataUri keeps that cheap. */}
-              {[avatarSeed, ...seedChoices.filter((seed) => seed !== avatarSeed)].map((seed) => (
-                <button
-                  key={seed}
-                  type="button"
-                  aria-label="Choose this robot"
-                  aria-pressed={seed === avatarSeed}
-                  onClick={() => setAvatarSeed(seed)}
-                  className={cn(
-                    'size-8 shrink-0 overflow-hidden rounded-lg border transition-transform hover:scale-110',
-                    seed === avatarSeed ? 'border-foreground' : 'border-transparent'
-                  )}
-                  style={{ backgroundColor: `color-mix(in srgb, ${avatarColor} 16%, transparent)` }}
+            <div className="flex flex-col gap-1.5">
+              <Label>Robot</Label>
+              <div className="flex items-center gap-1.5">
+                {/* Stable order: the ring moves to the clicked tile, and the
+                    die refreshes every tile except the chosen one — a
+                    selection that reordered tiles read as the click failing.
+                    Tiles tint with the in-form colour live; the (seed, color)
+                    memo in botttsDataUri keeps that cheap. */}
+                {seedTiles.map((seed) => (
+                  <button
+                    key={seed}
+                    type="button"
+                    aria-label="Choose this robot"
+                    aria-pressed={seed === avatarSeed}
+                    onClick={() => setAvatarSeed(seed)}
+                    className={cn(
+                      'size-8 shrink-0 overflow-hidden rounded-lg border transition-transform hover:scale-110',
+                      seed === avatarSeed ? 'border-foreground' : 'border-transparent'
+                    )}
+                    style={{
+                      backgroundColor: `color-mix(in srgb, ${avatarColor} 16%, transparent)`
+                    }}
+                  >
+                    <img
+                      src={botttsDataUri(seed, avatarColor)}
+                      alt=""
+                      draggable={false}
+                      className="size-full p-0.5"
+                    />
+                  </button>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Roll new robots"
+                  onClick={() => setSeedTiles((tiles) => rerollOtherSeeds(tiles, avatarSeed))}
                 >
-                  <img
-                    src={botttsDataUri(seed, avatarColor)}
-                    alt=""
-                    draggable={false}
-                    className="size-full p-0.5"
-                  />
-                </button>
-              ))}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Roll new robots"
-                onClick={() => setSeedChoices(rollSeedCandidates(7, avatarSeed))}
-              >
-                <Dices className="size-4" />
-              </Button>
+                  <Dices className="size-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
