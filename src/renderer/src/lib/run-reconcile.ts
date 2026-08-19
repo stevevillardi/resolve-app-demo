@@ -24,3 +24,26 @@ export function staleTurnContacts(
     .filter(([, turn]) => !active.has(turn.runId))
     .map(([contactId]) => contactId)
 }
+
+/**
+ * The symmetric half (Phase 25): active runs the store has never heard of.
+ *
+ * A turn the renderer did not start — a routine fire (scheduled or Run now),
+ * or any turn surviving a renderer reload — has no `begin()` caller, so
+ * nothing streams and the thread views render an idle conversation while
+ * main is mid-turn. Sweeping these *into* the store is what makes background
+ * work visible with the same machinery a sent message uses.
+ *
+ * A contact that already has a store entry is left alone even if the runId
+ * differs — the store is keyed by contact, and clobbering an in-flight entry
+ * would discard a live stream to adopt a name for the same conversation.
+ */
+export function missingTurnRuns(
+  byContact: Record<string, { runId: string }>,
+  runs: readonly { runId: string; contactId: string }[]
+): { contactId: string; runId: string }[] {
+  const knownRuns = new Set(Object.values(byContact).map((turn) => turn.runId))
+  return runs
+    .filter((run) => !knownRuns.has(run.runId) && !(run.contactId in byContact))
+    .map((run) => ({ contactId: run.contactId, runId: run.runId }))
+}
