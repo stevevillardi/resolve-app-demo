@@ -260,7 +260,8 @@ describe('contention with a writer already holding the repo', () => {
       contactName: 'Refactor Buddy',
       workingPath: REPO,
       mode: 'exclusive',
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      origin: { kind: 'message' }
     })
   }
 
@@ -337,7 +338,8 @@ describe('outcome notifications', () => {
       contactName: 'Refactor Buddy',
       workingPath: REPO,
       mode: 'exclusive',
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      origin: { kind: 'message' }
     })
 
     const result = await fireRoutine('routine-1').completed

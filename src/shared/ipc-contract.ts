@@ -205,7 +205,19 @@ const activeRunSchema = z.object({
   workingPath: z.string(),
   /** `shared` runs cannot write, so any number of them may overlap. */
   mode: z.enum(['shared', 'exclusive']),
-  startedAt: z.number()
+  startedAt: z.number(),
+  /**
+   * What started the turn. Flattened rather than a nested union so a renderer
+   * surface filters with a field compare — and so output validation fails
+   * loudly if main forgets to populate it. Before this existed, no surface
+   * could tell a routine fire from a chat, which is why the Routines pane
+   * couldn't say "running" about its own routine.
+   */
+  origin: z.enum(['message', 'mention', 'routine']),
+  /** Set when origin is `routine`. */
+  routineId: z.string().nullable(),
+  /** Set when origin is `mention` — the group thread it was sent from. */
+  groupId: z.string().nullable()
 })
 
 /**

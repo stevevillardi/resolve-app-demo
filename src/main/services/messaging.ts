@@ -55,6 +55,10 @@ export interface ActiveRun {
   workingPath: string
   mode: 'shared' | 'exclusive'
   startedAt: number
+  /** Flattened TurnOrigin — see activeRunSchema for why it is flat. */
+  origin: 'message' | 'mention' | 'routine'
+  routineId: string | null
+  groupId: string | null
 }
 
 export interface MentionResult {
@@ -167,7 +171,10 @@ export function listActiveRuns(): ActiveRun[] {
     contactName: holder.contactName,
     workingPath: holder.workingPath,
     mode: holder.mode,
-    startedAt: holder.startedAt
+    startedAt: holder.startedAt,
+    origin: holder.origin.kind,
+    routineId: holder.origin.kind === 'routine' ? holder.origin.routineId : null,
+    groupId: holder.origin.kind === 'mention' ? holder.origin.groupId : null
   }))
 }
 
@@ -340,7 +347,8 @@ function startTurn(
     contactName: contact.displayName,
     workingPath,
     mode,
-    startedAt: Date.now()
+    startedAt: Date.now(),
+    origin
   })
 
   if (!release) {

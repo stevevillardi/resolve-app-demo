@@ -447,7 +447,8 @@ describe('rebindPersona', () => {
       contactName: contact.displayName,
       workingPath: '~/code/app',
       mode: 'shared',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     expect(() => rebindContactPersona(contact.id, OTHER_PERSONA)).toThrow(/working right now/)
@@ -596,7 +597,8 @@ describe('recreateContact', () => {
       contactName: original.displayName,
       workingPath: '~/code/app',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     await expect(
@@ -709,7 +711,8 @@ describe('setContactIsolation', () => {
       contactName: contact.displayName,
       workingPath: '~/code/app',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     await expect(setContactIsolation(contact.id, 'worktree')).rejects.toThrow(/working right now/)
@@ -763,7 +766,8 @@ describe('startFreshSession', () => {
       contactName: contact.displayName,
       workingPath: '~/code/app',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     expect(() => startFreshSession(contact.id)).toThrow(/working right now/)
@@ -792,7 +796,8 @@ describe('deleteContact under a running turn', () => {
       contactName: contact.displayName,
       workingPath: '~/code/app',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     await expect(deleteContact(contact.id)).rejects.toThrow(/working right now/)
@@ -816,7 +821,8 @@ describe('deleteContact under a running turn', () => {
       contactName: busy.displayName,
       workingPath: '~/code/other',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     await expect(deleteContact(target.id)).resolves.toBe(true)
@@ -830,7 +836,8 @@ describe('deleteContact under a running turn', () => {
       contactName: contact.displayName,
       workingPath: '~/code/app',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     await expect(deleteContact(contact.id)).rejects.toThrow(/Reviewer · app is working/)

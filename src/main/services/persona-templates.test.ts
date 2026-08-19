@@ -192,7 +192,8 @@ describe('update', () => {
       contactName: 'alpha',
       workingPath: '~/code/alpha',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     expect(() => updatePersonaTemplate({ ...persona, backend: 'codex', model: null })).toThrow(
@@ -220,7 +221,8 @@ describe('update', () => {
       contactName: 'alpha',
       workingPath: '~/code/alpha',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     updatePersonaTemplate({ ...persona, name: 'Renamed', sandbox: 'workspace_write' })
