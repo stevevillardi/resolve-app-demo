@@ -84,4 +84,4 @@ if ! wait "$codesign_pid"; then
 fi
 
 echo "sign-dev-electron: signed $APP"
-codesign -d -r- "$APP" 2>&1 | sed -n 's/^# designated => /  designated => /p'
+codesign -d -r- "$APP" 2>&1 | sed -n 's/^#* *designated =>/  designated =>/p'
