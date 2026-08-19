@@ -21,6 +21,13 @@ export type AppStateKey =
   /** Set once the first-run defaults have been inserted. See services/seed.ts. */
   | 'seed_version'
   /**
+   * 'system' | 'light' | 'dark'. Here rather than in renderer storage because
+   * main derives the window's pre-paint background from it: reading the OS
+   * theme instead meant an explicit dark choice on a light system flashed
+   * white on every launch. Absent means 'system'.
+   */
+  | 'theme_preference'
+  /**
    * Where cloned repos land. Chosen by the user the first time a clone is
    * needed rather than defaulted, since ~/Developer, ~/code and ~/src are each
    * somebody's convention. See services/repos.ts.

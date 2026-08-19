@@ -11,6 +11,7 @@ import {
   setAppStateNumber
 } from '../../services/app-state'
 import { chooseWorkspaceRoot } from '../../services/repos'
+import { getThemePreference, setThemePreference } from '../../services/theme'
 
 registerProcedure('workspace.getRoot', () => {
   const path = getAppState('workspace_root')
@@ -18,6 +19,12 @@ registerProcedure('workspace.getRoot', () => {
 })
 
 registerProcedure('workspace.chooseRoot', async () => ({ path: await chooseWorkspaceRoot() }))
+
+registerProcedure('theme.get', () => ({ preference: getThemePreference() }))
+
+registerProcedure('theme.set', ({ preference }) => ({
+  preference: setThemePreference(preference)
+}))
 
 registerProcedure('notifications.get', () => ({ enabled: notificationsEnabled() }))
 

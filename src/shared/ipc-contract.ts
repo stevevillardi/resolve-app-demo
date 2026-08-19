@@ -17,6 +17,7 @@ import {
   skillDraftSchema,
   skillSchema,
   systemSummaryCategorySchema,
+  themePreferenceSchema,
   usageEventSchema
 } from './domain'
 
@@ -398,6 +399,20 @@ export const ipcContract = {
   },
 
   /** OS notifications on/off. Default ON — absence of the flag means enabled. */
+  /**
+   * The theme the user picked. Stored app-side rather than in the renderer
+   * because main paints the window background from it before the bundle loads
+   * (see services/theme.ts).
+   */
+  'theme.get': {
+    input: z.void(),
+    output: z.object({ preference: themePreferenceSchema })
+  },
+  'theme.set': {
+    input: z.object({ preference: themePreferenceSchema }),
+    output: z.object({ preference: themePreferenceSchema })
+  },
+
   'notifications.get': {
     input: z.void(),
     output: z.object({ enabled: z.boolean() })

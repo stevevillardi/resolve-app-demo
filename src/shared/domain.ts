@@ -47,6 +47,15 @@ export const skillSchema = z.object({
   content: z.string()
 })
 
+/**
+ * Which theme the user chose, as opposed to which one is showing: 'system'
+ * resolves against the OS at paint time. Lives in the shared layer because
+ * main needs it too — the window's pre-paint background colour is derived
+ * from it (see src/main/index.ts), and main cannot read renderer storage.
+ */
+export const themePreferenceSchema = z.enum(['system', 'light', 'dark'])
+export type ThemePreference = z.infer<typeof themePreferenceSchema>
+
 export const personaTemplateSchema = z.object({
   id: z.string(),
   name: z.string(),

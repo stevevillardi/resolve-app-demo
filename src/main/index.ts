@@ -28,6 +28,7 @@ import { sweepInterruptedToolCalls } from './services/reconcile'
 import { pruneOrphanedWorktrees } from './services/worktrees'
 import { startScheduler, stopScheduler } from './services/scheduler'
 import { seedIfNeeded } from './services/seed'
+import { applyThemePreference } from './services/theme'
 import { createTray, destroyTray, hasTray, refreshTrayMenu } from './tray'
 import { DOCS_URL, MENU_ACTION_CHANNEL, type MenuActionId } from '../shared/menu'
 
@@ -54,6 +55,8 @@ function createWindow(): void {
     autoHideMenuBar: true,
     // Painted behind the renderer so the window doesn't flash white while the
     // bundle loads. Matches --background: light #ffffff, dark #000000.
+    // shouldUseDarkColors answers for the user's stored choice, not the OS,
+    // because applyThemePreference() has set themeSource by now.
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#ffffff',
     // Hide the macOS title bar and let the nav rail own that space, with the
     // traffic lights inset into it. The renderer marks its own drag regions
@@ -139,6 +142,11 @@ app.whenReady().then(async () => {
   // is a turn the last process took down with it (the run registry starts
   // empty), and reconciling first means the renderer's first read already
   // sees the truth instead of repainting it.
+  // Before createWindow(): the window's backgroundColor is read from
+  // nativeTheme at construction, and until this runs nativeTheme answers for
+  // the OS rather than the user. Someone running the app dark on a light
+  // system used to watch it flash white on every launch.
+  applyThemePreference()
   sweepInterruptedToolCalls()
   // Before setupIpc, so the renderer's first skills.list can never race an
   // empty library and render the "no skills" empty state on a fresh install.

@@ -49,6 +49,7 @@ import {
   useWorkspaceRoot
 } from '@/hooks/useSettings'
 import { useUiStore, type ThemePreference } from '@/store/useUiStore'
+import { useThemePreference } from '@/hooks/useThemePreference'
 import { DOCS_URL } from '../../../../shared/menu'
 
 const THEME_OPTIONS = [
@@ -86,8 +87,7 @@ export function SettingsDialog({
 function SettingsContent(): React.JSX.Element {
   const { data: status } = useAuthStatus()
   const setDialog = useUiStore((state) => state.setDialog)
-  const themePreference = useUiStore((state) => state.themePreference)
-  const setThemePreference = useUiStore((state) => state.setThemePreference)
+  const { preference: themePreference, setPreference: setThemePreference } = useThemePreference()
 
   const anthropicKey = useSetAnthropicApiKey()
   const openAiKey = useSetOpenAiApiKey()

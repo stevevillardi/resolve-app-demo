@@ -9,7 +9,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SidebarMenuButton } from '@/components/ui/sidebar'
 import { RAIL_BUTTON } from '@/lib/nav-items'
-import { useUiStore, type ThemePreference } from '@/store/useUiStore'
+import { type ThemePreference } from '@/store/useUiStore'
+import { useThemePreference } from '@/hooks/useThemePreference'
 
 const THEMES: { value: ThemePreference; label: string; icon: LucideIcon }[] = [
   { value: 'system', label: 'Match system', icon: Monitor },
@@ -20,8 +21,7 @@ const THEMES: { value: ThemePreference; label: string; icon: LucideIcon }[] = [
 // A menu rather than a cycling button: cycling forces you to click through
 // states you don't want and never shows which of the three is active.
 export function ThemeMenu(): React.JSX.Element {
-  const themePreference = useUiStore((state) => state.themePreference)
-  const setThemePreference = useUiStore((state) => state.setThemePreference)
+  const { preference: themePreference, setPreference: setThemePreference } = useThemePreference()
   const active = THEMES.find((theme) => theme.value === themePreference) ?? THEMES[0]
   const ActiveIcon = active.icon
 

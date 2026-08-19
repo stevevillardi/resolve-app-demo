@@ -1,4 +1,7 @@
-export type ThemePreference = 'system' | 'light' | 'dark'
+// Re-exported, not redeclared: main stores and validates this same union
+// (shared/domain.ts), and two copies would drift the moment one gained a value.
+export type { ThemePreference } from '../../../shared/domain'
+import type { ThemePreference } from '../../../shared/domain'
 
 const DARK_QUERY = '(prefers-color-scheme: dark)'
 
