@@ -79,7 +79,15 @@ export function secretUnreadable(key: SecretKey): boolean {
 export function getSecret(key: SecretKey): string | null {
   const path = secretPath(key)
   if (!existsSync(path)) return null
-  if (!isSecretStorageAvailable()) return null
+  if (!isSecretStorageAvailable()) {
+    // Ciphertext exists and cannot be read, which is what `unreadable` means —
+    // so mark it here too. Returning null without the mark made every status
+    // surface reach for the wrong sentence: "Connect GitHub first" about a
+    // credential that is stored and intact. `secretStorageAvailable` carries
+    // the distinct "no keyring on this machine at all" meaning separately.
+    unreadable.add(key)
+    return null
+  }
 
   try {
     const value = safeStorage.decryptString(readFileSync(path))

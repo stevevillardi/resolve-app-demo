@@ -131,6 +131,33 @@ describe('unavailable OS keychain', () => {
     encryptionAvailable = false
     expect(isSecretStorageAvailable()).toBe(false)
   })
+
+  // Regression: this branch returned before the mark was set, so a stored,
+  // intact credential that merely could not be unlocked was reported as though
+  // nothing had ever been stored — GitHub then said "Connect GitHub first"
+  // rather than "this build can't unlock it".
+  it('marks a stored key unreadable rather than looking absent', () => {
+    setSecret('github_token', 'gho_x')
+    encryptionAvailable = false
+
+    expect(getSecret('github_token')).toBeNull()
+    expect(secretUnreadable('github_token')).toBe(true)
+    // The ciphertext is untouched — the keyring came back, not the secret went.
+    expect(hasSecret('github_token')).toBe(true)
+  })
+
+  it('does not mark a key that was never stored', () => {
+    // deleteSecret to establish the precondition rather than assume it: the
+    // `unreadable` set is module-level by design (the verdict belongs to the
+    // running process), so it outlives an individual case here.
+    deleteSecret('github_token')
+    encryptionAvailable = false
+
+    // Returns at the no-file check, before the availability branch — an absent
+    // credential is absent, not locked.
+    expect(getSecret('github_token')).toBeNull()
+    expect(secretUnreadable('github_token')).toBe(false)
+  })
 })
 
 describe('undecryptable ciphertext', () => {
