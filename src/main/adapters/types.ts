@@ -250,6 +250,17 @@ export interface AdapterConfig {
    * dev, broken inside a packaged app.
    */
   codexBinaryPath?: string | null
+  /**
+   * Absolute path to the vendored `claude` executable, injected for exactly the
+   * same reason as `codexBinaryPath` — and missing until a packaged build
+   * failed with `spawn ENOTDIR` on every Claude call.
+   *
+   * The failure is quiet by construction: the SDK resolves the binary with
+   * `require.resolve` and guards it with `existsSync`, and inside a packaged
+   * app that resolves *into* `app.asar`, where Electron's patched `fs` reports
+   * it present. Only the spawn itself, which has no asar awareness, disagrees.
+   */
+  claudeBinaryPath?: string | null
   /** Extra environment for the backend subprocess. Merged, never replacing. */
   env?: NodeJS.ProcessEnv
   /**

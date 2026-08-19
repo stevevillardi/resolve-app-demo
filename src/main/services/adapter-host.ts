@@ -1,5 +1,6 @@
 import { adapterFor, type AdapterConfig, type AgentAdapter } from '../adapters'
 import { GITHUB_MCP_TOKEN_ENV } from '../adapters/github-mcp-tools'
+import { resolveClaudeBinary } from './claude-auth'
 import { resolveCodexBinary } from './codex-auth'
 import { getGitHubToken } from './github-auth'
 import { getSecret, secretsPathForDenyList } from './secrets'
@@ -69,11 +70,15 @@ function backendEnv(backend: PersonaBackend, needsGithubToken: boolean): NodeJS.
  * Read fresh per turn rather than cached at startup, so signing in during
  * onboarding takes effect without a relaunch.
  *
- * `codexBinaryPath` is the part that fails late if it is forgotten: the SDK
+ * The two binary paths are the part that fails late if forgotten: each SDK
  * falls back to its own require.resolve lookup, which works in dev and breaks
- * inside a packaged app, where the binary lives in app.asar.unpacked. The
- * resolver needs `electron` to find it, which is exactly why the adapters take
- * it as config instead of importing it.
+ * inside a packaged app, where the binaries live in app.asar.unpacked. The
+ * resolvers need `electron` to find them, which is exactly why the adapters
+ * take them as config instead of importing.
+ *
+ * "Fails late" was literal. Only codex was filled in here for three phases,
+ * and nothing caught it, because the whole class of bug is invisible until the
+ * app is packaged — every test and every dev run resolves these correctly.
  */
 export function adapterConfig(
   backend: PersonaBackend,
@@ -81,6 +86,9 @@ export function adapterConfig(
 ): AdapterConfig {
   return {
     codexBinaryPath: resolveCodexBinary(),
+    // Both backends, for the same reason. Only codex had this until a packaged
+    // build proved the Claude half was missing — see AdapterConfig.
+    claudeBinaryPath: resolveClaudeBinary(),
     env: backendEnv(backend, options.needsGithubToken ?? false),
     // The field has existed since Phase 5, is plumbed all the way into the
     // Claude OS sandbox, and until now nothing ever filled it — so the one

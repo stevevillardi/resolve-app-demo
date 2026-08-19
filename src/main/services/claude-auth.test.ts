@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AccountInfo } from '@anthropic-ai/claude-agent-sdk'
 
 /**
@@ -29,6 +29,19 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 const secretStore = new Map<string, string>()
 let encryptionAvailable = true
 
+/**
+ * Captures what `resolveClaudeBinary` asks for, so the package naming can be
+ * asserted without a packaged app on disk. The search itself — and the asar
+ * rule that is the actual bug guard — belongs to `vendored-binaries.test.ts`.
+ */
+let requested: string[] = []
+vi.mock('./vendored-binaries', () => ({
+  resolveVendored: (relative: string) => {
+    requested.push(relative)
+    return relative.includes('darwin-arm64') ? `/unpacked/${relative}` : null
+  }
+}))
+
 vi.mock('./secrets', () => ({
   getSecret: (k: string) => secretStore.get(k) ?? null,
   setSecret: (k: string, v: string) => void secretStore.set(k, v),
@@ -41,6 +54,7 @@ let claude: ClaudeModule
 
 beforeEach(async () => {
   secretStore.clear()
+  requested = []
   closeCalls = 0
   queryOptions = undefined
   encryptionAvailable = true
@@ -213,5 +227,57 @@ describe('clearAnthropicApiKey', () => {
     accountInfoImpl = async () => ({ email: 'cli@user.dev', apiKeySource: 'oauth' })
     const status = await claude.clearAnthropicApiKey()
     expect(status).toMatchObject({ authenticated: true, source: 'cli' })
+  })
+})
+
+/**
+ * Which package the vendored `claude` executable is expected in.
+ *
+ * Mirrors the SDK's own resolution, read out of its bundled source rather than
+ * guessed: `claude-agent-sdk-<platform>-<arch>` with the binary at the package
+ * root, musl preferred on linux, and `.exe` on Windows. Codex differs on every
+ * one of those points — it nests under `vendor/<triple>/bin/` — which is
+ * exactly why the two resolvers are separate and why copying one to make the
+ * other would have been wrong.
+ */
+describe('resolveClaudeBinary', () => {
+  const on = (platform: NodeJS.Platform, arch: string): void => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+    vi.spyOn(process, 'arch', 'get').mockReturnValue(arch as NodeJS.Architecture)
+  }
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('asks for the platform package with the binary at its root', () => {
+    on('darwin', 'arm64')
+    expect(claude.resolveClaudeBinary()).toBe(
+      '/unpacked/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude'
+    )
+    expect(requested).toEqual(['@anthropic-ai/claude-agent-sdk-darwin-arm64/claude'])
+  })
+
+  // Two packages ship for linux and only one is installed, so both spellings
+  // are tried — musl first, matching the SDK.
+  it('prefers musl on linux and falls back to glibc', () => {
+    on('linux', 'x64')
+    expect(claude.resolveClaudeBinary()).toBeNull()
+    expect(requested).toEqual([
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl/claude',
+      '@anthropic-ai/claude-agent-sdk-linux-x64/claude'
+    ])
+  })
+
+  it('asks for claude.exe on Windows', () => {
+    on('win32', 'x64')
+    claude.resolveClaudeBinary()
+    expect(requested).toEqual(['@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe'])
+  })
+
+  // Null is a supported answer all the way through: the adapter simply omits
+  // `pathToClaudeCodeExecutable` and the SDK looks for itself, which is the
+  // correct behaviour in dev and on an unpackaged run.
+  it('is null when the package is not installed', () => {
+    on('freebsd', 'x64')
+    expect(claude.resolveClaudeBinary()).toBeNull()
   })
 })

@@ -236,6 +236,9 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
       prompt,
       options: {
         cwd: spec.repoPath,
+        // Injected rather than left to the SDK's own require.resolve, which
+        // resolves into app.asar in a packaged build and spawns ENOTDIR.
+        ...(config.claudeBinaryPath ? { pathToClaudeCodeExecutable: config.claudeBinaryPath } : {}),
         // The boundary marks where the globally-cacheable half of the prompt
         // ends. Everything before it is stable for the life of the session;
         // the group summaries and sibling branches after it are re-resolved
@@ -509,6 +512,9 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
         prompt,
         options: {
           cwd: spec.repoPath,
+          ...(config.claudeBinaryPath
+            ? { pathToClaudeCodeExecutable: config.claudeBinaryPath }
+            : {}),
           systemPrompt: composeInstructions(spec),
           settingSources: [],
           // No mcpServers, deliberately — see SUMMARY_DISALLOWED_TOOLS below.

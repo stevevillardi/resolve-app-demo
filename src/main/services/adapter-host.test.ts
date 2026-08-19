@@ -18,6 +18,10 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => true }
 }))
 vi.mock('./codex-auth', () => ({ resolveCodexBinary: () => '/usr/local/bin/codex' }))
+// Both backends resolve a vendored binary, and both are stubbed here for the
+// same reason: the real resolvers walk a packaged app's layout, which this
+// suite has none of. `vendored-binaries.test.ts` owns that behaviour.
+vi.mock('./claude-auth', () => ({ resolveClaudeBinary: () => '/usr/local/bin/claude' }))
 
 const githubToken = { value: 'gho_test' as string | null }
 vi.mock('./github-auth', () => ({ getGitHubToken: () => githubToken.value }))
@@ -40,6 +44,19 @@ describe('adapterConfig', () => {
     const config = adapterConfig('codex')
     expect(config.codexBinaryPath).toBe('/usr/local/bin/codex')
     expect(config.env?.PATH).toBe(process.env.PATH)
+  })
+
+  /**
+   * The other half, and the one that was missing for three phases: only codex
+   * was filled in here, so a packaged build failed `spawn ENOTDIR` on every
+   * Claude call including the launch auth probe, which surfaced as an error
+   * banner. Asserted per backend because the config is built per backend and
+   * a Claude persona is the case that broke.
+   */
+  it.each(['claude', 'codex'] as const)('injects both binary paths for %s', (backend) => {
+    const config = adapterConfig(backend)
+    expect(config.claudeBinaryPath).toBe('/usr/local/bin/claude')
+    expect(config.codexBinaryPath).toBe('/usr/local/bin/codex')
   })
 
   it('carries the GitHub token Codex has no other way to receive', () => {

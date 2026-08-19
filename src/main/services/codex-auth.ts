@@ -1,9 +1,8 @@
-import { app } from 'electron'
 import { spawn, spawnSync, type ChildProcess } from 'child_process'
-import { existsSync } from 'fs'
 import { join } from 'path'
 import type { CodexAuthStatus, DeviceFlowState } from '../../shared/ipc-contract'
 import { deleteSecret, getSecret, isSecretStorageAvailable, setSecret } from './secrets'
+import { resolveVendored } from './vendored-binaries'
 
 /**
  * Codex backend auth.
@@ -55,7 +54,10 @@ let resolvedBinary: string | undefined
  * Mirrors the resolution in @openai/codex's bin/codex.js, but searches explicit
  * roots rather than using require.resolve: in a packaged build the binary lives
  * under app.asar.unpacked (see asarUnpack in electron-builder.yml), which bare
- * module resolution from inside the asar would miss.
+ * module resolution from inside the asar would miss — and worse, would resolve
+ * to an in-archive path that `existsSync` accepts and `spawn` refuses. The
+ * roots and that guard now live in `vendored-binaries.ts`, shared with Claude's
+ * resolver, which was missing entirely until a packaged build proved it.
  *
  * Only a successful resolution is memoized. A miss used to be cached forever,
  * which turned one badly-timed stat during startup into "Codex is not
@@ -69,21 +71,9 @@ export function resolveCodexBinary(): string | null {
   if (!triple || !platformPackage) return null
 
   const exe = process.platform === 'win32' ? 'codex.exe' : 'codex'
-  const roots = [
-    join(process.resourcesPath ?? '', 'app.asar.unpacked', 'node_modules'),
-    join(app.getAppPath(), 'node_modules'),
-    join(app.getAppPath().replace(/\.asar$/, '.asar.unpacked'), 'node_modules')
-  ]
-
-  for (const root of roots) {
-    const candidate = join(root, platformPackage, 'vendor', triple, 'bin', exe)
-    if (existsSync(candidate)) {
-      resolvedBinary = candidate
-      return candidate
-    }
-  }
-
-  return null
+  const found = resolveVendored(join(platformPackage, 'vendor', triple, 'bin', exe))
+  if (found) resolvedBinary = found
+  return found
 }
 
 function childEnv(): NodeJS.ProcessEnv {
