@@ -1,4 +1,5 @@
-import { Pin } from 'lucide-react'
+import { Milestone, Pin, Scale, ScrollText } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatTime } from '@/lib/format'
 import type { SystemSummaryCategory } from '@/types'
@@ -11,10 +12,16 @@ interface JournalNoticeProps {
   timestamp?: number
 }
 
-const CATEGORY_LABEL: Record<SystemSummaryCategory, string> = {
-  decision: 'Decision',
-  tradeoff: 'Tradeoff',
-  routine: 'Routine summary'
+/**
+ * Icon plus label per category, so the record types read at a glance the way
+ * the log rows already do (RoutineRunNotice's clock, BranchRequestNotice's
+ * PR arrow): a milestone marks a decision the fleet will keep, scales weigh
+ * a tradeoff, a scroll is the routine session record.
+ */
+const CATEGORY: Record<SystemSummaryCategory, { label: string; icon: LucideIcon }> = {
+  decision: { label: 'Decision', icon: Milestone },
+  tradeoff: { label: 'Tradeoff', icon: Scale },
+  routine: { label: 'Routine summary', icon: ScrollText }
 }
 
 /**
@@ -39,7 +46,11 @@ export function JournalNotice({
       <div className="flex w-full items-center gap-2.5">
         <span className="bg-border h-px flex-1" />
         <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-meta font-medium tracking-wide uppercase">
-          {CATEGORY_LABEL[category]}
+          {(() => {
+            const Icon = CATEGORY[category].icon
+            return <Icon aria-hidden className="size-3" />
+          })()}
+          {CATEGORY[category].label}
           {durable && (
             <Tooltip>
               <TooltipTrigger
