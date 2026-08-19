@@ -44,6 +44,18 @@ export const runsKey = ['runs'] as const
 export const groupMessagesRootKey = ['groupMessages'] as const
 
 export function useMessages(contactId: string): UseQueryResult<PersistedMessage[]> {
+  const queryClient = useQueryClient()
+
+  // Background turns — a routine fire, a mention answered elsewhere — write
+  // rows with no runId subscription in this view, and before this the open
+  // thread showed them only after a remount or window refocus (Phase 25).
+  // Same signal useMessagePreviews already rides; the prefix invalidation
+  // covers the toolCalls entry too.
+  useEffect(
+    () => onMessagesChanged(() => void queryClient.invalidateQueries({ queryKey: messagesKey(contactId) })),
+    [queryClient, contactId]
+  )
+
   return useQuery({
     queryKey: messagesKey(contactId),
     queryFn: () => callProcedure('messages.list', { contactId })
