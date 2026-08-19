@@ -7,6 +7,7 @@ import trayActive2x from '../../resources/trayActiveTemplate@2x.png?asset'
 import { listActiveRuns } from './services/messaging'
 import { nextRuns } from './services/scheduler'
 import { buildTrayMenu, type TrayMenuItem } from './tray-menu'
+import { navigateTo } from './main-window'
 
 /**
  * The menu-bar presence that makes routines worth having (blueprint §15E).
@@ -58,9 +59,20 @@ export function createTray(onShow: () => void): void {
 export function refreshTrayMenu(): void {
   if (!tray) return
 
-  const runningTurns = listActiveRuns().length
+  const active = listActiveRuns()
+  const runningTurns = active.length
   tray.setContextMenu(
-    Menu.buildFromTemplate(buildTrayMenu(nextRuns(), { runningTurns }).map(toMenuItem))
+    Menu.buildFromTemplate(
+      buildTrayMenu(nextRuns(), {
+        running: active.map((run) => ({
+          contactId: run.contactId,
+          contactName: run.contactName,
+          origin: run.origin,
+          groupId: run.groupId,
+          startedAt: run.startedAt
+        }))
+      }).map(toMenuItem)
+    )
   )
   // "Agents are working" without opening the menu, in two registers. The badged
   // icon is the cross-platform one, and carries in peripheral vision where a
@@ -97,6 +109,12 @@ function toMenuItem(item: TrayMenuItem): Electron.MenuItemConstructorOptions {
   if (item.id === 'show') return { label: item.label, click: () => showWindow?.() }
   // "N turns running" is an invitation to look, so clicking it is Show.
   if (item.id === 'running') return { label: item.label, click: () => showWindow?.() }
+  // A named run goes to its conversation — navigateTo shows and focuses first,
+  // the same path a notification click takes.
+  if (item.id === 'run' && item.target) {
+    const target = item.target
+    return { label: item.label, click: () => navigateTo(target) }
+  }
   if (item.id === 'quit') return { label: item.label, click: () => app.quit() }
   return { label: item.label, enabled: false }
 }

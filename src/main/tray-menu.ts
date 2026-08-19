@@ -1,4 +1,5 @@
 import type { NextRun } from './services/scheduler'
+import type { NavigateTarget } from '../shared/navigation'
 
 /**
  * What the tray menu says, as data.
@@ -9,9 +10,11 @@ import type { NextRun } from './services/scheduler'
  */
 
 export interface TrayMenuItem {
-  id: 'show' | 'quit' | 'header' | 'routine' | 'empty' | 'running' | 'more' | 'separator'
+  id: 'show' | 'quit' | 'header' | 'routine' | 'empty' | 'running' | 'run' | 'more' | 'separator'
   label: string
   enabled: boolean
+  /** Where a click lands, for the rows that go somewhere (`run`). */
+  target?: NavigateTarget
 }
 
 export const SHOW_LABEL = 'Show Switchboard'
@@ -26,9 +29,18 @@ const EMPTY_LABEL = 'No routines scheduled'
  */
 export const ROUTINE_ROWS_MAX = 5
 
+/** One in-flight turn, as the tray needs to name it. */
+export interface TrayRunningTurn {
+  contactId: string
+  contactName: string
+  origin: 'message' | 'mention' | 'routine'
+  groupId: string | null
+  startedAt: number
+}
+
 interface TrayMenuState {
-  /** Turns streaming right now — clicking the row is the same as Show. */
-  runningTurns?: number
+  /** Turns streaming right now — the summary row's click is the same as Show. */
+  running?: TrayRunningTurn[]
   now?: number
 }
 
@@ -46,17 +58,38 @@ function separator(): TrayMenuItem {
  * rebuild trigger: the run set changing is exactly when it is redrawn.)
  */
 export function buildTrayMenu(runs: NextRun[], state: TrayMenuState = {}): TrayMenuItem[] {
-  const { runningTurns = 0, now = Date.now() } = state
+  const { running = [], now = Date.now() } = state
   const items: TrayMenuItem[] = [{ id: 'show', label: SHOW_LABEL, enabled: true }]
 
-  if (runningTurns > 0) {
+  if (running.length > 0) {
     items.push({
       id: 'running',
-      label: runningTurns === 1 ? '1 turn running' : `${runningTurns} turns running`,
+      label: running.length === 1 ? '1 turn running' : `${running.length} turns running`,
       // Enabled and clickable (mapped to Show): "something is running" is an
       // invitation to look, not a fact to grey out.
       enabled: true
     })
+    // Named, like the scheduled section below — a count that lists nobody made
+    // the tray answer "how many" while dodging "who" (Phase 25). Absolute
+    // start times, same no-counting rule as everything else in this menu.
+    for (const turn of running.slice(0, ROUTINE_ROWS_MAX)) {
+      items.push({
+        id: 'run',
+        label: `${turn.contactName} — ${describeOrigin(turn.origin)} since ${localTime(turn.startedAt)}`,
+        enabled: true,
+        target:
+          turn.origin === 'mention' && turn.groupId
+            ? { kind: 'group', groupId: turn.groupId }
+            : { kind: 'contact', contactId: turn.contactId }
+      })
+    }
+    if (running.length > ROUTINE_ROWS_MAX) {
+      items.push({
+        id: 'more',
+        label: `+ ${running.length - ROUTINE_ROWS_MAX} more running`,
+        enabled: false
+      })
+    }
   }
 
   items.push(separator())
@@ -89,6 +122,15 @@ export function buildTrayMenu(runs: NextRun[], state: TrayMenuState = {}): TrayM
 }
 
 const PROMPT_MAX = 40
+
+/** The user-facing word for what started a turn — "chat" for a typed message. */
+function describeOrigin(origin: TrayRunningTurn['origin']): string {
+  return origin === 'message' ? 'chat' : origin
+}
+
+function localTime(at: number): string {
+  return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
 
 function describe(prompt: string): string {
   const collapsed = prompt.replace(/\s+/g, ' ').trim()
