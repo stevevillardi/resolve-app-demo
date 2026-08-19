@@ -27,7 +27,12 @@ for personas, and the reasoning is worth reading in
 
 `node_modules` is **not** shared. Each worktree needs its own `npm ci`, because
 `postinstall` runs `electron-builder install-app-deps` and rebuilds
-better-sqlite3 against Electron's ABI.
+better-sqlite3 against Electron's ABI — and then re-signs the freshly unpacked
+dev Electron with the app's Developer ID (`scripts/sign-dev-electron.sh`), which
+is what lets every worktree read the same stored credentials. The very first
+signing on a machine raises a one-time keychain dialog; approve it ("Always
+Allow") or the install leaves the binary ad-hoc and stored secrets read as
+locked. A machine without the certificate skips signing and still installs.
 
 ## Commits
 

@@ -21,7 +21,16 @@ mismatch, converted into a permanent loss, wearing GitHub's fault.
 The fix is to not destroy: decrypt failure now keeps the file (the build that
 wrote it can still read it — switching back genuinely recovers), records the
 key as unreadable for this process, and the status surfaces say what
-happened. GitHub gets a `locked` tokenState — attention dot, its own dialog
+happened.
+
+> **Superseded, 2026-08-19.** The above made the symptom survivable; the cause
+> is now gone. `mac.identity` is a real Developer ID and `postinstall` re-signs
+> the dev Electron under the same identifier, so the designated requirement is
+> identifier + team rather than a hash of the binary — a rebuild, a new
+> worktree and an Electron upgrade all keep the keychain grant. The `locked`
+> state below still exists and is still correct; it is now reached only by a
+> genuinely foreign identity (a copied profile, an unsigned build on a machine
+> without the certificate), not by every `npm ci`. GitHub gets a `locked` tokenState — attention dot, its own dialog
 and Home-banner copy, Reconnect offered — worded to blame the binary, never
 the credential. A stored Anthropic/OpenAI key in the same state says so
 through the per-backend error field. And because the _other_ road to this

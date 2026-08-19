@@ -31,12 +31,22 @@ nsis:
   createDesktopShortcut: always
 mac:
   target: dir
-  # Signing/notarization are out of scope for Phase 1 (docs/plan/01-bootstrap.md)
-  # -- unsigned dir builds are enough to prove packaging works. The machine's
-  # keychain has an ambiguous duplicate "Developer ID Application" identity
-  # that breaks electron-builder's auto-signing; skip signing explicitly
-  # rather than fight that here.
-  identity: null
+  # Load-bearing, not cosmetic. safeStorage seals every stored credential with a
+  # keychain key whose ACL trusts the app's *code identity*; unsigned, that
+  # identity is a hash of the binary, so each rebuilt Electron was a new app to
+  # the keychain and the stored GitHub token read as locked. A Developer ID
+  # signature makes the designated requirement identifier + team instead, which
+  # survives rebuilds and Electron upgrades. See docs/plan/18-switchboard.md.
+  #
+  # Selected by SHA-1 rather than by name because this keychain holds two
+  # distinct, both-valid "Developer ID Application: Steve Villardi (VZ5TTKF948)"
+  # certificates -- that ambiguity is what defeated auto-discovery when signing
+  # was first skipped. Both carry team VZ5TTKF948 and therefore produce the same
+  # designated requirement, so swapping certs on expiry will not invalidate the
+  # keychain grant. scripts/sign-dev-electron.sh reads this exact line.
+  identity: 2CA9C0B374C903DC12D7236A041DC1E171B9B302
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
