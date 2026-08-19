@@ -1,21 +1,14 @@
 import { useEffect, useState } from 'react'
-import {
-  AlertTriangle,
-  CalendarClock,
-  GitBranch,
-  Loader2,
-  MessagesSquare
-} from 'lucide-react'
-import { Bar, BarChart } from 'recharts'
+import { AlertTriangle, CalendarClock, GitBranch, Loader2, MessagesSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { EmptyPane } from '@/components/common/EmptyPane'
 import { ListRow } from '@/components/common/ListRow'
 import { PaneBody } from '@/components/common/PaneBody'
 import { PaneHeader } from '@/components/common/PaneHeader'
 import { RunRow } from '@/components/common/RunRow'
 import { Section } from '@/components/common/Section'
+import { StatTile } from '@/components/common/StatTile'
 import { GuideStrip, WorkspaceGuide } from './WorkspaceGuide'
 import { useAuthStatus, useRefreshAuth } from '@/hooks/useAuth'
 import { useBudget } from '@/hooks/useSettings'
@@ -32,12 +25,15 @@ import {
   formatUpcoming,
   missedRuns,
   recentActivity,
+  spendBarPercents,
   spendWindow,
   upcomingRuns
 } from '@/lib/home'
 import { formatListTimestamp, repoName } from '@/lib/format'
-import { formatCostSummary, formatTokens } from '@/lib/usage'
+import { formatCost, formatCostSummary, formatTokens } from '@/lib/usage'
 import { useUiStore } from '@/store/useUiStore'
+import type { DailySpendPoint } from '@/lib/home'
+import { cn } from '@/lib/utils'
 
 const RECENT_LIMIT = 6
 const SPEND_DAYS = 7
@@ -115,6 +111,10 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
   // forever (Phase 19). A branch with no diff against the
   // repo is not waiting on anybody.
   const waiting = variant === 'home' ? branches.filter((b) => b.files.length > 0 && !b.merged) : []
+  // Whether there is a second column to make. On Chats all three of these are
+  // empty by construction, and a 2fr column with nothing beside it is a third
+  // of the pane thrown away.
+  const hasRail = waiting.length > 0 || missed.length > 0 || upcoming.length > 0
 
   // A fresh install is a different screen, not an emptier version of this one:
   // there is nothing to summarise, and what the person on the other side needs
@@ -203,235 +203,240 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
           </div>
         )}
 
-        {runs.length > 0 && (
-          <Section
-            title={runs.length === 1 ? '1 turn running' : `${runs.length} turns running`}
-            description="What the fleet is doing right now."
-          >
-            <div className="flex flex-col gap-1.5">
-              {runs.map((run) => (
-                <RunRow key={run.runId} run={run} now={now} onStop={cancel} />
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {recent.length > 0 && (
-          <Section title="Recent" description="The last thing said in each conversation.">
-            {/* Two across once there is room. Six rows down the left of a
-                1200px pane is the same wasted width this pass exists to fix. */}
-            <div className="grid gap-x-4 @4xl/pane:grid-cols-2">
-              {recent.map((item) => (
-                <ListRow
-                  key={item.contactId}
-                  active={false}
-                  onSelect={() => setSelected({ kind: 'contact', id: item.contactId })}
-                  leading={
-                    <AvatarColorSwatch name={item.name} color={item.color} seed={item.personaId} />
-                  }
-                  trailing={
-                    <span className="text-muted-foreground shrink-0 font-mono text-micro tabular-nums">
-                      {formatListTimestamp(item.timestamp, now)}
-                    </span>
-                  }
-                >
-                  <span className="flex items-baseline gap-2">
-                    <span className="truncate text-row font-medium">{item.name}</span>
-                    <span className="text-muted-foreground shrink-0 font-mono text-meta">
-                      {item.repo}
-                    </span>
-                  </span>
-                  <span className="text-muted-foreground mt-0.5 block truncate text-xs">
-                    {/* Whose turn it was, because "the last thing said" is only
-                        useful if you know whether it was you or the persona. */}
-                    {item.role === 'user' && <span className="text-foreground/70">You: </span>}
-                    {item.preview}
-                  </span>
-                </ListRow>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/*
-          Work a persona finished that is now waiting on a human. Home only,
-          and worth the extra query: a branch on disk with commits nobody has
-          merged is the one thing in this app that quietly accumulates, and
-          until now it was visible only if you thought to open the Branches
-          section and look.
-        */}
-        {variant === 'home' && waiting.length > 0 && (
-          <Section
-            title={waiting.length === 1 ? '1 branch waiting' : `${waiting.length} branches waiting`}
-            description="Finished work that has not been merged or discarded."
-          >
-            <div className="grid gap-1.5 @4xl/pane:grid-cols-2">
-              {waiting.map((branch) => (
-                <ListRow
-                  key={`${branch.repoPath}\0${branch.branch}`}
-                  active={false}
-                  align="center"
-                  bordered
-                  leading={<GitBranch className="text-muted-foreground size-4 shrink-0" />}
-                  onSelect={() => {
-                    setSelectedBranch({ repoPath: branch.repoPath, branch: branch.branch })
-                    setSection('branches')
-                  }}
-                  trailing={
-                    <span className="text-muted-foreground shrink-0 font-mono text-micro tabular-nums">
-                      {branch.files.length} {branch.files.length === 1 ? 'file' : 'files'}
-                    </span>
-                  }
-                >
-                  <span className="block truncate font-mono text-meta">{branch.branch}</span>
-                  {/* `contactName` is already "Persona · repo", so appending the
-                      repo again prints it twice — the exact thing Phase 13 fixed
-                      in BranchDetail's subtitle. Only added when it is missing. */}
-                  <span className="text-muted-foreground block truncate text-xs">
-                    {branch.contactName ?? `No contact · ${repoName(branch.repoPath)}`}
-                  </span>
-                </ListRow>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/*
-          Fires that silently never happened (review §C2). Above Scheduled
-          because outstanding beats upcoming, and in the warning register
-          rather than the destructive one — nothing failed, something didn't
-          run. Clicking lands in the editor, where Run now is the catch-up.
-        */}
-        {variant === 'home' && missed.length > 0 && (
-          <Section
-            title={missed.length === 1 ? '1 routine missed its schedule' : 'Missed schedules'}
-            description="Fires skipped while the app was closed or the machine slept. Run now catches up."
-          >
-            <div className="grid gap-1.5 @4xl/pane:grid-cols-3">
-              {missed.map((run) => (
-                <ListRow
-                  key={run.routineId}
-                  active={false}
-                  align="center"
-                  bordered
-                  leading={<CalendarClock className="text-scope-elevated size-4 shrink-0" />}
-                  onSelect={() => {
-                    setSelectedRoutineId(run.routineId)
-                    setSection('routines')
-                  }}
-                  trailing={
-                    <span className="text-scope-elevated shrink-0 font-mono text-micro tabular-nums">
-                      ×{run.count}
-                    </span>
-                  }
-                >
-                  <span className="block truncate text-row">{run.prompt}</span>
-                  <span className="text-muted-foreground block truncate text-xs">
-                    {run.contactName ? `${run.contactName} · ` : ''}
-                    last missed {formatListTimestamp(run.lastMissedAt, now)}
-                  </span>
-                </ListRow>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/*
-          What fires next, without opening Routines. The tray answers this for
-          someone glancing at the menu bar; Home answers it for someone sitting
-          in the app. Same data, same absolute-time rule.
-        */}
-        {variant === 'home' && upcoming.length > 0 && (
-          <Section title="Scheduled" description="The next unattended work.">
-            <div className="grid gap-1.5 @4xl/pane:grid-cols-3">
-              {upcoming.map((run) => (
-                <ListRow
-                  key={run.routineId}
-                  active={false}
-                  align="center"
-                  bordered
-                  leading={<CalendarClock className="text-muted-foreground size-4 shrink-0" />}
-                  onSelect={() => {
-                    setSelectedRoutineId(run.routineId)
-                    setSection('routines')
-                  }}
-                >
-                  <span className="block truncate text-row">{run.prompt}</span>
-                  <span className="text-muted-foreground block truncate text-xs">
-                    {run.contactName ? `${run.contactName} · ` : ''}
-                    {formatUpcoming(run.nextRun, now)}
-                  </span>
-                </ListRow>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/* Home only. In Chats this is a section about money in a pane about
-            conversations — the Usage section already owns it, and the point of
-            splitting the two screens was to stop each one being everything. */}
+        {/* Home only, and first. In Chats this is a section about money in a
+            pane about conversations — the Usage section already owns it, and
+            the point of splitting the two screens was to stop each one being
+            everything. */}
         {variant === 'home' && spend.turns > 0 && (
           <Section title={`Last ${spend.days} days`}>
-            {/* A shape, not a chart: no axes, no legend, no tooltip config —
-                the Usage section owns real charts. Seven bars answer "was this
-                week's spend flat or spiky" at a glance, which a total cannot. */}
-            <ChartContainer
-              config={{ cost: { label: 'Spend', color: 'var(--chart-1)' } }}
-              className="mb-2 aspect-auto h-12 w-full max-w-md"
-            >
-              <BarChart data={spendByDay} margin={{ left: 0, right: 0, top: 0, bottom: 0 }}>
-                {/* The one interaction the sparkline supports: which day was
-                    that spike. Label comes from the bucket, value formatted as
-                    money — the same formatter the summary line uses. */}
-                <ChartTooltip
-                  cursor={false}
-                  content={
-                    <ChartTooltipContent
-                      labelFormatter={(_label, payload) =>
-                        new Date(
-                          (payload?.[0]?.payload as { day?: number })?.day ?? 0
-                        ).toLocaleDateString(undefined, {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric'
-                        })
-                      }
-                      formatter={(value) => `$${Number(value).toFixed(2)}`}
-                      indicator="dot"
-                    />
-                  }
-                />
-                <Bar dataKey="cost" fill="var(--color-cost)" radius={2} isAnimationActive={false} />
-              </BarChart>
-            </ChartContainer>
-            <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-6 gap-y-1 text-xs">
-              <span>
-                <span className="text-foreground font-mono tabular-nums">
-                  {formatCostSummary(spend)}
-                </span>{' '}
-                spent
-              </span>
-              <span>
-                <span className="text-foreground font-mono tabular-nums">
-                  {formatTokens(spend.totalInputTokens + spend.totalOutputTokens)}
-                </span>{' '}
-                tokens
-              </span>
-              <span>
-                <span className="text-foreground font-mono tabular-nums">{spend.turns}</span>{' '}
-                {spend.turns === 1 ? 'turn' : 'turns'}
-              </span>
-              <span>
-                <span className="text-foreground font-mono tabular-nums">{contacts.length}</span>{' '}
-                {contacts.length === 1 ? 'contact' : 'contacts'} across{' '}
-                <span className="text-foreground font-mono tabular-nums">{repoCount}</span>{' '}
-                {repoCount === 1 ? 'repo' : 'repos'}, running{' '}
-                <span className="text-foreground font-mono tabular-nums">{personas.length}</span>{' '}
-                {personas.length === 1 ? 'persona' : 'personas'}
-              </span>
+            <div className="grid grid-cols-3 gap-1.5">
+              <StatTile label="Spend" value={formatCostSummary(spend)}>
+                <SpendStrip points={spendByDay} />
+              </StatTile>
+              <StatTile
+                label="Tokens"
+                value={formatTokens(spend.totalInputTokens + spend.totalOutputTokens)}
+              />
+              <StatTile
+                label="Turns"
+                value={String(spend.turns)}
+                note={spend.turns === 1 ? 'turn' : 'turns'}
+              />
             </div>
+            {/* Not a tile, because it is not a figure for this window — it is
+                what the fleet is, right now. Three numbers about seven days and
+                a fourth about today would read as four of the same thing. */}
+            <p className="text-muted-foreground text-xs">
+              <span className="text-foreground font-mono tabular-nums">{contacts.length}</span>{' '}
+              {contacts.length === 1 ? 'contact' : 'contacts'} across{' '}
+              <span className="text-foreground font-mono tabular-nums">{repoCount}</span>{' '}
+              {repoCount === 1 ? 'repo' : 'repos'}, running{' '}
+              <span className="text-foreground font-mono tabular-nums">{personas.length}</span>{' '}
+              {personas.length === 1 ? 'persona' : 'personas'}
+            </p>
           </Section>
         )}
+
+        {/*
+          Two columns once the pane can hold them. The primary side carries the
+          conversation — what is running, and what was last said — and the rail
+          carries the work waiting on a human. Before this the whole screen was
+          one column of full-width sections, so a single waiting branch drew at
+          half width and a single scheduled run at a third, for no reason a
+          reader could see, and the summary ran well past the fold.
+        */}
+        <div
+          className={cn(
+            'grid gap-6',
+            hasRail && '@5xl/pane:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'
+          )}
+        >
+          {/*
+            Its own container. `@container/pane` measures the whole pane, so
+            Recent would go two-across at a width this column does not have
+            once the rail takes a third of it — the same mistake the four `sm:`
+            variants `PaneBody` replaced were making against the viewport.
+          */}
+          <div className="@container/main flex flex-col gap-6">
+            {runs.length > 0 && (
+              <Section
+                title={runs.length === 1 ? '1 turn running' : `${runs.length} turns running`}
+                description="What the fleet is doing right now."
+              >
+                <div className="flex flex-col gap-1.5">
+                  {runs.map((run) => (
+                    <RunRow key={run.runId} run={run} now={now} onStop={cancel} />
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {recent.length > 0 && (
+              <Section title="Recent" description="The last thing said in each conversation.">
+                {/* Two across once there is room. Six rows down the left of a
+                  1200px pane is the same wasted width this pass exists to fix.
+                    Measured against `@container/main` — this column, not the
+                    pane, because the rail beside it takes a third of it. */}
+                <div className="grid gap-x-4 @2xl/main:grid-cols-2">
+                  {recent.map((item) => (
+                    <ListRow
+                      key={item.contactId}
+                      active={false}
+                      onSelect={() => setSelected({ kind: 'contact', id: item.contactId })}
+                      leading={
+                        <AvatarColorSwatch
+                          name={item.name}
+                          color={item.color}
+                          seed={item.personaId}
+                        />
+                      }
+                      trailing={
+                        <span className="text-muted-foreground shrink-0 font-mono text-micro tabular-nums">
+                          {formatListTimestamp(item.timestamp, now)}
+                        </span>
+                      }
+                    >
+                      <span className="flex items-baseline gap-2">
+                        <span className="truncate text-row font-medium">{item.name}</span>
+                        <span className="text-muted-foreground shrink-0 font-mono text-meta">
+                          {item.repo}
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground mt-0.5 block truncate text-xs">
+                        {/* Whose turn it was, because "the last thing said" is only
+                          useful if you know whether it was you or the persona. */}
+                        {item.role === 'user' && <span className="text-foreground/70">You: </span>}
+                        {item.preview}
+                      </span>
+                    </ListRow>
+                  ))}
+                </div>
+              </Section>
+            )}
+          </div>
+
+          {hasRail && (
+            <div className="flex flex-col gap-6">
+              {/*
+              Work a persona finished that is now waiting on a human. Home only,
+              and worth the extra query: a branch on disk with commits nobody has
+              merged is the one thing in this app that quietly accumulates, and
+              until now it was visible only if you thought to open the Branches
+              section and look.
+            */}
+              {variant === 'home' && waiting.length > 0 && (
+                <Section
+                  title={
+                    waiting.length === 1 ? '1 branch waiting' : `${waiting.length} branches waiting`
+                  }
+                  description="Finished work that has not been merged or discarded."
+                >
+                  <div className="flex flex-col gap-1.5">
+                    {waiting.map((branch) => (
+                      <ListRow
+                        key={`${branch.repoPath}\0${branch.branch}`}
+                        active={false}
+                        align="center"
+                        bordered
+                        leading={<GitBranch className="text-muted-foreground size-4 shrink-0" />}
+                        onSelect={() => {
+                          setSelectedBranch({ repoPath: branch.repoPath, branch: branch.branch })
+                          setSection('branches')
+                        }}
+                        trailing={
+                          <span className="text-muted-foreground shrink-0 font-mono text-micro tabular-nums">
+                            {branch.files.length} {branch.files.length === 1 ? 'file' : 'files'}
+                          </span>
+                        }
+                      >
+                        <span className="block truncate font-mono text-meta">{branch.branch}</span>
+                        {/* `contactName` is already "Persona · repo", so appending the
+                          repo again prints it twice — the exact thing Phase 13 fixed
+                          in BranchDetail's subtitle. Only added when it is missing. */}
+                        <span className="text-muted-foreground block truncate text-xs">
+                          {branch.contactName ?? `No contact · ${repoName(branch.repoPath)}`}
+                        </span>
+                      </ListRow>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/*
+              Fires that silently never happened (review §C2). Above Scheduled
+              because outstanding beats upcoming, and in the warning register
+              rather than the destructive one — nothing failed, something didn't
+              run. Clicking lands in the editor, where Run now is the catch-up.
+            */}
+              {variant === 'home' && missed.length > 0 && (
+                <Section
+                  title={missed.length === 1 ? '1 routine missed its schedule' : 'Missed schedules'}
+                  description="Fires skipped while the app was closed or the machine slept. Run now catches up."
+                >
+                  <div className="flex flex-col gap-1.5">
+                    {missed.map((run) => (
+                      <ListRow
+                        key={run.routineId}
+                        active={false}
+                        align="center"
+                        bordered
+                        leading={<CalendarClock className="text-scope-elevated size-4 shrink-0" />}
+                        onSelect={() => {
+                          setSelectedRoutineId(run.routineId)
+                          setSection('routines')
+                        }}
+                        trailing={
+                          <span className="text-scope-elevated shrink-0 font-mono text-micro tabular-nums">
+                            ×{run.count}
+                          </span>
+                        }
+                      >
+                        <span className="block truncate text-row">{run.prompt}</span>
+                        <span className="text-muted-foreground block truncate text-xs">
+                          {run.contactName ? `${run.contactName} · ` : ''}
+                          last missed {formatListTimestamp(run.lastMissedAt, now)}
+                        </span>
+                      </ListRow>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/*
+              What fires next, without opening Routines. The tray answers this for
+              someone glancing at the menu bar; Home answers it for someone sitting
+              in the app. Same data, same absolute-time rule.
+            */}
+              {variant === 'home' && upcoming.length > 0 && (
+                <Section title="Scheduled" description="The next unattended work.">
+                  <div className="flex flex-col gap-1.5">
+                    {upcoming.map((run) => (
+                      <ListRow
+                        key={run.routineId}
+                        active={false}
+                        align="center"
+                        bordered
+                        leading={
+                          <CalendarClock className="text-muted-foreground size-4 shrink-0" />
+                        }
+                        onSelect={() => {
+                          setSelectedRoutineId(run.routineId)
+                          setSection('routines')
+                        }}
+                      >
+                        <span className="block truncate text-row">{run.prompt}</span>
+                        <span className="text-muted-foreground block truncate text-xs">
+                          {run.contactName ? `${run.contactName} · ` : ''}
+                          {formatUpcoming(run.nextRun, now)}
+                        </span>
+                      </ListRow>
+                    ))}
+                  </div>
+                </Section>
+              )}
+            </div>
+          )}
+        </div>
 
         {/*
           Last, and Home only. The summary above is why you are on this screen;
@@ -441,6 +446,44 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
         */}
         {variant === 'home' && <GuideStrip />}
       </PaneBody>
+    </div>
+  )
+}
+
+/**
+ * Seven days of spend as seven rectangles.
+ *
+ * Not a chart component, on purpose. This was recharts, and at 40px tall it
+ * drew only the days that had spend — a week with three busy days rendered as
+ * three blocks floating in an empty box with nothing to read them against,
+ * which is the thing this strip exists to answer. Seven divs always draw seven
+ * days, and the track behind each one is what makes a quiet day legible as a
+ * quiet day rather than as a gap.
+ *
+ * Capped rather than stretched. The tile is a third of a 1280px pane, and
+ * seven bars spread across 420px of it are 55px wide each — a row of buttons,
+ * not a shape you read at a glance.
+ *
+ * Hidden from assistive tech: the figure it decorates is already stated as
+ * text beside it, and "was the week flat or spiky" is not a question a screen
+ * reader can be answered with seven unlabelled rectangles.
+ */
+function SpendStrip({ points }: { points: DailySpendPoint[] }): React.JSX.Element {
+  const percents = spendBarPercents(points)
+  return (
+    <div className="mt-2 flex h-8 max-w-52 items-stretch gap-1" aria-hidden>
+      {points.map((point, i) => (
+        <div
+          key={point.day}
+          className="bg-muted relative min-w-0 flex-1 overflow-hidden rounded-sm"
+          title={`${point.label} — ${formatCost(point.cost)}`}
+        >
+          <div
+            className="absolute inset-x-0 bottom-0"
+            style={{ height: `${percents[i]}%`, backgroundColor: 'var(--chart-1)' }}
+          />
+        </div>
+      ))}
     </div>
   )
 }

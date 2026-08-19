@@ -54,6 +54,13 @@ interface UiState {
    * about this launch. It does not gate the guide on an empty Home — with
    * nothing to summarise, collapsing it would leave a blank pane, which is the
    * screen this whole thing exists to replace.
+   *
+   * Folded by default. A Home with content already answers the question the
+   * guide answers, and open it is six bordered cards, a row of key hints and
+   * three buttons sitting under the summary you came for — enough on its own
+   * to push the screen past a scroll. The two paths where the guide is the
+   * most useful thing on screen return the whole `WorkspaceGuide` pane
+   * instead, so nothing is lost by starting closed.
    */
   homeGuideOpen: boolean
   setHomeGuideOpen: (open: boolean) => void
@@ -112,7 +119,7 @@ export const useUiStore = create<UiState>()(
       navExpanded: false,
       setNavExpanded: (navExpanded) => set({ navExpanded }),
 
-      homeGuideOpen: true,
+      homeGuideOpen: false,
       setHomeGuideOpen: (homeGuideOpen) => set({ homeGuideOpen }),
 
       selectedConversation: null,
