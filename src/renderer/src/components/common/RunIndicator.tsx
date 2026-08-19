@@ -1,11 +1,15 @@
+import { useState } from 'react'
+import { Activity } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { SidebarMenuButton } from '@/components/ui/sidebar'
+import { EmptyState } from '@/components/common/EmptyState'
 import { RunRow } from '@/components/common/RunRow'
 import { useCancelRun } from '@/hooks/useMessages'
 import { useNow } from '@/hooks/useNow'
 import { runTarget } from '@/lib/run-view'
+import { RAIL_BUTTON } from '@/lib/nav-items'
 import { useUiStore } from '@/store/useUiStore'
 import { cn } from '@/lib/utils'
-import { useState } from 'react'
 import type { ActiveRun } from '../../../../shared/ipc-contract'
 
 /**
@@ -28,81 +32,85 @@ export function RunPulse({ className }: { className?: string }): React.JSX.Eleme
 }
 
 /**
- * The fleet status line, for the bottom of the nav rail.
+ * The fleet activity button, at the bottom of the nav rail.
  *
- * The count is the point, so it is set in the mono face with tabular figures —
- * the same rule every other machine figure in the app follows, which is what
- * makes this read as a console status line rather than a notification badge.
- *
- * Renders nothing at zero: a permanent "0 running" is noise, and the absence of
- * the mark is already the idle state.
+ * A permanent rail button in the same register as the GitHub status button —
+ * an icon, a label, and a corner mark when something is live — rather than a
+ * mark that only exists while running: a control that appears and vanishes
+ * cannot be learned, and an idle click deserves an answer ("nothing running")
+ * instead of nothing to click. The popover lists every in-flight turn with
+ * who, where, why (origin chip), elapsed, Stop, and a click-through to the
+ * conversation.
  */
-export function RunIndicator({
-  runs,
-  expanded
-}: {
-  runs: ActiveRun[]
-  expanded: boolean
-}): React.JSX.Element | null {
+export function RunIndicator({ runs }: { runs: ActiveRun[] }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const now = useNow(open && runs.length > 0)
   const { cancel } = useCancelRun()
   const setSection = useUiStore((state) => state.setSection)
   const setSelectedConversation = useUiStore((state) => state.setSelectedConversation)
 
-  if (runs.length === 0) return null
-
   const count = runs.length
-  const label = `${count} ${count === 1 ? 'run' : 'runs'} in progress`
+  const label =
+    count === 0
+      ? 'Activity — nothing running'
+      : `Activity — ${count} ${count === 1 ? 'run' : 'runs'} in progress`
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {/* A button, at last: "3 running" with no way to get to them was the
-          Phase 25 complaint about this mark in one line. */}
       <PopoverTrigger
         render={
-          <button
-            type="button"
+          <SidebarMenuButton
+            tooltip={label}
             aria-label={label}
-            className={cn(
-              'text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex h-8 items-center gap-2 rounded-md outline-none focus-visible:ring-2',
-              // Collapsed, it takes the same 40px box as the rail's icon
-              // buttons (size-10) rather than the footer's full content width —
-              // centring in the wider box would put the mark a few pixels off
-              // their centre line.
-              expanded ? 'px-2' : 'w-10 justify-center'
-            )}
-            title={expanded ? undefined : label}
+            className={cn('relative', RAIL_BUTTON)}
           >
-            <RunPulse />
-            {expanded ? (
-              <span className="truncate font-mono text-meta tabular-nums">{count} running</span>
-            ) : (
-              <span className="sr-only">{label}</span>
+            <Activity />
+            <span className="group-data-[collapsible=icon]:hidden">Activity</span>
+            {count > 0 && (
+              <>
+                {/* Pinned to the icon's corner, the same spot the GitHub
+                    button puts its status dot — and pulsing, because this one
+                    means "right now". */}
+                <RunPulse className="absolute top-2 left-5" />
+                <span className="text-primary ml-auto font-mono text-meta tabular-nums group-data-[collapsible=icon]:hidden">
+                  {count}
+                </span>
+              </>
             )}
-          </button>
+          </SidebarMenuButton>
         }
       />
       <PopoverContent side="right" align="end" className="w-80 p-2">
-        <p className="text-muted-foreground px-1 pb-2 font-mono text-micro tracking-wide uppercase">
-          {label}
-        </p>
-        <div className="flex flex-col gap-1.5">
-          {runs.map((run) => (
-            <RunRow
-              key={run.runId}
-              run={run}
-              now={now}
-              onStop={cancel}
-              onOpen={(target) => {
-                const destination = runTarget(target)
-                setSection('chats')
-                setSelectedConversation(destination)
-                setOpen(false)
-              }}
-            />
-          ))}
-        </div>
+        {count === 0 ? (
+          <EmptyState
+            compact
+            icon={Activity}
+            title="Nothing running"
+            description="Persona turns and routine fires show up here live, with elapsed time and a stop control."
+          />
+        ) : (
+          <>
+            <p className="text-muted-foreground px-1 pb-2 font-mono text-micro tracking-wide uppercase">
+              {count} {count === 1 ? 'run' : 'runs'} in progress
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {runs.map((run) => (
+                <RunRow
+                  key={run.runId}
+                  run={run}
+                  now={now}
+                  onStop={cancel}
+                  onOpen={(target) => {
+                    const destination = runTarget(target)
+                    setSection('chats')
+                    setSelectedConversation(destination)
+                    setOpen(false)
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </PopoverContent>
     </Popover>
   )

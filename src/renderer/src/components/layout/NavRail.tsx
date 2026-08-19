@@ -20,7 +20,6 @@ import { cn } from '@/lib/utils'
 export function NavRail(): React.JSX.Element {
   const section = useUiStore((state) => state.section)
   const setSection = useUiStore((state) => state.setSection)
-  const navExpanded = useUiStore((state) => state.navExpanded)
   const { data: runs = [] } = useActiveRuns()
 
   return (
@@ -86,11 +85,15 @@ export function NavRail(): React.JSX.Element {
       </SidebarContent>
 
       <SidebarFooter className="gap-1 px-2 pb-3">
-        {/* What the fleet is doing right now. It sits above the account and
-            appearance controls because it is state, not a setting — and it is
-            the one thing here that changes on its own. */}
-        <RunIndicator runs={runs} expanded={navExpanded} />
         <SidebarMenu className="gap-1">
+          {/* What the fleet is doing right now. First in the footer because it
+              is state, not a setting — the one row here that changes on its
+              own — but a permanent button either way: a control that only
+              exists while running cannot be learned, and an idle click gets
+              an honest empty state. */}
+          <SidebarMenuItem>
+            <RunIndicator runs={runs} />
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <GitHubStatusButton />
           </SidebarMenuItem>
