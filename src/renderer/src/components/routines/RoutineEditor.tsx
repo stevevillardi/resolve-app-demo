@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Check, Clock, Play, Trash2 } from 'lucide-react'
+import { Check, Clock, MessageSquare, Play, Square, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -12,6 +13,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { RunPulse } from '@/components/common/RunIndicator'
 import { ScopeChip } from '@/components/common/ScopeChip'
 import { EmptyPane } from '@/components/common/EmptyPane'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
@@ -22,6 +24,8 @@ import { FieldGrid, FieldGridSpan } from '@/components/common/FieldGrid'
 import { SchedulePicker } from './SchedulePicker'
 import { Section } from '@/components/common/Section'
 import { formatRelative, repoName } from '@/lib/format'
+import { formatElapsed } from '@/lib/home'
+import { routineRun } from '@/lib/run-view'
 import { useContacts } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import {
@@ -31,6 +35,8 @@ import {
   useRunRoutineNow,
   useUpdateRoutine
 } from '@/hooks/useRoutines'
+import { useActiveRuns, useCancelRun } from '@/hooks/useMessages'
+import { useNow } from '@/hooks/useNow'
 import { useUiStore } from '@/store/useUiStore'
 import type { Routine } from '@/types'
 
@@ -50,7 +56,16 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
   const { error: cronError, nextRuns } = useCronValidation(schedule)
   const { save, isPending: saving, error: saveError } = useUpdateRoutine()
   const { remove } = useDeleteRoutine()
-  const { runNow, isPending: running, skipped } = useRunRoutineNow()
+  const { runNow, isPending: starting, skipped } = useRunRoutineNow()
+  // The live half (Phase 25): a routine mid-fire used to be indistinguishable
+  // from an idle one in its own editor — the button stayed clickable and the
+  // pane showed the PREVIOUS run's summary as if it were current.
+  const { data: runs = [] } = useActiveRuns()
+  const liveRun = routineRun(runs, routine.id)
+  const now = useNow(Boolean(liveRun))
+  const { cancel } = useCancelRun()
+  const setSection = useUiStore((state) => state.setSection)
+  const setSelectedConversation = useUiStore((state) => state.setSelectedConversation)
   const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
 
   const contact = contacts.find((c) => c.id === contactId)
@@ -87,11 +102,15 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
               variant="outline"
               size="sm"
               className="gap-1.5"
-              disabled={running}
-              onClick={() => runNow(routine.id)}
+              disabled={starting || Boolean(liveRun)}
+              onClick={() =>
+                runNow(routine.id, (result) =>
+                  toast(result.skipped ? `Skipped — ${result.skipped}` : 'Run started')
+                )
+              }
             >
-              <Play className="size-3.5" />
-              Run now
+              {liveRun ? <RunPulse /> : <Play className="size-3.5" />}
+              {liveRun ? 'Running' : starting ? 'Starting…' : 'Run now'}
             </Button>
             <Button
               size="sm"
@@ -227,6 +246,34 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
         {saveError && <p className="text-destructive text-xs">{saveError}</p>}
 
         <Section title="Last run">
+          {liveRun && (
+            <div className="border-primary/40 flex items-center gap-2.5 rounded-lg border p-3">
+              <RunPulse />
+              <span className="text-primary text-row flex-1 font-medium">
+                Running · {formatElapsed(liveRun.startedAt, now)}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  setSection('chats')
+                  setSelectedConversation({ kind: 'contact', id: liveRun.contactId })
+                }}
+              >
+                <MessageSquare className="size-3.5" />
+                View conversation
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Stop this run"
+                onClick={() => cancel(liveRun.runId)}
+              >
+                <Square className="size-3.5" />
+              </Button>
+            </div>
+          )}
           {routine.lastRunAt ? (
             <div className="border-border rounded-lg border p-3">
               <p className="text-muted-foreground font-mono text-meta">

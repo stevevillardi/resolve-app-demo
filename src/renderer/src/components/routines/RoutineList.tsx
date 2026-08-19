@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Clock, Pause, Play, Trash2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
+import { RunPulse } from '@/components/common/RunIndicator'
 import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ListRow } from '@/components/common/ListRow'
@@ -11,6 +12,8 @@ import {
   ContextMenuSeparator
 } from '@/components/ui/context-menu'
 import { formatRelative } from '@/lib/format'
+import { formatElapsed } from '@/lib/home'
+import { routineRun } from '@/lib/run-view'
 import { cn } from '@/lib/utils'
 import { useContacts } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
@@ -20,6 +23,8 @@ import {
   useRunRoutineNow,
   useUpdateRoutine
 } from '@/hooks/useRoutines'
+import { useActiveRuns } from '@/hooks/useMessages'
+import { useNow } from '@/hooks/useNow'
 import { useUiStore } from '@/store/useUiStore'
 import type { Routine } from '@/types'
 
@@ -97,6 +102,12 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
   const { data: routines = [], isPending } = useRoutines()
   const contacts = useContacts().data ?? []
   const personaTemplates = usePersonas().data ?? []
+  // Live state: a routine mid-fire must not read "Last run 3 days ago" — that
+  // was the Phase 25 complaint in one sentence. Elapsed ticks only while
+  // something is actually running.
+  const { data: runs = [] } = useActiveRuns()
+  const anyRoutineRunning = runs.some((run) => run.origin === 'routine')
+  const now = useNow(anyRoutineRunning)
 
   const visible = routines.filter(
     (routine) =>
@@ -169,13 +180,26 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
               <span className="text-muted-foreground mt-0.5 block truncate text-xs">
                 {routine.prompt}
               </span>
-              <span className="text-muted-foreground mt-0.5 block text-meta">
-                {routine.enabled
-                  ? routine.lastRunAt
-                    ? `Last run ${formatRelative(routine.lastRunAt)}`
-                    : 'Never run'
-                  : 'Paused'}
-              </span>
+              {(() => {
+                const live = routineRun(runs, routine.id)
+                if (live) {
+                  return (
+                    <span className="text-primary mt-0.5 flex items-center gap-1.5 text-meta">
+                      <RunPulse />
+                      Running · {formatElapsed(live.startedAt, now)}
+                    </span>
+                  )
+                }
+                return (
+                  <span className="text-muted-foreground mt-0.5 block text-meta">
+                    {routine.enabled
+                      ? routine.lastRunAt
+                        ? `Last run ${formatRelative(routine.lastRunAt)}`
+                        : 'Never run'
+                      : 'Paused'}
+                  </span>
+                )
+              })()}
               {/* Outstanding misses, in the warning register rather than the
                   destructive one — nothing failed, something silently didn't
                   happen. Cleared by any attempt, so a healthy routine never
