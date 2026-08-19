@@ -70,6 +70,14 @@ function MonacoDiff({
           readOnly: true,
           originalEditable: false,
           renderSideBySide: sideBySide,
+          // The segmented control above this pane is the only thing that
+          // decides the layout. Monaco otherwise drops to inline below 900px,
+          // and the branch pane hands this editor roughly 800px on a normal
+          // window (pane width less the 224px file rail) — so "Split" had been
+          // rendering inline, with two adjacent line-number gutters, for every
+          // window narrower than about 1900px. A control that silently does
+          // the other thing is worse than one that is cramped.
+          useInlineViewWhenSpaceIsLimited: false,
           automaticLayout: true,
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
