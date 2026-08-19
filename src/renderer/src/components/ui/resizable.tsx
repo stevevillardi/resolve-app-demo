@@ -12,8 +12,30 @@ function ResizablePanelGroup({ className, ...props }: ResizablePrimitive.GroupPr
   )
 }
 
-function ResizablePanel({ ...props }: ResizablePrimitive.PanelProps) {
-  return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />
+function ResizablePanel({ style, ...props }: ResizablePrimitive.PanelProps) {
+  return (
+    <ResizablePrimitive.Panel
+      data-slot="resizable-panel"
+      // Two overrides of the library's inner content wrapper (v4 spreads the
+      // style prop after its own `overflow: auto` etc., so these win):
+      //
+      // `height: 100%` — the wrapper's default height comes from *two* nested
+      // flex stretches through `height: auto` layers, and a pane's `h-full`
+      // resolved against that chain can wedge at a stale value after window
+      // resize churn (seen live: the group thread laid out for an old height,
+      // composer floating mid-window). A definite percentage removes the
+      // dependency on stretch resolution entirely.
+      //
+      // `overflow: hidden` — the wrapper is a scroll container by default,
+      // which is the failure's visible half: when a pane's height wedged, the
+      // *panel* scrolled the whole pane, header and all. Every pane in this
+      // app scrolls internally (ScrollArea in PaneBody/ListPanel/threads), so
+      // panel-level scrolling is never wanted; hidden makes the symptom class
+      // structurally impossible.
+      style={{ height: '100%', overflow: 'hidden', ...style }}
+      {...props}
+    />
+  )
 }
 
 function ResizableHandle({
