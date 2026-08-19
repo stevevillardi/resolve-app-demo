@@ -1,7 +1,7 @@
 {
   "name": "switchboard",
   "version": "0.1.0",
-  "description": "Switchboard — desktop orchestration layer for persistent AI persona contacts on the Claude Agent SDK and Codex SDK",
+  "description": "Switchboard \u2014 desktop orchestration layer for persistent AI persona contacts on the Claude Agent SDK and Codex SDK",
   "main": "./out/main/index.js",
   "author": "Steve Villardi",
   "private": true,
@@ -23,6 +23,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "demo": "SWITCHBOARD_DEMO=1 electron-vite dev",
+    "demo:reset": "bash scripts/reset-demo.sh",
     "build": "npm run typecheck && npm run test && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "package": "npm run build && electron-builder --mac dir",

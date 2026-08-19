@@ -94,7 +94,9 @@ persona on the same repo chats freely the whole time.
 
 `npm run demo` (`SWITCHBOARD_DEMO=1`) rebuilds the profile as a pre-populated
 showcase on every launch — same pristine state however the last rehearsal
-ended. `SWITCHBOARD_DEMO_REPO` overrides which checkout it binds.
+ended. `SWITCHBOARD_DEMO_REPO` overrides which checkout it binds. To reset
+the *journeys* demo instead (PRs closed, branches deleted, issues reopened,
+profile wiped, credentials kept), run `npm run demo:reset` — see the runbook.
 
 ## Live checks
 

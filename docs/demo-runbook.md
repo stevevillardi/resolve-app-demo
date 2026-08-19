@@ -157,7 +157,19 @@ permissions.*
 
 ## After the demo
 
-Close the PR and delete its branch if you plan to rerun (`gh pr close <n>
---delete-branch`), reopen/keep the issues, and reset the profile. The demo
-repo is reusable indefinitely; the planted bugs only get "fixed" on persona
-branches, never on `main`.
+One command puts everything back to runbook-ready:
+
+```bash
+npm run demo:reset              # close PRs + delete branches + reopen issues,
+                                # then wipe the clone and the app profile
+npm run demo:reset -- --repo-only     # keep the app profile
+npm run demo:reset -- --profile-only  # keep the GitHub state
+npm run demo:reset -- --dry-run       # say what would happen
+```
+
+It refuses to touch the profile while the app is running, and never touches
+credentials — the next launch starts at onboarding with all three rows green.
+The demo repo is reusable indefinitely; the planted bugs only get "fixed" on
+persona branches, never on `main`. Defaults target
+`stevevillardi/switchboard-journey-demo`; override with `DEMO_REPO` and
+`DEMO_CLONE`.
