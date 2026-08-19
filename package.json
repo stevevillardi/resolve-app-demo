@@ -27,6 +27,7 @@
     "build": "npm run typecheck && npm run test && electron-vite build",
     "postinstall": "electron-builder install-app-deps && bash scripts/sign-dev-electron.sh",
     "package": "npm run build && electron-builder --mac dir",
+    "install:local": "npm run package && bash scripts/install-local.sh",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",

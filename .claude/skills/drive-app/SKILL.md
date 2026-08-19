@@ -23,6 +23,17 @@ driving the previous bundle.
 - `npx electron-vite build` bundles without the gate. Use it when iterating on
   UI you'll verify by eye, or when testing a deliberate mutation.
 
+## Installing the real app locally
+
+`npm run install:local` = build + package + replace `/Applications/Switchboard.app`
++ relaunch. It quits a running copy with AppleScript first (the app hides to the
+tray rather than exiting, and holds a SQLite handle, so `quit` beats a kill),
+copies with `ditto` to preserve the code signature, and verifies that signature
+before declaring success. `NO_LAUNCH=1` installs without stealing focus.
+
+Use it when the thing under test is the *packaged* app — hardened runtime, the
+asar layout, the real bundle identity — rather than the dev bundle.
+
 ## Formal specs (`e2e/*.spec.ts`)
 
 `npm run test:e2e` = build + `playwright test --project=e2e`. Screenshot specs
