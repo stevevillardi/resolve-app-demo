@@ -45,6 +45,9 @@ mac:
   # designated requirement, so swapping certs on expiry will not invalidate the
   # keychain grant. scripts/sign-dev-electron.sh reads this exact line.
   identity: 2CA9C0B374C903DC12D7236A041DC1E171B9B302
+  # electron-builder would pass this certificate's *name* to codesign, and the
+  # name is ambiguous here; the hook re-selects it by hash. See build/mac-sign.js.
+  sign: build/mac-sign.js
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist

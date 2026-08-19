@@ -6,7 +6,9 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out'] },
+  // build/mac-sign.js is a CommonJS hook that electron-builder `require`s at
+  // package time, so it cannot be ESM and cannot carry TS annotations.
+  { ignores: ['**/node_modules', '**/dist', '**/out', 'build/mac-sign.js'] },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],
