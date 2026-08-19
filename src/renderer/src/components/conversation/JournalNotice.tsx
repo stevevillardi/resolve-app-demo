@@ -1,4 +1,4 @@
-import { Milestone, Pin, Scale, ScrollText } from 'lucide-react'
+import { Milestone, Scale, ScrollText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatTime } from '@/lib/format'
@@ -17,6 +17,11 @@ interface JournalNoticeProps {
  * the log rows already do (RoutineRunNotice's clock, BranchRequestNotice's
  * PR arrow): a milestone marks a decision the fleet will keep, scales weigh
  * a tradeoff, a scroll is the routine session record.
+ *
+ * One glyph, not two: durability used to add a trailing pin, but decisions
+ * and tradeoffs are durable by construction (compaction.ts), so every such
+ * banner wore both marks. The category icon now carries the durable tooltip
+ * itself instead.
  */
 const CATEGORY: Record<SystemSummaryCategory, { label: string; icon: LucideIcon }> = {
   decision: { label: 'Decision', icon: Milestone },
@@ -48,24 +53,24 @@ export function JournalNotice({
         <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-meta font-medium tracking-wide uppercase">
           {(() => {
             const Icon = CATEGORY[category].icon
-            return <Icon aria-hidden className="size-3" />
+            if (!durable) return <Icon aria-hidden className="size-3" />
+            return (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span className="inline-flex cursor-default">
+                      <Icon aria-hidden className="size-3" />
+                      <span className="sr-only">Kept indefinitely</span>
+                    </span>
+                  }
+                />
+                <TooltipContent>
+                  Durable — re-injected into every future session on this repo.
+                </TooltipContent>
+              </Tooltip>
+            )
           })()}
           {CATEGORY[category].label}
-          {durable && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span className="text-foreground/70 inline-flex cursor-default">
-                    <Pin className="size-3" />
-                    <span className="sr-only">Kept indefinitely</span>
-                  </span>
-                }
-              />
-              <TooltipContent>
-                Durable — re-injected into every future session on this repo.
-              </TooltipContent>
-            </Tooltip>
-          )}
         </span>
         <span className="bg-border h-px flex-1" />
       </div>
