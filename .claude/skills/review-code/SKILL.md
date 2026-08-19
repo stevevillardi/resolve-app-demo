@@ -16,9 +16,19 @@ layered on top of that pass.
 
 ## Process
 
-1. Get the full diff (`git diff` against `main`, or the PR/branch given). Read touched files in full,
-   not just the hunk — this app's bugs are usually about a boundary being crossed, which a hunk alone
-   won't show.
+1. Get the full diff:
+   - Working tree / local branch: `git diff main...<branch>` (three dots — the branch's own changes,
+     not what main grew since).
+   - GitHub PR: `gh pr diff <n>`; `gh pr view <n> --json title,body,commits` for the claimed intent.
+     To read touched files in full without disturbing your checkout, `gh pr checkout <n>` **in a
+     worktree**, never the shared primary checkout.
+   - A sibling agent's unmerged branch: worktrees share the object store, so
+     `git show <branch>:<file>` and `git diff main...<branch>` read it without a merge and without
+     leaving your tree.
+
+   Read touched files in full, not just the hunk — this app's bugs are usually about a boundary
+   being crossed, which a hunk alone won't show. Compare the commit messages' claims against the
+   diff's behavior; the most valuable findings live in that gap.
 2. Walk the categories below; skip categories with nothing relevant in the diff.
 3. Rank findings: correctness and architecture-boundary violations first (they're effectively security/
    stability bugs in this app's threat model), then DRY, then missing tests, then style.
@@ -110,8 +120,37 @@ Stack-specific:
 - `GroupMessage.durable` handling matches the compaction rule (§6): `decision`/`tradeoff` → durable,
   always injected; `routine` → non-durable, only most-recent-N injected, rest stay queryable only.
 
+## 7. Repo idioms that bite (each of these has already produced a real bug or near-miss)
+
+- **Explicit `.set({...})` column lists** in update services (`persona-templates.ts` documents the
+  `model` regression): a schema column added without being named there is a silent no-op. A diff
+  adding a column must show the `.set()` line *and* a round-trip test that reads the value back.
+- **Whole-form saves compare JSON**: `PersonaForm`-style editors build an `edited` object and
+  `JSON.stringify`-compare it against the entity. A new editable field omitted from that object
+  changes on screen while Save stays disabled. Check the `edited` literal, not just the JSX.
+- **Nullable-no-backfill columns carry meaning in null** (`mcp_server_ids`, `groups.name`,
+  `avatar_seed`): the coalesce lives in `mappers.ts`. A diff reading the row type directly
+  (skipping the mapper) silently loses that meaning.
+- **Draft vs entity Zod**: fields the server defaults must stay optional on the draft schema —
+  requiring them on the draft breaks every draft-shaped fixture and the quick-create flows.
+- **Shared-component bypasses**: some call sites inline the underlying helper instead of the shared
+  component (the group tile calls `botttsDataUri` directly rather than `AvatarColorSwatch`). When a
+  diff changes "how X renders everywhere", grep for the helper, not just the component.
+- **Untyped Zod fixtures** (`domain.test.ts`): typecheck passes when a required field is missing
+  there; only the suite catches it. "Typecheck is green" is not "fixtures are updated".
+- **Migrations are generated**, and every icon PNG is generated from its SVG sibling — a diff
+  hand-editing `drizzle/meta/*` or a PNG in `build/`/`resources/` is wrong even if it works.
+- **A persona is sealed against its repo** (Claude `settingSources: []`; Codex
+  `project_doc_max_bytes: 0`, hooks off, skills disabled by name). A diff removing one of those to
+  make something work is a governance decision that belongs in `docs/plan/00-progress.md` — flag it
+  even if the feature is desirable.
+
 ## Output
 
 List findings ranked by severity (correctness/architecture first). For each: file:line, the defect in
 one sentence, the concrete failure scenario, and a suggested fix. If nothing survives review, say so
 plainly rather than padding with style nits.
+
+For a GitHub PR, post to the PR **only when explicitly asked**: a single summarizing comment via
+`gh pr comment <n> --body-file <file>`, or inline comments via the review API — never an
+approve/request-changes verdict, which stays a human's call.
