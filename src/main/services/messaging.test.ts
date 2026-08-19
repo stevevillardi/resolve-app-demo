@@ -859,6 +859,43 @@ describe('listActiveRuns', () => {
     expect(runs).toHaveLength(1)
     expect(runs[0]).toMatchObject({ runId, contactId: 'contact-a', mode: 'shared' })
   })
+
+  // Phase 25: the wire row names what started the turn. Before this, no
+  // surface could tell a routine fire from a chat — which is why the Routines
+  // pane could not say "running" about its own routine.
+  it('names a user message as the origin', () => {
+    harness.gate = holdOpen()
+    sendMessage('contact-a', 'go')
+
+    expect(listActiveRuns()[0]).toMatchObject({
+      origin: 'message',
+      routineId: null,
+      groupId: null
+    })
+  })
+
+  it('names the routine behind an unattended turn', () => {
+    harness.gate = holdOpen()
+    runRoutineTurn('routine-9', 'contact-a', 'check the issues')
+
+    expect(listActiveRuns()[0]).toMatchObject({
+      origin: 'routine',
+      routineId: 'routine-9',
+      groupId: null
+    })
+  })
+
+  it('names the group behind a mention', () => {
+    db.insert(groups).values({ id: 'group-runs', repoPath: REPO }).run()
+    harness.gate = holdOpen()
+    mentionInGroup('group-runs', 'contact-a', 'take a look')
+
+    expect(listActiveRuns()[0]).toMatchObject({
+      origin: 'mention',
+      routineId: null,
+      groupId: 'group-runs'
+    })
+  })
 })
 
 function holdOpen(): { promise: Promise<void>; open: () => void } {

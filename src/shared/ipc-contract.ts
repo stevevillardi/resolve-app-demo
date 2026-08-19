@@ -205,7 +205,19 @@ const activeRunSchema = z.object({
   workingPath: z.string(),
   /** `shared` runs cannot write, so any number of them may overlap. */
   mode: z.enum(['shared', 'exclusive']),
-  startedAt: z.number()
+  startedAt: z.number(),
+  /**
+   * What started the turn. Flattened rather than a nested union so a renderer
+   * surface filters with a field compare — and so output validation fails
+   * loudly if main forgets to populate it. Before this existed, no surface
+   * could tell a routine fire from a chat, which is why the Routines pane
+   * couldn't say "running" about its own routine.
+   */
+  origin: z.enum(['message', 'mention', 'routine']),
+  /** Set when origin is `routine`. */
+  routineId: z.string().nullable(),
+  /** Set when origin is `mention` — the group thread it was sent from. */
+  groupId: z.string().nullable()
 })
 
 /**
@@ -623,7 +635,16 @@ export const ipcContract = {
    */
   'routines.runNow': {
     input: z.object({ id: z.string() }),
-    output: z.object({ runId: z.string().nullable(), skipped: z.string().nullable() })
+    output: z.object({
+      runId: z.string().nullable(),
+      skipped: z.string().nullable(),
+      /**
+       * The contact the routine runs as, when the turn started. Returned so
+       * the renderer can enter the run store immediately (live bubble, busy
+       * composer) instead of waiting for a push round-trip. Null on skip.
+       */
+      contactId: z.string().nullable()
+    })
   },
 
   /**

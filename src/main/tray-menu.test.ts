@@ -87,7 +87,7 @@ describe('buildTrayMenu', () => {
     const idle = buildTrayMenu([], { now: NOW })
     expect(idle.some((item) => item.id === 'running')).toBe(false)
 
-    const one = buildTrayMenu([], { runningTurns: 1, now: NOW })
+    const one = buildTrayMenu([], { running: [turn()], now: NOW })
     expect(one.find((item) => item.id === 'running')).toEqual({
       id: 'running',
       label: '1 turn running',
@@ -96,10 +96,66 @@ describe('buildTrayMenu', () => {
       enabled: true
     })
 
-    const three = buildTrayMenu([], { runningTurns: 3, now: NOW })
+    const three = buildTrayMenu([], { running: [turn(), turn(), turn()], now: NOW })
     expect(three.find((item) => item.id === 'running')?.label).toBe('3 turns running')
   })
+
+  // Phase 25: a count that listed nobody made the tray answer "how many"
+  // while dodging "who" — while the scheduled section below it names five
+  // routines. Running turns get the same treatment.
+  it('names each running turn with its contact, origin, and absolute start', () => {
+    const items = buildTrayMenu([], {
+      running: [turn({ contactName: 'Refactor Buddy', origin: 'routine', startedAt: NOW })],
+      now: NOW
+    })
+    const row = items.find((item) => item.id === 'run')
+    expect(row?.enabled).toBe(true)
+    expect(row?.label).toContain('Refactor Buddy — routine since ')
+    // Absolute local time, never a countdown — the same no-counting rule as
+    // the scheduled section, because a static menu cannot tick.
+    expect(row?.label).toMatch(/since \d{1,2}:\d{2}/)
+  })
+
+  it('says chat for a typed message', () => {
+    const items = buildTrayMenu([], { running: [turn({ origin: 'message' })], now: NOW })
+    expect(items.find((item) => item.id === 'run')?.label).toContain('— chat since')
+  })
+
+  it('carries a navigate target: the contact thread, or the group for a mention', () => {
+    const items = buildTrayMenu([], {
+      running: [
+        turn({ contactId: 'contact-a', origin: 'routine' }),
+        turn({ contactId: 'contact-b', origin: 'mention', groupId: 'group-1' })
+      ],
+      now: NOW
+    })
+    const rows = items.filter((item) => item.id === 'run')
+    expect(rows[0].target).toEqual({ kind: 'contact', contactId: 'contact-a' })
+    expect(rows[1].target).toEqual({ kind: 'group', groupId: 'group-1' })
+  })
+
+  it('caps the named rows and counts the overflow', () => {
+    const items = buildTrayMenu([], {
+      running: Array.from({ length: 7 }, (_, i) => turn({ contactId: `contact-${i}` })),
+      now: NOW
+    })
+    expect(items.filter((item) => item.id === 'run')).toHaveLength(5)
+    expect(items.find((item) => item.label === '+ 2 more running')).toBeTruthy()
+  })
 })
+
+function turn(
+  overrides: Partial<import('./tray-menu').TrayRunningTurn> = {}
+): import('./tray-menu').TrayRunningTurn {
+  return {
+    contactId: 'contact-a',
+    contactName: 'Code Reviewer',
+    origin: 'message',
+    groupId: null,
+    startedAt: NOW - 60_000,
+    ...overrides
+  }
+}
 
 describe('formatNextRun', () => {
   /**

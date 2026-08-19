@@ -4,8 +4,7 @@ import {
   CalendarClock,
   GitBranch,
   Loader2,
-  MessagesSquare,
-  Square
+  MessagesSquare
 } from 'lucide-react'
 import { Bar, BarChart } from 'recharts'
 import { Button } from '@/components/ui/button'
@@ -15,7 +14,7 @@ import { EmptyPane } from '@/components/common/EmptyPane'
 import { ListRow } from '@/components/common/ListRow'
 import { PaneBody } from '@/components/common/PaneBody'
 import { PaneHeader } from '@/components/common/PaneHeader'
-import { RunPulse } from '@/components/common/RunIndicator'
+import { RunRow } from '@/components/common/RunRow'
 import { Section } from '@/components/common/Section'
 import { GuideStrip, WorkspaceGuide } from './WorkspaceGuide'
 import { useAuthStatus, useRefreshAuth } from '@/hooks/useAuth'
@@ -30,7 +29,6 @@ import {
   authBannerFor,
   budgetBannerFor,
   dailySpend,
-  formatElapsed,
   formatUpcoming,
   missedRuns,
   recentActivity,
@@ -212,29 +210,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
           >
             <div className="flex flex-col gap-1.5">
               {runs.map((run) => (
-                <div
-                  key={run.runId}
-                  className="border-border flex items-center gap-2.5 rounded-lg border px-2.5 py-2"
-                >
-                  <RunPulse />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-row font-medium">{run.contactName}</span>
-                    <span className="text-muted-foreground block truncate font-mono text-meta">
-                      {repoName(run.workingPath)}
-                    </span>
-                  </span>
-                  <span className="text-muted-foreground shrink-0 font-mono text-meta tabular-nums">
-                    {formatElapsed(run.startedAt, now)}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Stop ${run.contactName}`}
-                    onClick={() => cancel(run.runId)}
-                  >
-                    <Square className="size-3.5" />
-                  </Button>
-                </div>
+                <RunRow key={run.runId} run={run} now={now} onStop={cancel} />
               ))}
             </div>
           </Section>

@@ -25,7 +25,8 @@ function holder(mode: LockMode, workingPath = REPO, contactName = 'Code Reviewer
     contactName,
     workingPath,
     mode,
-    startedAt: Date.now()
+    startedAt: Date.now(),
+    origin: { kind: 'message' }
   }
 }
 

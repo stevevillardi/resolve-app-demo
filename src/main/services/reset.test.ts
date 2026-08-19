@@ -161,7 +161,8 @@ describe('clearAppData', () => {
       contactName: 'c2 · app',
       workingPath: '~/code/app',
       mode: 'exclusive',
-      startedAt: 0
+      startedAt: 0,
+      origin: { kind: 'message' }
     })
 
     await expect(clearAppData()).rejects.toThrow(/working right now/)

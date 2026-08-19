@@ -1,5 +1,6 @@
 import { blockingRun } from '../../shared/locking'
 import type { LockMode } from '../../shared/locking'
+import type { TurnOrigin } from './turn-origin'
 
 /**
  * Who may run where, at the same time (blueprint §15D).
@@ -37,6 +38,14 @@ export interface RunHolder {
   workingPath: string
   mode: LockMode
   startedAt: number
+  /**
+   * What started the turn — carried the same way contactName is: the lock does
+   * not decide anything with it, but every surface that lists active runs
+   * needs it to say *why* something is running (Run-now feedback, the fleet
+   * popover, the tray). Dropping it here was why runs.list could not tell a
+   * routine from a chat.
+   */
+  origin: TurnOrigin
 }
 
 /** Undoes exactly one acquire(). Idempotent — a double release is a no-op. */

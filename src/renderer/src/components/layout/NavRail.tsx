@@ -89,7 +89,7 @@ export function NavRail(): React.JSX.Element {
         {/* What the fleet is doing right now. It sits above the account and
             appearance controls because it is state, not a setting — and it is
             the one thing here that changes on its own. */}
-        <RunIndicator count={runs.length} expanded={navExpanded} />
+        <RunIndicator runs={runs} expanded={navExpanded} />
         <SidebarMenu className="gap-1">
           <SidebarMenuItem>
             <GitHubStatusButton />

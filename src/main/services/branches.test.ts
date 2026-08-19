@@ -304,7 +304,8 @@ describe('commitBranchWork (Phase 19)', () => {
       contactName: 'Refactor Buddy · my-app',
       workingPath: contact.worktreePath as string,
       mode: 'exclusive',
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      origin: { kind: 'message' }
     })
 
     await expect(commitBranchWork(repo, contact.branch as string, 'racing')).rejects.toThrow(

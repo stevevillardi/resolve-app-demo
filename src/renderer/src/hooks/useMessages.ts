@@ -8,7 +8,7 @@ import {
   onRunsChanged
 } from '@/lib/ipc-client'
 import { useRunStore } from '@/store/useRunStore'
-import { staleTurnContacts } from '@/lib/run-reconcile'
+import { missingTurnRuns, staleTurnContacts } from '@/lib/run-reconcile'
 import { contactsKey } from './useConversations'
 import type { PersistedMessage } from '@/types'
 import type { ActiveRun, IpcOutput } from '../../../shared/ipc-contract'
@@ -44,6 +44,18 @@ export const runsKey = ['runs'] as const
 export const groupMessagesRootKey = ['groupMessages'] as const
 
 export function useMessages(contactId: string): UseQueryResult<PersistedMessage[]> {
+  const queryClient = useQueryClient()
+
+  // Background turns — a routine fire, a mention answered elsewhere — write
+  // rows with no runId subscription in this view, and before this the open
+  // thread showed them only after a remount or window refocus (Phase 25).
+  // Same signal useMessagePreviews already rides; the prefix invalidation
+  // covers the toolCalls entry too.
+  useEffect(
+    () => onMessagesChanged(() => void queryClient.invalidateQueries({ queryKey: messagesKey(contactId) })),
+    [queryClient, contactId]
+  )
+
   return useQuery({
     queryKey: messagesKey(contactId),
     queryFn: () => callProcedure('messages.list', { contactId })
@@ -233,14 +245,22 @@ export function useActiveRuns(): UseQueryResult<ActiveRun[]> {
  */
 export function useRunReconciliation(): void {
   const queryClient = useQueryClient()
+  const begin = useRunStore((state) => state.begin)
   const end = useRunStore((state) => state.end)
 
   useEffect(() => {
     const sweep = async (): Promise<void> => {
       const byContact = useRunStore.getState().byContact
-      if (Object.keys(byContact).length === 0) return
-
       const runs = await callProcedure('runs.list', undefined)
+
+      // The add half (Phase 25): runs no renderer mutation ever began — a
+      // routine fire, or any turn surviving a renderer reload — enter the
+      // store here so they stream with the same machinery a sent message
+      // uses. A mid-turn begin() starts from emptyStream; deltas emitted
+      // before the subscription are lost by design — the persisted rows are
+      // the record.
+      missingTurnRuns(byContact, runs).forEach(({ contactId, runId }) => begin(contactId, runId))
+
       const stale = staleTurnContacts(
         byContact,
         runs.map((run) => run.runId)
@@ -267,5 +287,5 @@ export function useRunReconciliation(): void {
       document.removeEventListener('visibilitychange', onVisible)
       unsubscribe()
     }
-  }, [queryClient, end])
+  }, [queryClient, begin, end])
 }

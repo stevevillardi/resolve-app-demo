@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { callProcedure, ipcErrorMessage, onRoutinesChanged } from '@/lib/ipc-client'
+import { useRunStore } from '@/store/useRunStore'
+import { runsKey } from './useMessages'
 import type { Routine, RoutineDraft, RoutineUpdate } from '@/types'
 
 export const routinesKey = ['routines'] as const
@@ -85,12 +87,19 @@ export function useRunRoutineNow(): {
   error: string | null
 } {
   const queryClient = useQueryClient()
+  const begin = useRunStore((state) => state.begin)
   const mutation = useMutation({
     mutationFn: (id: string) => callProcedure('routines.runNow', { id }),
     // The turn only just *started* — its run history lands minutes later, when
-    // the scheduler writes it. Invalidating here refreshes the skip case, which
-    // is already decided; the completed case arrives with the next refetch.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: routinesKey })
+    // the scheduler writes it. Entering the run store here is what makes the
+    // start visible NOW: the live bubble, the busy composer, and the Routines
+    // pane's running state all key off it, deterministically rather than via
+    // the push round-trip the reconciliation sweep would eventually take.
+    onSuccess: (result) => {
+      if (result.runId && result.contactId) begin(result.contactId, result.runId)
+      void queryClient.invalidateQueries({ queryKey: routinesKey })
+      void queryClient.invalidateQueries({ queryKey: runsKey })
+    }
   })
 
   return {
