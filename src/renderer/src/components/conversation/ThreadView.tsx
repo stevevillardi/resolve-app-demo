@@ -158,7 +158,13 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
     return <EmptyState icon={MessageSquare} title="Conversation not found" />
   }
 
-  const isRunning = Boolean(turn && !turn.stream.finished)
+  // The store covers turns this renderer started or swept in; the runs query
+  // covers the gap before a sweep lands and any push the sweep missed. Without
+  // the second half, a routine turn left the composer enabled and Stop
+  // unreachable — the user could type into a running conversation and only
+  // learn about the turn from main's lock refusal (Phase 25).
+  const ownRun = runs.find((run) => run.contactId === contactId)
+  const isRunning = Boolean(turn && !turn.stream.finished) || Boolean(ownRun)
 
   const doRetry = (): void => {
     resetRetry()
@@ -372,7 +378,10 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
           send(value, { onSuccess: () => clearDraft(draftId) })
         }}
         busy={isRunning}
-        onStop={() => turn && cancel(turn.runId)}
+        onStop={() => {
+          const runId = turn?.runId ?? ownRun?.runId
+          if (runId) cancel(runId)
+        }}
         disabled={Boolean(blocker)}
         notice={
           // A pull-request refusal belongs here rather than beside the button:
