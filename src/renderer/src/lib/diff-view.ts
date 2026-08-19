@@ -97,6 +97,36 @@ export function unrenderableReason(file: FileDiff): string | null {
   return null
 }
 
+/**
+ * Why git listed a file the diff editor will render with no marks at all, or
+ * null when the two sides genuinely differ.
+ *
+ * `git diff --name-status` reports `M` for a **mode** change — 644 to 755 —
+ * whose two blobs are byte-identical, and `R100` for a rename that edited
+ * nothing. Both arrive here as a normal pair, and the pane then renders the
+ * whole file with every line unchanged, which reads as the viewer being broken
+ * rather than as the file not having changed.
+ *
+ * Line endings are normalised before comparing because Monaco's models are:
+ * `createModel` stores one EOL for the document, so a CRLF-to-LF commit hands
+ * us two different strings and still renders as two identical files.
+ *
+ * One-sided pairs return null. An empty side is what an add or a delete looks
+ * like, not an absence of change.
+ */
+export function noVisibleChangeNote(file: FileDiff): string | null {
+  if (file.oldText === null || file.newText === null) return null
+  if (normalizeEol(file.oldText) !== normalizeEol(file.newText)) return null
+
+  return file.status === 'renamed'
+    ? 'Moved. Its contents did not change.'
+    : 'git lists this file as changed, but both sides hold the same lines — the change is to its mode or its line endings.'
+}
+
+function normalizeEol(text: string): string {
+  return text.replace(/\r\n/g, '\n')
+}
+
 /** The first file worth selecting: the first one that renders. */
 export function firstRenderable(files: FileDiff[]): string | null {
   return (files.find((file) => !unrenderableReason(file)) ?? files[0])?.path ?? null

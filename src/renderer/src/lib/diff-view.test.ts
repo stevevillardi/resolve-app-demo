@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { firstRenderable, languageForPath, statusLabel, unrenderableReason } from './diff-view'
+import {
+  firstRenderable,
+  languageForPath,
+  noVisibleChangeNote,
+  statusLabel,
+  unrenderableReason
+} from './diff-view'
 import type { FileDiff } from '../../../shared/ipc-contract'
 
 function file(overrides: Partial<FileDiff>): FileDiff {
@@ -56,6 +62,41 @@ describe('unrenderableReason', () => {
     expect(unrenderableReason(file({ truncated: true, oldText: null, newText: null }))).toMatch(
       /Too large/
     )
+  })
+})
+
+describe('noVisibleChangeNote', () => {
+  const MODE_NOTE =
+    'git lists this file as changed, but both sides hold the same lines — the change is to its mode or its line endings.'
+
+  it('names the mode change behind a pair git calls modified and the editor cannot mark', () => {
+    expect(noVisibleChangeNote(file({ oldText: 'same\n', newText: 'same\n' }))).toBe(MODE_NOTE)
+  })
+
+  it('sees through line endings, because the editor’s models normalise them', () => {
+    // Two different strings that Monaco renders as two identical files: its
+    // models hold one EOL for the document, so the CRLF never reaches the diff.
+    expect(noVisibleChangeNote(file({ oldText: 'a\r\nb\r\n', newText: 'a\nb\n' }))).toBe(MODE_NOTE)
+  })
+
+  it('says moved, not changed, for a rename that edited nothing', () => {
+    expect(
+      noVisibleChangeNote(
+        file({ status: 'renamed', oldPath: 'src/old.ts', oldText: 'x', newText: 'x' })
+      )
+    ).toBe('Moved. Its contents did not change.')
+  })
+
+  it('is silent for a real edit, whitespace included', () => {
+    expect(noVisibleChangeNote(file({ oldText: 'a', newText: 'b' }))).toBeNull()
+    // The case Monaco's ignoreTrimWhitespace default used to swallow. It is a
+    // change, it renders as one now, and this note must not claim otherwise.
+    expect(noVisibleChangeNote(file({ oldText: 'a \n', newText: 'a\n' }))).toBeNull()
+  })
+
+  it('is silent for one-sided pairs — an empty side is what an add or delete is', () => {
+    expect(noVisibleChangeNote(file({ status: 'added', oldText: null, newText: '' }))).toBeNull()
+    expect(noVisibleChangeNote(file({ status: 'deleted', oldText: '', newText: null }))).toBeNull()
   })
 })
 
