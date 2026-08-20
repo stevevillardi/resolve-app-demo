@@ -469,7 +469,9 @@ describe('rebindPersona', () => {
 
   it('rejects an unknown contact', () => {
     seedOtherPersona()
-    expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/no longer exists/)
+    expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(
+      /no longer exists/
+    )
   })
 })
 
