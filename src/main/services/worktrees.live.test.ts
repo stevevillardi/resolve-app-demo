@@ -11,8 +11,8 @@ import type { AgentEvent } from '../../shared/agent'
 import type { Contact, PersonaBackend } from '../../shared/domain'
 
 /**
- * The three Phase 12 acceptance checks that no amount of unit testing can
- * settle, because they are about what a real backend does inside a real
+ * The three worktree-isolation acceptance checks that no amount of unit testing
+ * can settle, because they are about what a real backend does inside a real
  * worktree.
  *
  * **Skipped unless `LIVE_WORKTREES=1`.** It spends real credits, the same house
@@ -167,7 +167,7 @@ describe.skipIf(!LIVE)(`worktree isolation, live on ${BACKEND}`, () => {
   /**
    * Gate 1 — the sandbox grant, end to end.
    *
-   * This is the check the whole phase rests on. The model has to run `git add`
+   * This is the check worktree isolation rests on. The model has to run `git add`
    * and `git commit` from inside a worktree, which writes to
    * `<repo>/.git/worktrees/<name>` — outside its own working directory. Without
    * `writablePaths` reaching the backend it fails on `index.lock`, which is
@@ -198,8 +198,9 @@ describe.skipIf(!LIVE)(`worktree isolation, live on ${BACKEND}`, () => {
   })
 
   /**
-   * Gate 2 — two writers at once, which is the contention this phase exists to
-   * end. Before it, the second would have been refused by the run lock.
+   * Gate 2 — two writers at once, which is the contention worktree isolation
+   * exists to end: give each writer its own checkout and the run lock, keyed on
+   * the working path, has nothing to serialize.
    */
   it(
     'two writing contacts run at the same time and both complete',
@@ -208,8 +209,8 @@ describe.skipIf(!LIVE)(`worktree isolation, live on ${BACKEND}`, () => {
       const a = bindWriter('Writer A · live')
       const b = bindWriter('Writer B · live')
 
-      // Started without awaiting the first, so they genuinely overlap. Under the
-      // old lock this second call threw synchronously.
+      // Started without awaiting the first, so they genuinely overlap. A lock
+      // keyed on the repo would throw on this second call synchronously.
       const runA = sendMessage(
         a.id,
         'Create a file called a.ts containing `export const A = 1`, then commit it. Reply with one word.'
@@ -250,7 +251,8 @@ describe.skipIf(!LIVE)(`worktree isolation, live on ${BACKEND}`, () => {
           existsSync(join(contact.worktreePath as string, own)),
           `${own} should exist in ${contact.displayName}'s own tree`
         ).toBe(true)
-        // Neither can see the other's work on disk — §6's degradation, made real.
+        // Neither can see the other's work on disk: filesystem state stops
+        // being free the moment each writer has a checkout of its own.
         expect(
           existsSync(join(contact.worktreePath as string, other)),
           `${other} must not be visible to ${contact.displayName}`
@@ -269,9 +271,10 @@ describe.skipIf(!LIVE)(`worktree isolation, live on ${BACKEND}`, () => {
   )
 
   /**
-   * Gate 3 — the claim that saves blueprint §6. A reader in the main tree
-   * cannot see the writer's changes on disk at all, but the object store is
-   * shared, so `git show` reaches them with nothing merged and no elevated
+   * Gate 3 — the claim that keeps shared context alive once writers are
+   * isolated: filesystem state is no longer free, but the *object store* still
+   * is. A reader in the main tree cannot see the writer's changes on disk at
+   * all, yet `git show` reaches them with nothing merged and no elevated
    * permission. If the read-only allowlist refused these commands the persona
    * would have nothing to answer with.
    */

@@ -3,7 +3,7 @@ import { initDb } from '../db'
 import { contacts, groupMessages, groups, messages } from '../db/schema'
 
 /**
- * Unread counts (Phase 20, review §C4) — the app's first SQL aggregation.
+ * Unread counts — the app's first SQL aggregation.
  *
  * In a service over the real schema rather than renderer arithmetic, because
  * the renderer only holds previews (the last row per conversation), which can

@@ -141,11 +141,11 @@ describe('tool activity', () => {
   })
 
   it('keeps showing the other tool when one of two finishes first', () => {
-    // The comment on the tool_end arm has always claimed this, and the arm
-    // ignored toolCallId and cleared unconditionally — so the first of two
-    // parallel calls to finish blanked the line while the second still ran.
-    // Both backends emit interleaved calls, so this is the normal case for any
-    // turn that greps two things at once, not an edge one.
+    // A tool_end arm that ignored toolCallId and cleared unconditionally would
+    // blank the line the moment the first of two parallel calls finished, while
+    // the second still ran. Both backends emit interleaved calls, so this is
+    // the normal case for any turn that greps two things at once, not an edge
+    // one.
     const stream = fold([
       { type: 'tool_start', toolCallId: 't1', name: 'Bash', detail: 'rg auth' },
       { type: 'tool_start', toolCallId: 't2', name: 'Bash', detail: 'npm test' },
@@ -188,8 +188,8 @@ describe('errors', () => {
     expect(stream.finished).toBe(true)
   })
 
-  // The default classifyErrorMessage() result, and the kind the renderer union
-  // could not express before Phase 6 widened it.
+  // The default classifyErrorMessage() result, and a kind the renderer union
+  // has to be wide enough to express.
   it('carries an unknown-kind failure through', () => {
     const stream = fold([{ type: 'error', kind: 'unknown', message: 'spawn ENOENT' }])
     expect(stream.error?.kind).toBe('unknown')

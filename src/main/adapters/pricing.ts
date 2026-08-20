@@ -1,7 +1,7 @@
 import type { Usage } from '@openai/codex-sdk'
 
 /**
- * Codex cost computation (blueprint §14 open item #3).
+ * Codex cost computation.
  *
  * Unlike Claude's SDK, @openai/codex-sdk returns token counts and no dollar
  * figure at all, so the price table lives here. Prices change — check
@@ -110,8 +110,9 @@ export const CODEX_PRICES: Record<string, ModelPrice> = {
 }
 
 /**
- * Blueprint §14 open item #2 — RESOLVED empirically against codex-cli 0.147.0
- * on 2026-08-16, not assumed.
+ * Whether Codex's `cached_input_tokens` is additive or a subset of
+ * `input_tokens` — RESOLVED empirically against codex-cli 0.147.0 on
+ * 2026-08-16, not assumed.
  *
  * `cached_input_tokens` is a SUBSET of `input_tokens`. The proof is the CLI's
  * own arithmetic, which the rollout file in ~/.codex/sessions records but the
@@ -122,8 +123,9 @@ export const CODEX_PRICES: Record<string, ModelPrice> = {
  *
  * with cached_input_tokens of 4480 and 16128 respectively. Had cached been
  * additive, the totals would have been 16769 and 40739. So billing input and
- * cached separately would have overcharged every cached turn — exactly the
- * double-count blueprint §14 flags a third-party integration for making.
+ * cached separately would have overcharged every cached turn — the
+ * double-count this was worth measuring rather than guessing to avoid, since
+ * other integrations have shipped it.
  */
 export const CACHED_TOKENS_ARE_SUBSET = true
 

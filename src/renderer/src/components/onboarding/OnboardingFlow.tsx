@@ -21,15 +21,14 @@ import { AuthStepCard } from './AuthStepCard'
 import { PersonaCatalogGrid, SkillCatalogList } from './StarterCatalogPicker'
 
 /**
- * First-run setup (blueprint §15A + §9, extended in Phase 17). Three steps:
- * connect backends, choose starting personas, choose starting Skills. The auth
- * step still shows all three providers at once rather than one per screen —
- * they're independent and none is required.
+ * First-run setup. Three steps: connect backends, choose starting personas,
+ * choose starting Skills. The auth step shows all three providers at once
+ * rather than one per screen — they're independent and none is required.
  *
  * Nothing here blocks. "Skip for now" is a first-class exit from the first
  * step: the recommended starter set is already installed by startup seeding,
- * so a skipper gets exactly what every install before this phase got. The
- * pickers refine that set; they never gate it.
+ * so a skipper still gets a working app. The pickers refine that set; they
+ * never gate it.
  */
 type Step = 'auth' | 'personas' | 'skills'
 const STEPS: Step[] = ['auth', 'personas', 'skills']
@@ -108,7 +107,7 @@ export function OnboardingFlow(): React.JSX.Element {
   }
 
   const subtitle: Record<Step, string> = {
-    auth: 'Connect the backends your personas will run on. You can do any of this later.',
+    auth: 'Connect Claude and Codex so your personas have somewhere to run. You can do any of this later.',
     personas:
       'Pick your starting personas. Each is a system prompt, Skills, and a permission scope you can edit later.',
     skills: 'Pick your starting Skills — reusable instruction text any persona can attach.'
@@ -178,7 +177,7 @@ export function OnboardingFlow(): React.JSX.Element {
               connectedLabel={describeClaude(claudeStatus)}
             >
               {!claudeStatus ? (
-                <PendingRow label="Checking for existing Claude authentication…" />
+                <PendingRow label="Checking for an existing Claude login…" />
               ) : (
                 !claudeStatus.authenticated && (
                   <div className="flex flex-col gap-2">
@@ -288,7 +287,7 @@ export function OnboardingFlow(): React.JSX.Element {
               {githubStatus && !githubStatus.connected && (
                 <div className="flex flex-col gap-3">
                   {!githubStatus.configured ? (
-                    <ErrorNote message="No GitHub client ID is configured. Set MAIN_VITE_GITHUB_CLIENT_ID in .env — see .env.example." />
+                    <ErrorNote message="GitHub sign-in isn’t available in this build of Switchboard. Everything else works without it." />
                   ) : github.state.status === 'awaiting_authorization' ? (
                     <>
                       <DeviceCodeDisplay

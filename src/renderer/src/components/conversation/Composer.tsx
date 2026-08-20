@@ -41,7 +41,10 @@ interface ComposerProps {
    */
   busy?: boolean
   onStop?: () => void
-  /** Blocks sending outright — another persona holds this repo (§15D). */
+  /**
+   * Blocks sending outright — another persona holds this repo. One turn per
+   * repository at a time is a lock main enforces, not a hint.
+   */
   disabled?: boolean
   /** Why sending is blocked. Replaces the hint while set. */
   notice?: ReactNode
@@ -95,7 +98,7 @@ export function Composer({
    * mechanism to maintain in exchange for nothing.
    *
    * The caret goes to the end rather than selecting what is there: drafts
-   * survive conversation switches (Phase 21), so there is often a half-written
+   * survive conversation switches, so there is often a half-written
    * message in the box, and a shortcut that selects it turns the next
    * keystroke into a deletion.
    *

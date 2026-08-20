@@ -19,7 +19,8 @@ describe('the curated registry', () => {
   })
 
   it('is a closed set, not an open one', () => {
-    // Deliberate, and the governance decision of this phase rather than a stub.
+    // Closed on purpose — a governance decision rather than a stub waiting to
+    // be filled in.
     // An arbitrary server by URL is reach with no gate behind it: GitHub is
     // narrowed by mapping githubScope onto a measured tool inventory, and there
     // is nothing equivalent to do for an endpoint nobody has inventoried.

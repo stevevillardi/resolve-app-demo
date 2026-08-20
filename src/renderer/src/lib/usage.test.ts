@@ -16,8 +16,8 @@ import {
 /**
  * Cost/token aggregation. The load-bearing case is the null cost.
  *
- * It no longer means "Codex": since Phase 5 both backends yield a dollar figure
- * — Claude's from its SDK, Codex's computed from src/main/adapters/pricing.ts.
+ * It does not mean "Codex": both backends yield a dollar figure — Claude's from
+ * its SDK, Codex's computed from src/main/adapters/pricing.ts.
  * A null is a model with no row in CODEX_PRICES, so the spend is real and the
  * amount is unknown. Two properties follow, and both are tested from that claim
  * rather than from the implementation: an unknown must never read as free, and
@@ -117,8 +117,9 @@ describe('aggregateUsage', () => {
   })
 
   it('keeps cached tokens separate from the input total', () => {
-    // Blueprint §14 flags cached-vs-input double counting as an open question
-    // for Phase 5/10 — aggregation must not pre-empt it by folding them.
+    // Whether a cached input token should also count as an input token is an
+    // open question for the backends, not for us — aggregation must not
+    // pre-empt it by folding the two together.
     const summary = aggregateUsage([event({ inputTokens: 100, cachedInputTokens: 80 })])
     expect(summary.totalInputTokens).toBe(100)
     expect(summary.totalCachedInputTokens).toBe(80)
@@ -183,8 +184,8 @@ describe('formatCostSummary', () => {
   })
 
   it('marks a total that excludes an unpriced turn as partial', () => {
-    // The regression guard for the defect this phase exists to fix: the same
-    // set read through formatCost looks like a complete, confident figure.
+    // The regression guard for the defect this function exists to prevent: the
+    // same set read through formatCost looks like a complete, confident figure.
     const summary = aggregateUsage([event({ costUsd: 12.34 }), event({ costUsd: null })])
     expect(formatCostSummary(summary)).toBe('$12.34+')
     expect(formatCost(summary.totalCostUsd)).toBe('$12.34')
@@ -236,9 +237,9 @@ describe('contextTokens', () => {
   })
 
   /**
-   * The repo's own measurement, from the Phase 6/7 close-out: three one-word
-   * Codex turns reported cumulative input 12122 → 25610 → 39114, so the stored
-   * deltas are 12122 / 13488 / 13504.
+   * Measured against the real backend: three one-word Codex turns reported
+   * cumulative input 12122 → 25610 → 39114, so the stored deltas are
+   * 12122 / 13488 / 13504.
    *
    * The bill is 39,114 — that really is what the session cost. The prompt is
    * about 13,504 — that really is what the last request held. A meter dividing
@@ -416,7 +417,7 @@ describe('formatTokens', () => {
 })
 
 /**
- * Which usage row paid for which reply (review §G6).
+ * Which usage row paid for which reply.
  *
  * The rule that matters is what happens to a row with no link. Three kinds have
  * none — written before migration 0020, compaction's own `summary` spend, and a

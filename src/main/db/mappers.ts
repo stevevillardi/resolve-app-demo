@@ -28,8 +28,8 @@ import type {
  *    here means nothing outside main ever has to know a Date was involved.
  * 2. SQLite has no "absent" — an unset column is null. The domain models
  *    genuinely optional fields as optional rather than nullable, so null
- *    becomes an omitted key. The exceptions are the three fields blueprint §4
- *    defines as explicitly nullable (`backendSessionId`, `lastRunAt`,
+ *    becomes an omitted key. The exceptions are the fields the domain defines
+ *    as explicitly nullable (`backendSessionId`, `lastRunAt`,
  *    `lastRunSummary`, `costUsd`), where null is a meaningful value — "no
  *    session yet" is not the same as "unknown".
  */

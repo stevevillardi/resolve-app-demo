@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * The blueprint §4 data model, as Zod schemas — the single definition both
+ * The app's data model, as Zod schemas — the single definition both
  * processes compile against. Main persists these shapes (src/main/db/schema.ts
  * mirrors them column-for-column), the IPC contract validates them at the
  * boundary, and the renderer re-exports the inferred types from `@/types`.
@@ -24,8 +24,9 @@ export const groupMessageTypeSchema = z.enum([
   'routine_run',
   /**
    * A persona asking for somebody else's branch to be merged into its tree —
-   * the one step of docs/plan/12-worktree-isolation.md that a human has to
-   * take. `branch` carries what it wants, `content` carries why.
+   * the one step of worktree isolation a human has to take, since a persona
+   * cannot land another checkout's work in its own. `branch` carries what it
+   * wants, `content` carries why.
    */
   'branch_request'
 ])
@@ -79,7 +80,7 @@ export const personaTemplateSchema = z.object({
    * The MCP servers this persona may use, by id — an allowlist over the app's
    * own curated registry, never arbitrary URLs.
    *
-   * Blueprint §4 names two governance axes and stops being sufficient here: an
+   * A persona carries two governance axes, and neither is sufficient here: an
    * MCP server is *network reach*, which neither `sandbox` (disk) nor
    * `githubScope` (GitHub authority) describes. Rather than invent a third enum
    * with one meaningful value in it, this allowlist **is** the axis in its v1
@@ -91,13 +92,15 @@ export const personaTemplateSchema = z.object({
    * the order the user picked is worth keeping.
    */
   mcpServerIds: z.array(z.string()),
-  /** Two independent axes (blueprint §4): disk access and GitHub authority. */
+  /** Two independent axes: disk access and GitHub authority. */
   sandbox: sandboxLevelSchema,
   githubScope: githubScopeSchema
 })
 
 /**
- * Where a Contact's session runs (docs/plan/12-worktree-isolation.md §4).
+ * Where a Contact's session runs: `shared` is the repository itself, `worktree`
+ * a checkout of its own, `exclusive` the repository with the lock held against
+ * everyone else.
  *
  * Chosen per Contact rather than per persona, because the same persona may want
  * isolation on one repo and not on another. This picks the *location*; the lock
@@ -129,7 +132,10 @@ export function isolationOf(isolation: Isolation | null): Isolation {
 
 /**
  * What this Contact has been told it may take from the repository it is bound
- * to (docs/plan/14-agent-capability-surface.md §3).
+ * to.
+ *
+ * A persona is sealed against its repository by default — repo instructions,
+ * skills, hooks and MCP config reach a session only where this says they may.
  *
  * Per Contact rather than per persona, for the same reason `isolation` is: the
  * same persona may trust one repository and not another. And it is a trust
@@ -222,7 +228,11 @@ export const groupMessageSchema = z.object({
   content: z.string(),
   /** `system_summary` only. */
   category: systemSummaryCategorySchema.optional(),
-  /** `system_summary` only — durable entries are always re-injected (§6). */
+  /**
+   * `system_summary` only. Durable entries are the repo's running decision log
+   * and are injected into every later session on it; the rest are injected only
+   * while they are among the most recent, and stay queryable after that.
+   */
   durable: z.boolean().optional(),
   /**
    * The branch this row is about.
@@ -238,7 +248,7 @@ export const groupMessageSchema = z.object({
    */
   branch: z.string().optional(),
   /**
-   * `branch_request` only (Phase 19): when the ask was answered — the branch
+   * `branch_request` only: when the ask was answered — the branch
    * was merged or discarded by a click in the Branches panel. Absent while the
    * request is still open, which is what lets the group thread and Home tell a
    * standing ask from a settled one.
@@ -248,7 +258,7 @@ export const groupMessageSchema = z.object({
 
 /**
  * What one turn did to the working tree, stamped by git rather than claimed by
- * the model (Phase 19) — the same rule recordOfWork() set for summaries.
+ * the model — the same rule recordOfWork() sets for summaries.
  *
  * `committed` is head-before → head-after; `dirty` is only what the turn *newly*
  * left uncommitted (paths already dirty before it are not attributed to it — a
@@ -264,12 +274,11 @@ export const turnWorkSchema = z.object({
 })
 
 /**
- * The persisted message. Blueprint §12 is deliberately just these five fields:
- * `status` and `error` describe an in-flight turn rather than a stored fact,
- * so they stay renderer-local (src/renderer/src/types/message.ts) and no
- * column is added for them. `work` (Phase 19) *is* a stored fact — what the
- * turn changed on disk — and only assistant rows whose turn changed something
- * carry it.
+ * The persisted message, deliberately just these few fields: `status` and
+ * `error` describe an in-flight turn rather than a stored fact, so they stay
+ * renderer-local (src/renderer/src/types/message.ts) and no column is added for
+ * them. `work` *is* a stored fact — what the turn changed on disk — and only
+ * assistant rows whose turn changed something carry it.
  */
 export const messageSchema = z.object({
   id: z.string(),
@@ -279,8 +288,8 @@ export const messageSchema = z.object({
   timestamp: z.number(),
   work: turnWorkSchema.optional(),
   /**
-   * The backend session that answered this message (Phase 22). Absent on rows
-   * written before 0018 and on turns that died before the backend named a
+   * The backend session that answered this message. Absent on rows written
+   * before migration 0018 and on turns that died before the backend named a
    * session — which the thread reads as "carry on from the row above", never as
    * a boundary. See the column comment in src/main/db/schema.ts.
    */
@@ -308,9 +317,10 @@ export const routineSchema = z.object({
 
 /**
  * One row per turn. Mirrors AgentUsage (src/shared/agent.ts) field for field,
- * so the adapter layer's output can be persisted without dropping anything —
- * it used to keep only tokens and cost, which left the model that served the
- * turn unrecorded and its spend unattributable.
+ * so the adapter layer's output can be persisted without dropping anything.
+ * Anything the adapter reports and this table cannot hold is spend that goes
+ * unattributable — a turn whose model went unrecorded cannot be priced, or even
+ * blamed, after the fact.
  */
 export const usageEventSchema = z.object({
   id: z.string(),
@@ -328,8 +338,8 @@ export const usageEventSchema = z.object({
   personaTemplateId: z.string().optional(),
   repoPath: z.string().optional(),
   /**
-   * The routine whose fire spent this, for routine-origin turns (Phase 20).
-   * Plain attribution, not a FK — may name a routine that no longer exists.
+   * The routine whose fire spent this, for routine-origin turns. Plain
+   * attribution, not a FK — may name a routine that no longer exists.
    */
   routineId: z.string().optional(),
   timestamp: z.number(),
@@ -339,7 +349,7 @@ export const usageEventSchema = z.object({
   cachedInputTokens: z.number().optional(),
   cacheWriteInputTokens: z.number().optional(),
   reasoningOutputTokens: z.number().optional(),
-  /** Null when no price is known — never 0, which reads as free (§3). */
+  /** Null when no price is known — never 0, which reads as free. */
   costUsd: z.number().nullable(),
   /** Recorded per event: a persona's model can change, its history can't. */
   model: z.string().optional(),
@@ -353,8 +363,10 @@ export const usageEventSchema = z.object({
    */
   sessionId: z.string().optional(),
   /**
-   * The assistant message this turn produced (§G6), so a thread can put a
-   * cost beside a reply rather than only in a total.
+   * The assistant message this turn produced, so a thread can put a cost beside
+   * a reply rather than only in a total. A real foreign key, not a timestamp
+   * correlation: two turns finishing in the same millisecond would otherwise
+   * swap their costs, and nothing would say so.
    *
    * Absent on rows written before the column existed, on compaction's own
    * spend, and on a turn that was billable but produced no text — all three of
@@ -408,13 +420,14 @@ export const contactDraftSchema = contactSchema
   .extend({
     isolation: isolationSchema.optional(),
     /**
-     * Same `.trim().min(1)` as `contacts.update`'s rename (§G4).
+     * Same `.trim().min(1)` as `contacts.update`'s rename.
      *
-     * The two disagreed until the flow could ask for a name at all: renaming a
-     * contact to nothing was refused, while *creating* one called nothing was
-     * accepted — the shape was unreachable only because the name was derived.
-     * Now that there is a field, the boundary has to say what it means, and it
-     * should say the same thing at both ends.
+     * Both ends of a contact's name say the same thing on purpose: a name of
+     * nothing but spaces is refused where it is created as well as where it is
+     * changed. The two disagreed while the name was derived rather than typed,
+     * which made the difference unreachable rather than harmless — now that the
+     * bind flow has a name field, the boundary has to mean the same thing on
+     * both sides of it.
      */
     displayName: z.string().trim().min(1)
   })
@@ -436,8 +449,8 @@ export const groupMessageDraftSchema = groupMessageSchema.omit({
  * `lastRunAt`/`lastRunSummary` are omitted from *both* write shapes, not just
  * the create one, because they are run history — written by the scheduler and
  * by nothing else. Taking a whole `routineSchema` on update would let an editor
- * that had been open across a fire save its stale copy back over what the fire
- * recorded, silently losing the run.
+ * left open across a fire save its stale copy back over what the fire recorded,
+ * silently losing the run.
  */
 export const routineDraftSchema = routineSchema.omit({
   id: true,

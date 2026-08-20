@@ -2,8 +2,8 @@ import { app } from 'electron'
 import { totalUnread } from './services/unread'
 
 /**
- * The macOS dock badge (Phase 20, review §C4) — iMessage's red number, on the
- * app that borrowed everything else from it.
+ * The macOS dock badge — iMessage's red number, on the app that borrowed
+ * everything else from it.
  *
  * Lives in main and recomputes on the main-side messages-changed registry
  * (wired in index.ts), because the messages that most need a badge arrive

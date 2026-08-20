@@ -227,7 +227,7 @@ beforeEach(() => {
   db.insert(groups).values({ id: 'group-1', repoPath: REPO }).run()
 })
 
-// --- The equivalence the blueprint asks to be able to state ------------------
+// --- A scheduled fire and Run now are the same path --------------------------
 
 describe('a scheduled fire and Run now are the same path', () => {
   it('runs the routine when cron ticks', async () => {
@@ -281,12 +281,13 @@ describe('contention with a writer already holding the repo', () => {
     // Recorded as an attempt: otherwise the list says "Never run" for a routine
     // that has been skipping nightly for a week.
     expect(routine?.lastRunAt).not.toBeNull()
-    // A refused turn leaves no trace in the thread — the rule Phase 6 set.
+    // A refused turn leaves no trace in the thread, by design.
     expect(listMessages('contact-writer')).toHaveLength(0)
   })
 
-  // The other direction, and the reason Phase 6 narrowed §15D at all: readers
-  // are never refused, so a read_only routine is unaffected by a writer.
+  // The other direction, and the reason the lock is deliberately narrower than
+  // one session per repo: readers are unlimited and never refused, and only a
+  // writer can block anybody — so a read_only routine runs straight past one.
   it('runs a read_only routine normally', async () => {
     seedRoutine('routine-2', 'contact-reader')
     startScheduler(engine)
@@ -299,7 +300,7 @@ describe('contention with a writer already holding the repo', () => {
   })
 })
 
-// --- The toast (Phase 20) ----------------------------------------------------
+// --- The toast ---------------------------------------------------------------
 
 describe('outcome notifications', () => {
   it('notifies a completed run with its summary', async () => {
@@ -327,8 +328,8 @@ describe('outcome notifications', () => {
     expect(notified[0].status).toBe('failed')
   })
 
-  // The decision this phase records: a lock-refused unattended fire is
-  // precisely the silence being ended, so a skip notifies too.
+  // A lock-refused unattended fire is precisely the silence these
+  // notifications exist to end, so a skip notifies too.
   it('notifies a lock-refused skip', async () => {
     seedRoutine('routine-1', 'contact-writer')
     startScheduler(engine)
@@ -358,7 +359,7 @@ describe('outcome notifications', () => {
   })
 })
 
-// --- Missed fires (Phase 20) -------------------------------------------------
+// --- Missed fires ------------------------------------------------------------
 
 describe('missed fires', () => {
   it('persists the miss with the slot it should have fired at', () => {
@@ -584,7 +585,7 @@ describe('fireRoutine', () => {
   })
 })
 
-// --- The unattended pull request (Phase 9, blueprint §16 Journey 3) -----------
+// --- The unattended pull request ---------------------------------------------
 
 describe('a routine that made changes ends by opening a pull request', () => {
   it('opens one and says so in the run history', async () => {
@@ -611,8 +612,9 @@ describe('a routine that made changes ends by opening a pull request', () => {
    * The `routine_run` row is written by the summariser before the PR step
    * runs, and the model has usually already described its own sandbox-blocked
    * `git push` as "could not open a pull request" — while the PR the app then
-   * opened sits on GitHub. Phase 11's live run read exactly that contradiction
-   * in the Group (F4); the row must end up carrying the app's own outcome.
+   * opened sits on GitHub. Left alone, the Group shows a row asserting the pull
+   * request failed directly above a pull request anyone can see is open; the
+   * row must end up carrying the app's own outcome.
    */
   it('amends the group row so it cannot claim the PR failed while the PR is open', async () => {
     db.insert(groupMessages)
@@ -644,7 +646,11 @@ describe('a routine that made changes ends by opening a pull request', () => {
 
     await fireRoutine('routine-1').completed
 
-    const row = db.select().from(groupMessages).all().find((r) => r.id === 'gm-run')
+    const row = db
+      .select()
+      .from(groupMessages)
+      .all()
+      .find((r) => r.id === 'gm-run')
     // The model's account is kept — what it believed is part of the record —
     // and the app's outcome lands after it, so the last word is the true one.
     expect(row?.content).toContain('could not be opened')

@@ -21,7 +21,7 @@ const VIEW_OPTIONS = [
 ] as const
 
 /**
- * A file rail and one rendered pair (Phase 19, review A1/A6).
+ * A file rail and one rendered pair.
  *
  * Selection is keyed by path and re-derived when the file set changes, so a
  * refetch after a commit or merge lands on a file that still exists rather

@@ -25,9 +25,10 @@ import type { GithubScope, SandboxLevel } from '../../shared/domain'
 
 /**
  * This is the file making a security claim, so it is the one asserted rather
- * than the SDK's behaviour. Every case here runs offline; the live half — that
- * a denied `touch` and `rm` really do leave the filesystem untouched — is in
- * docs/plan/05-backend-adapters.md.
+ * than the SDK's behaviour. Every case here runs offline; the other half — that
+ * a denied `touch` or `rm` really does leave the filesystem untouched — can
+ * only be shown by running a real session against a real sandbox, so nothing
+ * below should be read as proving it.
  */
 
 const REPO = '/tmp/repo'
@@ -379,7 +380,7 @@ describe('the GitHub MCP gate', () => {
 
   it('lets open_pr propose and never merge', () => {
     const denied = githubMcpDenyList('open_pr')
-    // The explicit line from blueprint §16.
+    // The rule the level exists to draw: propose, do not merge.
     expect(denied).toContain('merge_pull_request')
     // A branch and a PR are the whole point of the level.
     expect(denied).not.toContain('create_branch')
@@ -521,7 +522,7 @@ describe('evaluateMcpToolUse', () => {
 
 describe('the two axes are independent', () => {
   /**
-   * The finding this phase was built around. `sandbox: full_access` sets
+   * The finding these cases were written from. `sandbox: full_access` sets
    * `permissionMode: 'bypassPermissions'`, under which the SDK stops consulting
    * canUseTool entirely — so a GitHub decision keyed off the sandbox level
    * would hand every full-disk persona merge rights nobody granted it.
@@ -656,8 +657,8 @@ describe('the GitHub axis applied to the shell', () => {
   it('allows everything at full_access', () => {
     // Not because it is safe, but because it is the level that means "no
     // GitHub restriction" — and at sandbox: full_access this is never consulted
-    // anyway, since bypassPermissions stops the SDK asking. See
-    // docs/plan/15-deferred-capability-work.md.
+    // anyway, since bypassPermissions stops the SDK asking, which is the part
+    // of the axis this process cannot enforce at all.
     expect(evaluateGithubShellUse('full_access', 'Bash', bash('gh pr merge 1')).allowed).toBe(true)
   })
 

@@ -1,5 +1,5 @@
 /**
- * The composer's @file token: parsing, ranking, insertion (review §B3).
+ * The composer's @file token: parsing, ranking, insertion.
  *
  * Unlike the slash picker, which is a whole-value prefix at index 0, a file
  * token can sit anywhere in a sentence — "look at @src/auth.ts first" — so

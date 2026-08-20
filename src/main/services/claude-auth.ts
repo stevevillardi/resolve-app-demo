@@ -5,8 +5,8 @@ import { deleteSecret, getSecret, isSecretStorageAvailable, setSecret } from './
 import { resolveVendored } from './vendored-binaries'
 
 /**
- * Claude backend auth (blueprint §15A): reuse existing Claude Code CLI auth on
- * the machine if present, otherwise accept an ANTHROPIC_API_KEY.
+ * Claude backend auth: reuse existing Claude Code CLI auth on the machine if
+ * present, otherwise accept an ANTHROPIC_API_KEY.
  *
  * The SDK bundles its own CLI (platform optionalDependencies), so there is
  * nothing for the user to install — the only question is whether that CLI is
@@ -42,9 +42,9 @@ function idlePrompt(): AsyncIterable<SDKUserMessage> {
 /**
  * The vendored `claude` executable, or null to let the SDK look for itself.
  *
- * The counterpart to `resolveCodexBinary`, and it did not exist until a
- * packaged build failed with `spawn ENOTDIR` on every Claude call — the auth
- * probe included, which is why it surfaced as an error banner at launch.
+ * The counterpart to `resolveCodexBinary`. Without it a packaged build fails
+ * with `spawn ENOTDIR` on every Claude call — the auth probe included, which
+ * surfaces as an error banner at launch.
  *
  * The SDK's own lookup is `require.resolve` plus an `existsSync` guard. From
  * inside `app.asar` that resolves into the archive, Electron's patched `fs`

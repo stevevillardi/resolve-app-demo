@@ -115,7 +115,7 @@ export function formatElapsed(startedAt: number, now: number): string {
   return `${hours}h ${minutes % 60}m`
 }
 
-// --- Scheduled (Phase 17) ----------------------------------------------------
+// --- Scheduled ---------------------------------------------------------------
 
 export interface UpcomingRun {
   routineId: string
@@ -149,8 +149,7 @@ export interface MissedRun {
 }
 
 /**
- * Routines with scheduled fires that never ran, most recently missed first
- * (Phase 20, review §C2).
+ * Routines with scheduled fires that never ran, most recently missed first.
  *
  * Only routines currently carrying a miss appear — the counter is cleared by
  * any attempt, so this is "what is outstanding", not a history. A routine
@@ -206,7 +205,7 @@ export function formatUpcoming(at: number, now: number): string {
   return `${when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} ${time}`
 }
 
-// --- Degraded auth (Phase 17) ------------------------------------------------
+// --- Degraded auth -----------------------------------------------------------
 
 interface AuthStatusLike {
   claude: { error?: string }
@@ -248,7 +247,7 @@ export function authBannerFor(status: AuthStatusLike | undefined): AuthBanner | 
   return null
 }
 
-// --- Spend sparkline (Phase 17) ----------------------------------------------
+// --- Spend sparkline ---------------------------------------------------------
 
 export interface DailySpendPoint {
   day: number
@@ -314,7 +313,7 @@ export function spendBarPercents(points: DailySpendPoint[]): number[] {
 /** Percent of the track below which a bar stops reading as a bar. */
 const SPEND_BAR_FLOOR = 8
 
-// --- Budget banner (Phase 20) ------------------------------------------------
+// --- Budget banner -----------------------------------------------------------
 
 export interface BudgetBanner {
   /** "Switchboard" for the app scope, the routine's prompt preview otherwise. */

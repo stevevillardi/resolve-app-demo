@@ -11,12 +11,12 @@ import { groupName } from '@/lib/format'
 import type { Group } from '@/types'
 
 /**
- * The ⋯ button on the group thread header (review §G5).
+ * The ⋯ button on the group thread header.
  *
  * `ContactMenu`'s counterpart, and as thin: the items and dialogs live in
  * `GroupActions.tsx` so this menu and the conversation row's right-click cannot
- * drift apart. The group header had no actions at all, which made it the one
- * thread in the app you could open and then do nothing to.
+ * drift apart. Without it the group header carries no actions at all, which
+ * makes it the one thread in the app you can open and then do nothing to.
  */
 export function GroupMenu({ group }: { group: Group }): React.JSX.Element {
   const [dialog, setDialog] = useState<GroupDialogKind | null>(null)

@@ -9,10 +9,11 @@ import type { GithubScope, SandboxLevel } from '@/types'
  * The app's signature element.
  *
  * A persona is defined as much by what it *cannot* do as by its prompt — the
- * filesystem sandbox and the GitHub scope are independent permission axes
- * (blueprint §9), and the governance story is the whole point of §16's third
- * journey. Surfacing them as a compact, always-visible capsule is what makes
- * this read as a console for scoped workers rather than a chat window.
+ * filesystem sandbox and the GitHub scope are independent permission axes, and
+ * being able to see what a persona is allowed to do, without opening anything,
+ * is the governance story this app is built around. Surfacing them as a
+ * compact, always-visible capsule is what makes this read as a console for
+ * scoped workers rather than a chat window.
  *
  * Three severity levels, ordered by blast radius, shared across both axes.
  * Always icon + label, never colour alone.
@@ -29,19 +30,19 @@ interface Descriptor {
 
 const SANDBOX: Record<SandboxLevel, Descriptor> = {
   read_only: {
-    label: 'read_only',
+    label: 'Read only',
     icon: Eye,
     severity: 'safe',
     hint: 'Can read the repo. Cannot write any file.'
   },
   workspace_write: {
-    label: 'workspace_write',
+    label: 'Write',
     icon: FilePen,
     severity: 'elevated',
     hint: 'Can edit files inside the bound repo. Cannot reach the rest of the filesystem.'
   },
   full_access: {
-    label: 'full_access',
+    label: 'Full',
     icon: Unlock,
     severity: 'full',
     hint: 'Unrestricted filesystem access outside the bound repo.'
@@ -63,19 +64,19 @@ const SANDBOX: Record<SandboxLevel, Descriptor> = {
  */
 const GITHUB: Record<GithubScope, Descriptor> = {
   read_only: {
-    label: 'read_only',
+    label: 'Read only',
     icon: Eye,
     severity: 'safe',
-    hint: 'Can read issues and code on GitHub. Cannot push or comment — unless its sandbox is full_access, which lifts every restriction including this one.'
+    hint: 'Can read issues and code on GitHub. Cannot push or comment — unless it also has full access to your files, which lifts every restriction including this one.'
   },
   open_pr: {
-    label: 'open_pr',
+    label: 'Open PR',
     icon: GitPullRequest,
     severity: 'elevated',
-    hint: 'Can push a branch and open a pull request. Cannot merge — unless its sandbox is full_access.'
+    hint: 'Can push a branch and open a pull request. Cannot merge — unless it also has full access to your files.'
   },
   full_access: {
-    label: 'full_access',
+    label: 'Full',
     icon: ShieldAlert,
     severity: 'full',
     hint: 'Can push, open pull requests, and merge.'
@@ -93,18 +94,18 @@ const GITHUB: Record<GithubScope, Descriptor> = {
  */
 const MCP: Record<McpReach, Descriptor> = {
   none: {
-    label: 'none',
+    label: 'None',
     icon: Unplug,
     severity: 'safe',
-    hint: 'No MCP servers. This session can only touch its own files.'
+    hint: 'No connected tools. It can only touch files in its own checkout.'
   },
   github: {
-    label: 'github',
+    label: 'GitHub',
     icon: Plug,
     severity: 'elevated',
     // Says what it does *not* add, deliberately: holding the server grants
     // nothing the GitHub scope beside it does not already allow.
-    hint: 'Can reach GitHub through its MCP server, never beyond its GitHub scope.'
+    hint: 'Can reach GitHub, never beyond what its GitHub permission allows.'
   }
 }
 
@@ -126,9 +127,9 @@ type Axis = 'sandbox' | 'github' | 'mcp'
  * error instead.
  */
 const AXES: Record<Axis, { table: Record<string, Descriptor>; label: string; prefix: string }> = {
-  // The prefixes exist because the axes share value names — `read_only` and
-  // `full_access` appear on two of them, so without one, two chips side by side
-  // are byte-identical and tell you nothing.
+  // The prefixes exist because the axes share label names — "Read only" and
+  // "Full" appear on two of them, so without one, two chips side by side are
+  // identical and tell you nothing.
   sandbox: { table: SANDBOX, label: 'Sandbox', prefix: 'fs' },
   github: { table: GITHUB, label: 'GitHub', prefix: 'gh' },
   mcp: { table: MCP, label: 'Reach', prefix: 'mcp' }
@@ -159,7 +160,7 @@ export function ScopeChip({
         render={
           <span
             className={cn(
-              'inline-flex shrink-0 cursor-default items-center gap-1 rounded-full font-mono text-meta leading-none',
+              'inline-flex shrink-0 cursor-default items-center gap-1 rounded-full text-meta leading-none',
               compact ? 'size-5 justify-center' : 'py-1 pr-2 pl-1.5',
               SEVERITY_CLASS[descriptor.severity],
               className
@@ -180,7 +181,7 @@ export function ScopeChip({
       <TooltipContent>
         <span className="font-medium">{axisLabel}</span>
         <span className="text-muted-foreground"> · </span>
-        <span className="font-mono">{descriptor.label}</span>
+        <span>{descriptor.label}</span>
         <span className="mt-0.5 block max-w-52">{descriptor.hint}</span>
       </TooltipContent>
     </Tooltip>

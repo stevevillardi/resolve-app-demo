@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * The three-state token verdict, tested directly for the first time — until
- * Phase 18 it was covered only through github-auth.test.ts, and the ordering
- * rule below is exactly the kind of thing an indirect test lets drift.
+ * The three-state token verdict, tested directly rather than through
+ * github-auth.test.ts. The ordering rule below — a rejection GitHub actually
+ * gave outranks "cannot reach GitHub", which in turn outranks a stale `good` —
+ * is exactly the kind of thing an indirect test lets drift.
  */
 
 const appStateStore = new Map<string, string>()

@@ -1,7 +1,7 @@
 # Switchboard demo runbook
 
-The three blueprint §16 journeys as a follow-along script, written from two
-live end-to-end runs (2026-08-18). Every step below was actually driven, and
+The three journeys of [`ARCHITECTURE.md`](ARCHITECTURE.md) as a follow-along
+script, written from two live end-to-end runs (2026-08-18). Every step below was actually driven, and
 the timings and costs are what those runs measured. Total live spend for the
 whole sequence: **≈ $1.40**, about 12 minutes of stage time.
 

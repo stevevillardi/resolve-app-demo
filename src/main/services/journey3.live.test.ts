@@ -11,13 +11,12 @@ import type { AppDatabase } from '../db/create'
 import type { Contact, PersonaBackend } from '../../shared/domain'
 
 /**
- * Blueprint §16 Journey 3, end to end and for real: a routine wakes up, does
- * bounded autonomous work, and opens a pull request rather than pushing.
+ * An unattended routine, end to end and for real: it wakes, does bounded
+ * autonomous work, opens a pull request rather than pushing, reports what it
+ * did to the repository's Group, and leaves its cost visible in usage.
  *
- * This is the check `docs/plan/08-routines-scheduler.md` left open, and the one
- * it deferred here — Phase 8 could fire the routine but had nowhere for the
- * work to go. It fires through `fireRoutine`, the same function cron calls, so
- * "the manual trigger is the same code path" stays a fact rather than a claim.
+ * It fires through `fireRoutine`, the same function cron calls, so "the manual
+ * trigger is the same code path" stays a fact rather than a claim.
  *
  * **Skipped unless `LIVE_JOURNEY3=1`, and it spends real credits** — one turn
  * plus its summariser call. It also opens a real pull request, which it closes
@@ -27,10 +26,10 @@ import type { Contact, PersonaBackend } from '../../shared/domain'
  *     LIVE_JOURNEY3=1 npx vitest run --project main src/main/services/journey3.live.test.ts
  *   …with JOURNEY3_BACKEND=codex for the other backend.
  *
- * What is deliberately *not* here: the "reads the repo/issues" half of the
- * journey. Nothing gives a persona a view of GitHub issues — the app passes
- * `settingSources: []` and no MCP servers, by design — and that is scoped as
- * docs/plan/14-agent-capability-surface.md rather than faked here.
+ * What is deliberately *not* here: a routine that goes and reads the
+ * repository's issues first. Nothing gives a persona a view of GitHub issues —
+ * the app passes `settingSources: []` and no MCP servers, by design — so there
+ * is nothing to exercise, and faking it here would prove nothing.
  */
 
 const LIVE = process.env.LIVE_JOURNEY3 === '1'
@@ -95,7 +94,7 @@ beforeAll(async () => {
       systemPrompt: 'You make small, contained changes and always commit them.',
       skillIds: [],
       sandbox: 'workspace_write',
-      // The governance axis the journey exists to demonstrate.
+      // The governance axis under test: unattended work proposes, never pushes.
       githubScope: 'open_pr',
       model: PERSONA_MODEL
     })

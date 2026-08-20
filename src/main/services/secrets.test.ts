@@ -116,7 +116,7 @@ describe('unavailable OS keychain', () => {
     encryptionAvailable = false
     // Storing in the clear would be worse than failing — a Linux box with no
     // keyring must get an error the UI can surface, not a silent downgrade.
-    expect(() => setSecret('github_token', 'gho_x')).toThrow(/plaintext/i)
+    expect(() => setSecret('github_token', 'gho_x')).toThrow(/will not save/i)
     expect(existsSync(tokenPath())).toBe(false)
   })
 

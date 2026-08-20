@@ -234,7 +234,8 @@ export function seedDemoData(layout: DemoLayout): void {
       })
     }
 
-    // Code Reviewer — the lock refusal that ate drafts (the app's own §B2).
+    // Code Reviewer — the lock refusal that ate drafts, and the rule that
+    // ended it: the composer clears only on an accepted send.
     say(
       'demo-m-01',
       ids.reviewer,
@@ -268,7 +269,7 @@ export function seedDemoData(layout: DemoLayout): void {
       ids.reviewer,
       'user',
       now - 35 * MINUTE,
-      'That landed in the conversation-loop phase. Can you double-check the group thread got the same treatment?'
+      'That landed in the last round of work. Can you double-check the group thread got the same treatment?'
     )
     say(
       'demo-m-06',

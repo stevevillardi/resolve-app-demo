@@ -12,23 +12,30 @@ import {
 import type { TurnOutcome } from './turn-origin'
 
 /**
- * The scheduler (blueprint §7, §15E).
+ * The scheduler.
  *
- * Built in-app rather than on any vendor's native scheduling, per §7's warning
- * about Codex's cloud-only scheduling. node-cron holds the timers; this module
+ * Scheduling is built in-app rather than on any vendor's native scheduling.
+ * Codex's is a cloud-only feature, not exposed through the CLI or the SDK at
+ * all, and even its desktop automation has an open bug where the scheduled
+ * prompt is sometimes never injected. node-cron holds the timers; this module
  * holds the policy.
  *
  * Two properties worth understanding before editing:
  *
  * **`fireRoutine` is the only path.** A scheduled tick and the "Run now" button
- * both land here, with no branch between them — the blueprint calls out that
- * equivalence as something to be able to state truthfully if asked, so it is
- * structural rather than a convention. The tests assert it by checking both
- * entry points against one shared expectation helper.
+ * both land here, with no branch between them, so the manual trigger is not a
+ * shortcut around the real one. That equivalence is structural rather than a
+ * convention, and it is what makes "a demo fire is the same thing as a 3am
+ * fire" a fact worth stating. The tests assert it by checking both entry points
+ * against one shared expectation helper.
  *
  * **The engine is a port.** Everything interesting is testable without a second
  * of wall-clock time passing, which is the same division `adapter-host.ts` uses
  * to keep the adapters drivable outside Electron.
+ *
+ * None of it works without background residency: the app has to stay alive in
+ * the tray when its window closes, because a routine cannot fire in a process
+ * that has quit.
  */
 
 /** The slice of a cron engine this service uses. node-cron implements it; tests fake it. */
@@ -89,8 +96,8 @@ const SUMMARY_MAX = 200
 /**
  * Arms every enabled routine and starts firing.
  *
- * Called from `app.whenReady()` *before* the window is created, because not
- * depending on a window is the entire point of the phase.
+ * Called from `app.whenReady()` *before* the window is created, because a
+ * routine has to fire whether or not a window is open.
  */
 export function startScheduler(cronEngine: CronEngine, notifyChange?: () => void): void {
   engine = cronEngine
@@ -222,8 +229,9 @@ export function fireRoutine(routineId: string): RoutineFire {
       // The `routine_run` row was written by the summariser before this step
       // existed to report on, and the model has usually already described its
       // own blocked `git push` as a failure — while the PR this opened sits
-      // on GitHub (Phase 11, F4). The row is amended rather than left to
-      // contradict the truth the app itself established.
+      // open on GitHub. Left alone, that row asserts a pull request failed
+      // that anyone can see is open, so it is amended to carry the app's own
+      // outcome rather than being left to contradict it.
       if (outcome.summary) appendToGroupMessage(outcome.summary.id, pr)
       onChange?.()
     }
@@ -235,16 +243,16 @@ export function fireRoutine(routineId: string): RoutineFire {
 }
 
 /**
- * The pull request at the end of a routine run (blueprint §16 Journey 3).
+ * The pull request at the end of a routine run.
  *
- * Blueprint §9 says a remote action is "an explicit action... not an automatic
- * side effect", and this looks like the exception. It isn't: the explicit act is
- * setting up the routine — choosing a persona with `open_pr`, writing the
- * prompt, enabling the schedule — rather than a click per fire. Nobody is
- * watching a 3am run, so requiring a click there would mean the work simply sits
- * on a branch nobody knows about, which is the failure this whole phase exists
- * to prevent. What stays true is the bound: a PR, never a push to the default
- * branch, and never a merge.
+ * The rule everywhere else is that a remote action is an explicit action
+ * somebody took, never an automatic side effect — and this looks like the
+ * exception. It isn't: the explicit act is setting up the routine — choosing a
+ * persona with `open_pr`, writing the prompt, enabling the schedule — rather
+ * than a click per fire. Nobody is watching a 3am run, so requiring a click
+ * there would mean the work simply sits on a branch nobody knows about, which
+ * is exactly the outcome unattended work is meant to avoid. What stays true is
+ * the bound: a PR, never a push to the default branch, and never a merge.
  *
  * Runs after the lock is released and after the summariser has settled, so the
  * body can quote the persona's own account of what it did.

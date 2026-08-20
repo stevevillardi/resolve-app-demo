@@ -169,11 +169,11 @@ describe('openPullRequest', () => {
   })
 
   /**
-   * Phase 11, F5: the live run's routine created its own branch inside its
-   * worktree, and the PR opened from that branch (correct — head follows the
-   * working copy) while the *title* was built from the Contact's stale
-   * registered name. Head and title must name the same branch: the one the PR
-   * actually ships.
+   * A session told to work on a branch can create and check out one of its own
+   * inside its worktree. The PR then opens from that branch (correct — head
+   * follows the working copy) while a *title* built from the Contact's
+   * registered name still names the old one. Head and title must name the same
+   * branch: the one the PR actually ships.
    */
   it('titles the PR after the branch it pushed, not the registered one', async () => {
     const contact = await writerWithWork()
@@ -209,8 +209,8 @@ describe('openPullRequest', () => {
     expect(pushed).toEqual([])
   })
 
-  // blueprint §16: bounded means PR, not push. A Contact working straight in the
-  // user's checkout has no branch to raise one from.
+  // Bounded means PR, not push. A Contact working straight in the user's
+  // checkout has no branch to raise one from.
   it('refuses when the Contact is working on the default branch itself', async () => {
     // `exclusive` is the isolation that deliberately runs in the main tree.
     const contact = createContact({
@@ -286,7 +286,7 @@ describe('openPullRequest', () => {
 
   it("quotes the persona's own end-of-session summary in the body", async () => {
     const contact = await writerWithWork()
-    // createContact already made the repo's Group — blueprint §4's one per repo.
+    // createContact already made the repo's Group — one Group per repository.
     const group = db.select().from(groups).get()
     db.insert(groupMessages)
       .values({

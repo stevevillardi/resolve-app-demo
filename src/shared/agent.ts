@@ -2,11 +2,11 @@ import { z } from 'zod'
 import { costSourceSchema } from './domain'
 
 /**
- * The normalized agent stream (blueprint §3). Both backends map their native
- * events into these shapes so the UI and the cost logic branch on capability
- * rather than on backend name.
+ * The normalized agent stream. Both backends map their native events into these
+ * shapes so the UI and the cost logic branch on capability rather than on
+ * backend name.
  *
- * Zod rather than bare types because Phase 6 pushes these across the process
+ * Zod rather than bare types because these are pushed across the process
  * boundary — same reasoning as src/shared/domain.ts.
  */
 
@@ -22,11 +22,10 @@ import { costSourceSchema } from './domain'
 export { costSourceSchema }
 
 /**
- * Mirrors usageEventSchema's fields so Phase 6 can write a UsageEvent row
- * straight from this. The mirroring is now complete in both directions — the
- * table gained `model`, `costSource`, `cacheWriteInputTokens` and
- * `reasoningOutputTokens`, which this type had produced since Phase 5 with
- * nowhere to put them.
+ * Mirrors usageEventSchema's fields, so a turn's usage can be written to a
+ * UsageEvent row straight from this. The mirroring is complete in both
+ * directions on purpose: a field produced here with no column to land in is
+ * spend the dashboard can never account for, and the omission is silent.
  */
 export const agentUsageSchema = z.object({
   inputTokens: z.number(),
@@ -46,14 +45,13 @@ export const agentUsageSchema = z.object({
 
 /**
  * Kept in step with the renderer's MessageBubbleError['kind']
- * (src/renderer/src/types/message.ts) so Phase 6 assigns one to the other
- * directly, with no translation table.
+ * (src/renderer/src/types/message.ts) so one is assigned to the other directly,
+ * with no translation table. **Adding a kind here means adding it there too.**
  *
- * That claim used to be false in the direction that matters: this enum had
- * `auth` and `unknown` and the renderer's did not, so the two kinds that could
- * not be assigned included `unknown` — the default classifyErrorMessage()
- * returns, i.e. the common case rather than an edge one. The renderer union was
- * widened to match. Adding a kind here means adding it there too.
+ * The two unions are the same set, and it is worth keeping them that way rather
+ * than trusting the narrower one to be enough: the kind most likely to be
+ * missing is `unknown`, which is what classifyErrorMessage() returns by default
+ * — so a divergence bites on the common path rather than an edge one.
  */
 export const agentErrorKindSchema = z.enum([
   'rate_limit',
@@ -129,7 +127,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
      * How the call answered — stdout tail, MCP result text, or the error a
      * failed call reported. Bounded by the adapter to TOOL_OUTPUT_MAX before
      * it is emitted, so neither the push channel nor the tool_calls row ever
-     * carries an unbounded blob (Phase 19).
+     * carries an unbounded blob.
      */
     output: z.string().optional()
   }),
@@ -169,13 +167,13 @@ export function toolExcerpt(text: string, max: number): string {
 // --- The push channel -------------------------------------------------------
 
 /**
- * What main pushes to the renderer while a turn runs (Phase 6).
+ * What main pushes to the renderer while a turn runs.
  *
- * Phase 1's bridge is request/response only, so this is the first traffic that
- * travels main→renderer unprompted. It follows the same shape as `ipc-invoke`:
- * ONE channel, with the payload saying what it is, rather than a channel per
- * run — which keeps the preload surface fixed and avoids listener churn as
- * runs come and go.
+ * The rest of the bridge is request/response only, so this is the one channel
+ * that travels main→renderer unprompted. It follows the same shape as
+ * `ipc-invoke`: ONE channel, with the payload saying what it is, rather than a
+ * channel per run — which keeps the preload surface fixed and avoids listener
+ * churn as runs come and go.
  *
  * Keyed by `runId`, not by session id: `AgentSession.sessionId` is null until
  * the adapter fills it in mid-stream at `session_started`, so a contact's first
@@ -205,8 +203,9 @@ export const agentStreamMessageSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('usage-changed') }),
   /**
    * A routine's durable state changed — run history, a recorded miss, a
-   * schedule re-arm. Before this, routine outcomes reached the UI only by
-   * incidental refetch: a 3 a.m. fire's row went stale until the next focus.
+   * schedule re-arm. Announced rather than left to incidental refetch, because
+   * a 3 a.m. fire has no window watching it and its row would otherwise stay
+   * stale until the next focus.
    */
   z.object({ kind: z.literal('routines-changed') }),
   /**
@@ -221,8 +220,7 @@ export const agentStreamMessageSchema = z.discriminatedUnion('kind', [
 // --- Capabilities -----------------------------------------------------------
 
 /**
- * Blueprint §3: "preserve the genuine divergence points rather than papering
- * over them."
+ * Where the two backends genuinely differ, preserved rather than papered over.
  *
  * The two backends diverge in both directions, which is why this is a set of
  * flags and not a "richness" ranking: Claude streams token-level deltas but
@@ -251,7 +249,7 @@ export const agentCapabilitiesSchema = z.object({
    *
    * Both do today, by different mechanisms (Claude's session-level
    * `outputFormat`, Codex's per-turn `outputSchema`). The flag exists so
-   * blueprint §6's compaction can degrade honestly on a backend that stops
+   * end-of-session compaction can degrade honestly on a backend that stops
    * supporting it, rather than silently writing unparseable summaries into the
    * Group — the same reason `sandboxEnforcement` is reported rather than
    * assumed.

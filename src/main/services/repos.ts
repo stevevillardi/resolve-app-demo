@@ -7,14 +7,14 @@ import { getGitHubToken, missingTokenError } from './github-auth'
 import { gitHubClient } from './github-client'
 
 /**
- * Binding a Contact to somewhere on disk (blueprint §9.1).
+ * Binding a Contact to somewhere on disk.
  *
- * Two ways in, deliberately. §9.1 describes the GitHub one — list the user's
- * repos, offer to clone what isn't here yet — and that is the path that makes
- * the app feel like it knows about your work. But a demo that can only bind
- * repos that exist on GitHub *and* clone successfully has two ways to fail
- * before anything interesting happens, so picking a folder that is already on
- * disk is a first-class alternative rather than a fallback.
+ * Two ways in, deliberately. The GitHub one — list the user's repos, offer to
+ * clone what isn't here yet — is the path that makes the app feel like it knows
+ * about your work. But a flow that can only bind repos that exist on GitHub
+ * *and* clone successfully has two ways to fail before anything interesting
+ * happens, so picking a folder that is already on disk is a first-class
+ * alternative rather than a fallback.
  */
 
 export interface RepoOption {
@@ -50,7 +50,7 @@ export function getWorkspaceRoot(): string | null {
 }
 
 export async function chooseWorkspaceRoot(): Promise<string | null> {
-  const chosen = await chooseDirectory('Choose where cloned repositories should go')
+  const chosen = await chooseDirectory('Choose where Switchboard should put repositories it clones')
   if (chosen) setAppState('workspace_root', chosen.path)
   return chosen?.path ?? null
 }

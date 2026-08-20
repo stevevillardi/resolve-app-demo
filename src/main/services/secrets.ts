@@ -3,10 +3,10 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 /**
- * The single encryption boundary for the whole app (blueprint §11, "Secret
- * storage: Electron safeStorage"). This is the ONLY module permitted to import
- * `safeStorage` — enforced by a no-restricted-imports rule in eslint.config.mjs
- * so a later phase can't quietly scatter keychain access across the codebase.
+ * The single encryption boundary for the whole app: secrets are stored through
+ * Electron's `safeStorage`, and this is the ONLY module permitted to import it
+ * — enforced by a no-restricted-imports rule in eslint.config.mjs, so keychain
+ * access cannot quietly scatter across the codebase later.
  *
  * Ciphertext is written to individual files under userData/secrets rather than
  * into SQLite, so that "no token is in the database" is true by construction
@@ -64,10 +64,10 @@ export function hasSecret(key: SecretKey): boolean {
  * build. On macOS, safeStorage binds ciphertext to the app's code signature —
  * every rebuilt dev Electron is a new ad-hoc signature, so a secret written by
  * one build is routinely unreadable by the next *and readable again by the
- * first*. Which is exactly why this must never delete: the previous behavior
- * (drop the file on decrypt failure) converted that recoverable mismatch into
- * a permanent loss, and presented to the user as "my GitHub token keeps
- * getting invalidated" with GitHub never involved.
+ * first*. Which is exactly why this must never delete: dropping the file on a
+ * decrypt failure turns that recoverable mismatch into a permanent loss, and
+ * presents to the user as "my GitHub token keeps getting invalidated" with
+ * GitHub never involved.
  */
 const unreadable = new Set<SecretKey>()
 
@@ -81,8 +81,8 @@ export function getSecret(key: SecretKey): string | null {
   if (!existsSync(path)) return null
   if (!isSecretStorageAvailable()) {
     // Ciphertext exists and cannot be read, which is what `unreadable` means —
-    // so mark it here too. Returning null without the mark made every status
-    // surface reach for the wrong sentence: "Connect GitHub first" about a
+    // so mark it here too. Returning null without the mark sends every status
+    // surface reaching for the wrong sentence: "Connect GitHub first" about a
     // credential that is stored and intact. `secretStorageAvailable` carries
     // the distinct "no keyring on this machine at all" meaning separately.
     unreadable.add(key)
@@ -106,7 +106,9 @@ export function getSecret(key: SecretKey): string | null {
 
 export function setSecret(key: SecretKey, value: string): void {
   if (!isSecretStorageAvailable()) {
-    throw new Error('OS secret storage is unavailable; refusing to store credentials in plaintext.')
+    throw new Error(
+      'This computer has no secure place to keep credentials, so Switchboard will not save them.'
+    )
   }
   writeFileSync(secretPath(key), safeStorage.encryptString(value), { mode: 0o600 })
   // Freshly written by this build, so this build can read it again.

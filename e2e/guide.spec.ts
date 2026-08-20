@@ -91,7 +91,7 @@ test.describe('the guide on an empty profile', () => {
   test('a section row navigates the rail', async () => {
     const { window } = launched
     await window
-      .getByText('Reusable instruction text any persona can attach.', {
+      .getByText('Reusable instructions any persona can attach.', {
         exact: false
       })
       .click()
@@ -175,26 +175,33 @@ test.describe('the guide once Home has content', () => {
     await expect(window.getByRole('heading', { name: 'What is where' })).toBeVisible()
   })
 
-  test('folds away and stays folded across a relaunch', async () => {
+  test('opens and folds, and remembers which across a relaunch', async () => {
     const { window } = launched
-    const hide = window.getByRole('button', { name: 'Hide the guide' })
-    await expect(hide).toBeVisible()
-    // Open by default, so the rows are on screen before anything is clicked.
-    await expect(window.getByText('Message one contact', { exact: false })).toBeVisible()
+    const rows = window.getByText('Message one contact', { exact: false })
 
-    await hide.click()
-    await expect(window.getByText('Message one contact', { exact: false })).toBeHidden()
-    // Collapsed is one heading and a chevron — which is also the only way back,
-    // so folding the guide away can never lose it.
-    const show = window.getByRole('button', { name: 'Show the guide' })
-    await expect(show).toBeVisible()
+    // Folded on a Home that has a summary to show: the guide is the reference
+    // you want on week one, and the summary is the reason to be on this screen.
+    // Collapsed it is one heading and a chevron, which is also the only way
+    // back — so starting folded can never lose it.
+    await expect(window.getByRole('button', { name: 'Show the guide' })).toBeVisible()
+    await expect(rows).toBeHidden()
+
+    await window.getByRole('button', { name: 'Show the guide' }).click()
+    await expect(rows).toBeVisible()
+
+    // Persisted, and in both directions — "I have read the tour" is a fact
+    // about the person rather than about this launch.
+    await window.reload()
+    await waitForShell(window)
+    await expect(window.getByRole('button', { name: 'Hide the guide' })).toBeVisible()
+    await expect(rows).toBeVisible()
+
+    await window.getByRole('button', { name: 'Hide the guide' }).click()
+    await expect(rows).toBeHidden()
 
     await window.reload()
     await waitForShell(window)
     await expect(window.getByRole('button', { name: 'Show the guide' })).toBeVisible()
-    await expect(window.getByText('Message one contact', { exact: false })).toBeHidden()
-
-    await window.getByRole('button', { name: 'Show the guide' }).click()
-    await expect(window.getByText('Message one contact', { exact: false })).toBeVisible()
+    await expect(rows).toBeHidden()
   })
 })

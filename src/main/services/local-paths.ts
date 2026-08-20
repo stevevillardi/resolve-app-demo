@@ -5,7 +5,7 @@ import { contacts, groups } from '../db/schema'
 import { worktreeRoot } from './worktrees'
 
 /**
- * Which local paths the renderer may ask the OS to open (Phase 19, review A2).
+ * Which local paths the renderer may ask the OS to open.
  *
  * The same rule shell.openExternal set for URLs, applied to disk: the roots
  * are only what the app itself already knows — every bound repo, every

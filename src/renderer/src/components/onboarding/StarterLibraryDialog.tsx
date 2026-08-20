@@ -14,7 +14,7 @@ import { useApplyStarterSelection, useSeedCatalog } from '@/hooks/useSeed'
 import { PersonaCatalogGrid, SkillCatalogList } from './StarterCatalogPicker'
 
 /**
- * The starter catalog, after onboarding (Phase 17). This is the durable
+ * The starter catalog, after onboarding. This is the durable
  * re-entry point — the onboarding chooser is one-shot and the
  * `onboarding_completed` flag is never cleared, so anyone who skipped setup or
  * later wants Bug Hunter reaches the same picker here.

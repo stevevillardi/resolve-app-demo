@@ -3,7 +3,7 @@ import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
 import type { PersonaTemplate, PersonaTemplateDraft } from '@/types'
 
 /**
- * Persona template reads and writes (Phase 4).
+ * Persona template reads and writes.
  *
  * Note `remove` can legitimately fail: main refuses to delete a persona that
  * contacts are still bound to, and the thrown message names them. That error
@@ -25,10 +25,10 @@ export function useCreatePersona(): {
   /**
    * Why a create was refused, in the wording main sent.
    *
-   * Added with the quick-create dialog (§G4). `personas.create` can refuse at
-   * the Zod boundary — `requireScopePairing` is the live case — and until now
-   * this hook discarded the error, so the only caller was a blank draft that
-   * cannot fail. A form that can be refused needs somewhere to say so.
+   * `personas.create` can refuse at the Zod boundary — `requireScopePairing`
+   * is the live case — and a form that can be refused needs somewhere to say
+   * so. A caller that only ever submits a blank draft cannot fail and can
+   * ignore this; the quick-create dialog cannot.
    */
   error: string | null
 } {

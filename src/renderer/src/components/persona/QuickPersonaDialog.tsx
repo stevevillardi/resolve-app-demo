@@ -17,13 +17,13 @@ import { useModels } from '@/hooks/useModels'
 import type { GithubScope, PersonaBackend, PersonaTemplate, SandboxLevel } from '@/types'
 
 /**
- * Making a persona without leaving the new-contact flow (review §G4).
+ * Making a persona without leaving the new-contact flow.
  *
- * The flow's first step was a list with no way to add to it, so a user who did
- * not want any of the seeded three had to cancel, go to Personas, discover that
- * "new persona" means creating a blank draft and editing it, save, then start
- * the contact again from ⌘N. Four steps of detour to answer the first question
- * the app asks.
+ * Without this the flow's first step is a list with no way to add to it, so a
+ * user who does not want any of the seeded three has to cancel, go to Personas,
+ * discover that "new persona" means creating a blank draft and editing it,
+ * save, then start the contact again from ⌘N. Four steps of detour to answer
+ * the first question the app asks.
  *
  * Deliberately *not* the full editor. Skills, MCP servers and the model's finer
  * settings all belong there and none of them are needed to make a valid
@@ -133,8 +133,8 @@ export function QuickPersonaDialog({
         <DialogHeader>
           <DialogTitle>New persona</DialogTitle>
           <DialogDescription>
-            Enough to start with. Skills, MCP servers and the rest are in the Personas section, and
-            this persona can be edited there at any time.
+            Enough to start with. Skills, connected tools and the rest are in the Personas section,
+            and this persona can be edited there at any time.
           </DialogDescription>
         </DialogHeader>
 
@@ -149,7 +149,7 @@ export function QuickPersonaDialog({
             />
           </Field>
 
-          <Field label="Backend" htmlFor="quick-persona-backend">
+          <Field label="Runs on" htmlFor="quick-persona-backend">
             <SegmentedControl
               options={BACKEND_OPTIONS}
               value={backend}
@@ -203,7 +203,7 @@ export function QuickPersonaDialog({
             htmlFor="quick-persona-scope"
             {...(sandbox === 'full_access'
               ? {
-                  hint: 'Full disk access bypasses the tools that would enforce a narrower GitHub scope, so the two are set together.'
+                  hint: 'Full access to your files also grants full access on GitHub — a narrower GitHub setting could not be enforced alongside it.'
                 }
               : {})}
           >

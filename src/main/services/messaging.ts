@@ -30,10 +30,11 @@ import type { SessionSpec } from '../adapters/types'
 import { TOOL_DETAIL_MAX, toolExcerpt } from '../../shared/agent'
 import type { AgentEvent } from '../../shared/agent'
 import type { Contact, GroupMessage, PersistedMessage, TurnWork } from '../../shared/domain'
+import { notFound } from './not-found'
 
 /**
- * Sending a message to a Contact and streaming the reply back (blueprint §16
- * Journey 1). The loop everything else in the app exists to support.
+ * Sending a message to a Contact and streaming the reply back. The loop
+ * everything else in the app exists to support.
  *
  * The shape worth understanding before editing: `sendMessage` does the part
  * that must be synchronous — validate, take the lock, persist what the user
@@ -97,10 +98,8 @@ const runs = new Map<string, Run>()
 // --- Reads ------------------------------------------------------------------
 
 /**
- * The persisted tool record for a thread (Phase 17, doc 15 item 1; widened in
- * Phase 19): name and status per call, stamped with the message the turn ended
- * in, plus the bounded detail/output excerpts — see the table's comment in
- * schema.ts for the reversal this was.
+ * The persisted tool record for a thread: name and status per call, stamped
+ * with the message the turn ended in, plus the bounded detail/output excerpts.
  */
 export function listToolCalls(contactId: string): {
   id: string
@@ -219,13 +218,14 @@ export function sendMessage(contactId: string, content: string): SendResult {
 }
 
 /**
- * Routes a Group @mention to a Contact's real session (blueprint §8).
+ * Routes a Group @mention to a Contact's real session.
  *
  * The reason this is thin: an @mention *is* a message to that Contact. It takes
  * the same lock, resumes the same session, streams on the same runId, and
- * writes the same `messages` rows — the Group thread and the 1:1 thread are two
- * views of one conversation, which is what §8's "no duplicated conversation
- * state" requires and what the acceptance check on divergent copies tests.
+ * writes the same `messages` rows. A Group @mention routes to that Contact's
+ * real backend session by design, so the Group thread and the 1:1 thread render
+ * the same underlying conversation with no duplicated state — which is what the
+ * acceptance check on divergent copies tests.
  *
  * What it adds is the Group's own record of the exchange: a `user_mention` now
  * and an `agent_reply` when the turn finishes.
@@ -240,7 +240,7 @@ export function mentionInGroup(groupId: string, contactId: string, content: stri
 }
 
 /**
- * Runs a Routine's prompt as an ordinary turn (blueprint §7).
+ * Runs a Routine's prompt as an ordinary turn.
  *
  * The third and last entry point, and deliberately as thin as the other two:
  * a routine fire *is* a message to that Contact, taking the same lock, resuming
@@ -257,7 +257,7 @@ export function runRoutineTurn(routineId: string, contactId: string, prompt: str
 }
 
 /**
- * Re-runs the thread's last user message as a fresh turn (review §B1/§B6).
+ * Re-runs the thread's last user message as a fresh turn.
  *
  * The message is *reused*, not re-sent: it was persisted before the failed
  * turn ran (the lock-then-persist ordering above), so going through
@@ -269,8 +269,9 @@ export function runRoutineTurn(routineId: string, contactId: string, prompt: str
  * what started the original turn — Run.origin dies with the process. The
  * surface the user retries from is the best available truth: retried from
  * the group thread, the reply posts there; retried from the 1:1 thread (or
- * after a crash), it stays a plain message. Recorded as a known limitation
- * in docs/plan/20+-era decisions rather than solved with a runs table.
+ * after a crash), it stays a plain message. A deliberate limitation: a durable
+ * runs table would cost more than knowing where a retried reply belongs is
+ * worth.
  */
 export function retryTurn(contactId: string, groupId?: string): { runId: string } {
   const last = initDb()
@@ -332,10 +333,10 @@ function startTurn(
   reuse?: { userMessage: PersistedMessage }
 ): StartedTurn {
   const contact = getContact(contactId)
-  if (!contact) throw new Error(`No such contact: ${contactId}`)
+  if (!contact) throw notFound('contact', contactId)
 
   const persona = getPersonaTemplate(contact.personaTemplateId)
-  if (!persona) throw new Error(`Contact "${contact.displayName}" has no persona template.`)
+  if (!persona) throw notFound('persona', contact.personaTemplateId)
 
   const workingPath = workingPathFor(contact)
   const mode = lockModeFor(persona, contact.isolation)
@@ -362,9 +363,10 @@ function startTurn(
   // constructs an SDK client; neither is guaranteed not to throw, and a lock
   // leaked here would wedge the repo until the app restarts.
   try {
-    // Written for a routine too: blueprint §7 wants opening the Contact to show
-    // what it did while asleep, and an assistant bubble with no question above
-    // it reads as a glitch rather than as unattended work.
+    // Written for a routine too: a routine's result is appended to the
+    // Contact's ordinary message history, so opening the Contact shows what it
+    // did while nobody was watching — and an assistant bubble with no question
+    // above it reads as a glitch rather than as unattended work.
     const userMessage = reuse?.userMessage ?? insertMessage(contactId, 'user', content)
 
     // A mention's group is chosen, a routine's is derived from its repo. A
@@ -466,10 +468,10 @@ async function runTurn(
   // shed), and only before anything has streamed — past that point a restart
   // would silently discard output the user already saw.
   let canHealDeadResume = Boolean(contact.backendSessionId)
-  // Persisted per call as it happens, with the bounded detail/output excerpts
-  // (Phase 19, reversing doc 15 item 1). Row ids kept so finish() can stamp
-  // them with the message this turn ends in; the backend's toolCallId is only
-  // unique per turn.
+  // Persisted per call as it happens, with the bounded detail/output excerpts,
+  // so an overnight routine leaves a trace of what it actually called. Row ids
+  // kept so finish() can stamp them with the message this turn ends in; the
+  // backend's toolCallId is only unique per turn.
   const toolRowIds = new Map<string, string>()
   let workStart: Awaited<ReturnType<typeof captureWorkStart>> | null = null
   // Set by the watchdog before it aborts, and load-bearing: the abort makes
@@ -626,7 +628,7 @@ function finish(
     // reply. Collected first, written once below.
     const stamped: string[] = [userMessageId]
     /**
-     * The reply this turn produced, for the usage row written below (§G6).
+     * The reply this turn produced, for the usage row written below.
      *
      * Hoisted out of the block rather than reordering the two writes: the usage
      * row has to be able to name the message, so the message has to exist
@@ -655,7 +657,7 @@ function finish(
           .run()
       }
 
-      // The Group's copy of the same reply (§8). The `messages` row above is
+      // The Group's copy of the same reply. The `messages` row above is
       // the conversation; this is the Group's record that it happened, and the
       // two carry identical text on purpose — the 1:1 thread and the Group
       // thread are two views of one exchange, not two exchanges.
@@ -683,7 +685,7 @@ function finish(
         session.sessionId,
         origin.kind === 'routine' ? origin.routineId : null,
         // The reply this spend bought, so the thread can show a per-turn cost
-        // beside it (§G6). Null when the turn produced no text to point at.
+        // beside it. Null when the turn produced no text to point at.
         replyId
       )
     }
@@ -710,24 +712,27 @@ function finish(
     emitAgentEvent(runId, done ?? { type: 'done', finalText, usage: null })
     emitRunsChanged()
 
-    // A ten-minute turn finishing while the user is in their editor used to
-    // finish silently (review §C1). Routine origins are excluded — the
-    // scheduler notifies those with the run summary this function cannot see —
-    // and the "is anyone looking" check lives inside notifications.ts, so a
-    // watched turn stays silent without this module touching electron.
+    // A turn finishing while nobody is watching must not finish silently: a
+    // ten-minute turn that ends while the user is in their editor notifies.
+    // Routine origins are excluded — the scheduler notifies those with the run
+    // summary this function cannot see — and the "is anyone looking" check
+    // lives inside notifications.ts, so a watched turn stays silent without
+    // this module touching electron.
     if (origin.kind !== 'routine') {
       notifyTurnFinished({ contactId, origin, finalText, error: failure })
     }
 
-    // Blueprint §6, and deliberately the last thing to happen: it runs after
-    // the lock is released and after the renderer has been told the turn is
-    // over, so a slow summariser delays nothing the user is waiting on. Not
-    // awaited, and it never rejects — see summarizeTurn's contract.
+    // End-of-session compaction, and deliberately the last thing to happen: it
+    // runs after the lock is released and after the renderer has been told the
+    // turn is over, so a slow summariser delays nothing the user is waiting on.
+    // Not awaited, and it never rejects — see summarizeTurn's contract.
     // The branch reconciliation goes first, because the summariser re-reads
-    // the Contact row: a session that switched branches inside its worktree
-    // must be stamped with the branch its commits actually live on, not the
-    // one it was assigned (Phase 11, F5). reconcileWorktreeBranch never
-    // throws, so the chain keeps summarizeTurn's never-rejects contract.
+    // the Contact row: a session told to work on a branch can create and check
+    // out a *new* branch inside its worktree, leaving the branch this app
+    // registered and the branch the work actually landed on divergent. The
+    // Contact is stamped with the branch its commits really live on rather
+    // than the one it was assigned. reconcileWorktreeBranch never throws, so
+    // the chain keeps summarizeTurn's never-rejects contract.
     const finishedContact = getContact(contactId)
     const summarising = (
       finishedContact ? reconcileWorktreeBranch(finishedContact) : Promise.resolve(null)

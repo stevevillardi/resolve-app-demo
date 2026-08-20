@@ -26,8 +26,8 @@ import {
  * input/output Zod schema, validated on both sides of the boundary by
  * registerProcedure() (main) and callProcedure() (renderer).
  *
- * Replaces electron-trpc, which was verified stale/incompatible with this
- * toolchain during Phase 1 planning — see docs/plan/00-progress.md.
+ * Hand-rolled rather than electron-trpc, which was checked against this
+ * toolchain and found stale and incompatible with it.
  */
 
 /**
@@ -99,13 +99,9 @@ const authStatusSchema = z.object({
 const apiKeyInputSchema = z.object({ apiKey: z.string().min(1) })
 
 /**
- * One in-flight turn, as the UI needs to see it (Phase 6).
- *
- * `contactName` rather than just an id because its whole job is to be shown in
- * a sentence — "Refactor Buddy is already working in this repo" — and the
- * renderer would otherwise have to join back to the contact list to say so.
+ * A repo the user could bind to, from the GitHub side — listed through the API
+ * rather than typed as a path, and offered for cloning when it is not on disk.
  */
-/** A repo the user could bind to, from the GitHub side (blueprint §9.1). */
 const repoOptionSchema = z.object({
   id: z.string(),
   fullName: z.string(),
@@ -198,6 +194,13 @@ const contactContextSchema = z.object({
 export type ContactContext = z.infer<typeof contactContextSchema>
 export type RepoOffers = NonNullable<IpcOutput<'contacts.repoOffers'>>
 
+/**
+ * One in-flight turn, as the UI needs to see it.
+ *
+ * `contactName` rather than just an id because its whole job is to be shown in
+ * a sentence — "Refactor Buddy is already working in this repo" — and the
+ * renderer would otherwise have to join back to the contact list to say so.
+ */
 const activeRunSchema = z.object({
   runId: z.string(),
   contactId: z.string(),
@@ -238,7 +241,7 @@ export const branchSummarySchema = z.object({
   contactName: z.string().nullable(),
   files: z.array(z.string()),
   hasWorktree: z.boolean(),
-  /** Whether the main tree's HEAD already contains this branch (Phase 19). */
+  /** Whether the main tree's HEAD already contains this branch. */
   merged: z.boolean(),
   /** Uncommitted paths in the branch's live worktree; what commit would land. */
   dirtyFiles: z.array(z.string()),
@@ -252,11 +255,10 @@ export const branchSummarySchema = z.object({
 })
 
 /**
- * One file of a diff (Phase 19). Content is served whole under stated budgets
- * — an over-budget side is withheld with `truncated: true`, never clipped, so
- * half a file can never review as a whole one. `live` marks a pair whose new
- * side was read off the working tree just now rather than from the turn's own
- * moment.
+ * One file of a diff. Content is served whole under stated budgets — an
+ * over-budget side is withheld with `truncated: true`, never clipped, so half a
+ * file can never review as a whole one. `live` marks a pair whose new side was
+ * read off the working tree just now rather than from the turn's own moment.
  */
 export const fileDiffSchema = z.object({
   path: z.string(),
@@ -327,9 +329,11 @@ export const ipcContract = {
     })
   },
 
-  // --- Auth (Phase 3, blueprint §15A + §9) --------------------------------
-  // Each backend reports independently so the UI renders correctly when one is
-  // connected and another isn't.
+  // --- Auth ---------------------------------------------------------------
+  // App-level backend logins (Claude, Codex) plus GitHub's, which is a separate
+  // credential answering a separate question. Each backend reports
+  // independently so the UI renders correctly when one is connected and another
+  // isn't.
   'auth.getStatus': {
     input: z.void(),
     output: authStatusSchema
@@ -358,9 +362,9 @@ export const ipcContract = {
     output: authStatusSchema
   },
   /**
-   * Key removal (Phase 17 — the settings surface). Each returns the fresh
-   * per-backend status so the renderer can patch its cache slice without
-   * re-paying for the other probes. Neither is a sign-out of a CLI login:
+   * Key removal, from the settings surface. Each returns the fresh per-backend
+   * status so the renderer can patch its cache slice without re-paying for the
+   * other probes. Neither is a sign-out of a CLI login:
    * Claude Code's browser auth is not ours to revoke, and clearing the OpenAI
    * key signs the codex CLI out only when the key was how it signed in.
    */
@@ -398,7 +402,6 @@ export const ipcContract = {
     })
   },
 
-  /** OS notifications on/off. Default ON — absence of the flag means enabled. */
   /**
    * The theme the user picked. Stored app-side rather than in the renderer
    * because main paints the window background from it before the bundle loads
@@ -413,6 +416,7 @@ export const ipcContract = {
     output: z.object({ preference: themePreferenceSchema })
   },
 
+  /** OS notifications on/off. Default ON — absence of the flag means enabled. */
   'notifications.get': {
     input: z.void(),
     output: z.object({ enabled: z.boolean() })
@@ -423,7 +427,7 @@ export const ipcContract = {
   },
 
   /**
-   * The app-level soft monthly spend threshold (Phase 20). Null = no budget.
+   * The app-level soft monthly spend threshold. Null = no budget.
    * Alerts only — crossing it notifies and banners, nothing is stopped.
    * Per-routine thresholds live on the routine rows, not here.
    */
@@ -437,9 +441,9 @@ export const ipcContract = {
   },
 
   /**
-   * Wipes the app back to a fresh install and relaunches (Phase 18). Dev
-   * tooling: profile, secrets, worktrees and persona branches all go; the
-   * user's backend logins and cloned repositories are never touched. The
+   * Wipes the app back to a fresh install and relaunches. Dev tooling only, and
+   * gated on `appInfo.dev`: profile, secrets, worktrees and persona branches all
+   * go; the user's backend logins and cloned repositories are never touched. The
    * response races the relaunch and may never arrive — callers must not wait
    * on it for UI state.
    */
@@ -449,10 +453,10 @@ export const ipcContract = {
   },
 
   /**
-   * The starter catalog (Phase 17): everything the app *can* seed, flagged
-   * recommended (the tier startup installs by itself) and installed (a row
-   * with that id exists right now). Feeds the onboarding picker and the
-   * starter library dialog.
+   * The starter catalog: everything the app *can* seed, flagged recommended
+   * (the tier startup installs by itself) and installed (a row with that id
+   * exists right now). Feeds the onboarding picker and the starter library
+   * dialog.
    */
   'seed.catalog': {
     input: z.void(),
@@ -523,7 +527,12 @@ export const ipcContract = {
     output: githubStatusSchema
   },
 
-  // --- Remote actions (Phase 9, blueprint §9.2) ------------------------------
+  // --- Remote actions -------------------------------------------------------
+  // Pushes and pull requests go through GitHub's REST API from main, never by
+  // trusting an agent to shell out git commands unsupervised, and always as an
+  // explicit user action rather than an automatic side effect of a turn — which
+  // matters most for the turns nobody is watching, i.e. routine fires.
+  //
   // Keyed by Contact rather than by branch, because the permission being
   // checked belongs to a persona: an orphan branch has nobody to authorise it.
 
@@ -541,7 +550,7 @@ export const ipcContract = {
     output: prResultSchema
   },
 
-  // --- Data layer (Phase 4, blueprint §4 + §12) ---------------------------
+  // --- Data layer ---------------------------------------------------------
   // Entity shapes come from ./domain.ts so main's tables, these procedures,
   // and the renderer's types can't drift apart. Ids are minted in main, hence
   // the `Draft` (id-less) inputs on every create.
@@ -575,11 +584,13 @@ export const ipcContract = {
     output: personaTemplateSchema.nullable()
   },
   /**
-   * Both write shapes refuse full_access sandbox + narrower githubScope
-   * (Phase 17, doc 15 item 2): under bypassPermissions / danger-full-access
-   * neither the MCP tool filter nor the shell guard runs, so a narrower scope
-   * there was a promise nothing could keep. Inputs only — the shared output
-   * schema stays permissive so rows predating migration 0010 still read.
+   * Both write shapes refuse full_access sandbox + narrower githubScope: under
+   * `bypassPermissions` (Claude) / `danger-full-access` (Codex) neither backend
+   * asks this app anything again, so neither the MCP tool filter nor the shell
+   * guard runs and a narrower scope there is a promise nothing can keep. The
+   * combination is made unrepresentable rather than validated after the fact.
+   * Inputs only — the shared output schema stays permissive so rows predating
+   * migration 0010 still read.
    */
   'personas.create': {
     input: personaTemplateDraftSchema.superRefine(requireScopePairing),
@@ -595,7 +606,10 @@ export const ipcContract = {
     output: z.object({ deleted: z.boolean() })
   },
 
-  // --- Routines (Phase 8, blueprint §7) ------------------------------------
+  // --- Routines -------------------------------------------------------------
+  // Scheduled wake tasks, run by node-cron in main through the same
+  // AgentAdapter.run() a chat message uses — no vendor-side scheduling.
+  //
   // `lastRunAt`/`lastRunSummary` are absent from both write shapes: run history
   // is the scheduler's to write, and taking a whole routine on update would let
   // an editor open across a fire save its stale copy back over the run.
@@ -645,8 +659,9 @@ export const ipcContract = {
    * refused by the run lock, or the routine is gone — and `skipped` says why.
    *
    * This is the same `fireRoutine` a cron tick calls, with no branch between
-   * them: blueprint §16 Journey 3 uses the button for demo reliability and
-   * calls out that equivalence as something to be able to state truthfully.
+   * them — which is what makes clicking the button a truthful demonstration of
+   * what the schedule does at 3 a.m., rather than a second code path that
+   * merely looks like it.
    */
   'routines.runNow': {
     input: z.object({ id: z.string() }),
@@ -704,67 +719,55 @@ export const ipcContract = {
    * Zod boundary instead of relying on a service-level check.
    *
    * A Contact bound to the wrong repo is deleted and made again — which is what
-   * `contacts.delete`'s worktree cleanup below is for. (Since Phase 17 the
-   * persona binding alone has a dedicated, safe path: `rebindPersona` below.)
+   * `contacts.delete`'s worktree cleanup below is for. The persona binding alone
+   * has a dedicated, safe path: `rebindPersona` below.
    */
   'contacts.update': {
     input: z.object({ id: z.string(), displayName: z.string().min(1) }),
     output: contactSchema
   },
   /**
-   * Moves a Contact to another persona (Phase 17) — the one binding change
-   * that CAN be made safe, so it is: the resume key is cleared in the same
-   * transaction (a session id is an index into one SDK's storage, and the new
-   * persona may be on the other backend), while the repo, worktree, branch and
-   * message history all stay. Refused while a turn is running — rebinding
-   * under a live stream would change who is speaking mid-sentence.
+   * Moves a Contact to another persona — the one binding change that CAN be
+   * made safe, so it is: the resume key is cleared in the same transaction (a
+   * session id is an index into one SDK's storage, and the new persona may be
+   * on the other backend), while the repo, worktree, branch and message history
+   * all stay. Refused while a turn is running — rebinding under a live stream
+   * would change who is speaking mid-sentence.
    *
-   * repoPath remains immutable; its remedy is still delete-and-recreate, now
-   * guided by the prefilled NewContactFlow. Isolation joined the mutable side
-   * in Phase 22 — see `contacts.setIsolation`.
+   * repoPath remains immutable; its remedy is delete-and-recreate, guided by
+   * the prefilled NewContactFlow. Isolation is mutable by its own procedure —
+   * see `contacts.setIsolation`.
    */
   'contacts.rebindPersona': {
     input: z.object({ id: z.string(), personaTemplateId: z.string() }),
     output: contactSchema
   },
   /**
-   * Drops the resume key on purpose (Phase 22), so the next turn starts the
-   * backend over while the conversation on screen stays exactly as it is.
+   * Drops the resume key on purpose, so the next turn starts the backend over
+   * while the conversation on screen stays exactly as it is.
    *
    * Its own procedure rather than a flag on anything above, because it is the
    * one act whose entire point is what it does *not* change. Every turn is
-   * billed for the whole conversation the session can see, and until now the
-   * only way to reset that was the side effect of rebindPersona — the lever
-   * over session cost reachable only by pretending to want something else.
+   * billed for the whole conversation the session can see, so this is the only
+   * direct lever over session cost — it exists in its own right rather than as
+   * a side effect of `rebindPersona`, which also clears the key but changes who
+   * is answering.
    */
   'contacts.startFreshSession': {
     input: z.object({ id: z.string() }),
     output: contactSchema
   },
   /**
-   * Moves a Contact between the repo itself and its own checkout (Phase 22).
+   * Replaces a Contact and brings its conversation with it.
    *
-   * Its own procedure rather than a widened `contacts.update`, for the reason
-   * `setRepoTrust` gives below: a rename and a relocation are different
-   * decisions, and one permissive update is how the second becomes a side
-   * effect of the first.
+   * One procedure rather than a renderer-side create-then-delete pair, because
+   * the two halves are one decision: the old contact's rows are re-pointed at
+   * the new one in between, and a failure partway through a client-driven
+   * sequence leaves either two contacts or a deleted thread.
    *
-   * `discardUncommitted` only matters when leaving a worktree that has
-   * uncommitted changes — main refuses without it, and that refusal is a
-   * decision to put in front of a human rather than an error to render red.
-   * The same two-step `contacts.delete` uses.
-   */
-  /**
-   * Replaces a Contact and brings its conversation with it (Phase 22).
-   *
-   * One procedure rather than the renderer's old create-then-delete pair,
-   * because the two halves have to be one decision: the old contact's rows are
-   * re-pointed at the new one between them, and a failure partway used to mean
-   * either two contacts or a deleted thread.
-   *
-   * `bringHistory: false` is the old behaviour — the thread goes with the
-   * contact — kept because a genuinely fresh start is a reasonable thing to
-   * want and should not require deleting twice.
+   * `bringHistory: false` lets the old thread go with the old contact, which is
+   * to say it is deleted — a genuinely fresh start is a reasonable thing to want
+   * and should not require deleting twice.
    */
   'contacts.recreate': {
     input: z.object({
@@ -776,8 +779,7 @@ export const ipcContract = {
     output: contactSchema
   },
   /**
-   * A model for this Contact alone, or null to follow its persona again
-   * (Phase 22).
+   * A model for this Contact alone, or null to follow its persona again.
    *
    * Nullable rather than optional: "go back to the persona's" is a choice the
    * user makes, not an absent value, and an optional field could not express
@@ -787,6 +789,19 @@ export const ipcContract = {
     input: z.object({ id: z.string(), model: z.string().nullable() }),
     output: contactSchema
   },
+  /**
+   * Moves a Contact between the repo itself and its own checkout.
+   *
+   * Its own procedure rather than a widened `contacts.update`, for the reason
+   * `setRepoTrust` gives below: a rename and a relocation are different
+   * decisions, and one permissive update is how the second becomes a side
+   * effect of the first.
+   *
+   * `discardUncommitted` only matters when leaving a worktree that has
+   * uncommitted changes — main refuses without it, and that refusal is a
+   * decision to put in front of a human rather than an error to render red.
+   * The same two-step `contacts.delete` uses.
+   */
   'contacts.setIsolation': {
     input: z.object({
       id: z.string(),
@@ -796,7 +811,9 @@ export const ipcContract = {
     output: contactSchema
   },
   /**
-   * What this contact lets its repository say to it (blueprint §4, Phase 14).
+   * What this contact lets its repository say to it — a governance decision,
+   * not a preference: a repo's CLAUDE.md, AGENTS.md and skills are instructions
+   * written by whoever owns it, and a persona reaches none of them by default.
    *
    * Separate from `contacts.update` on purpose. A rename and a grant of trust
    * are different decisions with different consequences, and one permissive
@@ -848,7 +865,8 @@ export const ipcContract = {
       .nullable()
   },
   /**
-   * What the *next* turn on this contact would inject (blueprint §5).
+   * What the *next* turn on this contact would inject: its system prompt and
+   * resolved skills, plus the repo's durable and recent group log.
    *
    * A snapshot of what would be sent now, not a record of what was sent last
    * turn: the session spec is resolved per turn, so this moves as colleagues
@@ -883,9 +901,8 @@ export const ipcContract = {
     output: z.object({ deleted: z.boolean() })
   },
 
-  /** No create: a group is implied by its repo, never made directly (§4). */
   /**
-   * Per-conversation unread counts, both kinds in one call (Phase 20). The
+   * Per-conversation unread counts, both kinds in one call. The
    * renderer refetches on messages-changed, so this is the single authority
    * the sidebar badges, thread dividers, and dock badge all agree with.
    */
@@ -925,7 +942,7 @@ export const ipcContract = {
 
   /**
    * Rename a group, or clear the override with null and fall back to the
-   * repository's own name (§G5).
+   * repository's own name.
    *
    * `.trim().min(1)` matches `contacts.update`: a name of spaces is refused
    * here rather than stored and rendered as a blank row. Null is explicit and
@@ -950,6 +967,7 @@ export const ipcContract = {
     output: groupSchema
   },
 
+  /** No create: a group is implied by its repo, never made directly. */
   'groups.list': {
     input: z.void(),
     output: z.array(groupSchema)
@@ -960,7 +978,11 @@ export const ipcContract = {
     output: groupSchema.nullable()
   },
 
-  // --- Group coordination (Phase 7, blueprint §6/§8, §16 Journey 2) --------
+  // --- Group coordination -------------------------------------------------
+  // The layer that carries intent between Contacts bound to one repo. Code
+  // changes cross for free — every session reads the same disk — while the
+  // reasoning behind them lives in a private thread, so it is written to the
+  // group as a summary and re-injected into every later session on that repo.
   'groupMessages.list': {
     input: z.object({ groupId: z.string() }),
     output: z.array(groupMessageSchema)
@@ -971,12 +993,12 @@ export const ipcContract = {
     output: z.array(groupMessageSchema)
   },
   /**
-   * Routes a Group @mention to one Contact's real session (§8).
+   * Routes a Group @mention to one Contact's real session.
    *
    * Deliberately the same shape as `messages.send`, because it *is* that call
    * with two extra rows: the reply streams back on the same push channel under
    * the returned runId, and lands in the Contact's 1:1 thread as well as the
-   * Group. Single-target only — broadcast is cut in v1 (§13).
+   * Group. Single-target only — broadcast is deliberately not built.
    *
    * Rejects when the mentioned Contact cannot take the lock, exactly as
    * `messages.send` does, and writes nothing when it does: a persisted mention
@@ -991,25 +1013,28 @@ export const ipcContract = {
     output: z.object({ runId: z.string(), groupMessage: groupMessageSchema })
   },
 
-  // --- Messaging (Phase 6, blueprint §16 Journey 1) -----------------------
+  // --- Messaging ----------------------------------------------------------
   // `send` returns as soon as the turn is running, not when it finishes: the
   // reply arrives on the push channel (src/shared/agent.ts), keyed by the runId
   // returned here. A turn can take minutes, which is far too long to hold an
   // invoke open.
   /**
-   * Per-file content for one turn's work (Phase 19, review A6): the committed
-   * half between the turn's own heads, and the newly-dirty half read live.
+   * Per-file content for one turn's work: the committed half between the turn's
+   * own heads, and the newly-dirty half read live.
    */
   'messages.workDiff': {
     input: z.object({ contactId: z.string(), messageId: z.string() }),
     output: z.object({ files: z.array(fileDiffSchema), filesOmitted: z.number() })
   },
   /**
-   * The persisted tool record for a thread (Phase 17, doc 15 item 1; widened
-   * in Phase 19): which tools each turn ran, how each ended, and the bounded
-   * detail/output excerpts the live stream showed — capped where they are
-   * written, in messaging.ts. messageId is null for calls whose turn died
-   * before its reply was written; the renderer shows those as interrupted.
+   * The persisted tool record for a thread: which tools each turn ran, how each
+   * ended, and the bounded detail/output excerpts the live stream showed —
+   * capped where they are written, in messaging.ts. Persisted rather than left
+   * live because the run nobody watches is a routine firing at 3 a.m., and the
+   * morning after there would otherwise be a record of what the persona
+   * concluded and none of what it called. messageId is null for calls whose
+   * turn died before its reply was written; the renderer shows those as
+   * interrupted.
    */
   'messages.toolCalls': {
     input: z.object({ contactId: z.string() }),
@@ -1089,7 +1114,7 @@ export const ipcContract = {
   /**
    * Everything running right now, across every repo. The renderer needs the
    * whole set rather than its own contact's: a turn on a *sibling* contact is
-   * what disables this thread's composer (blueprint §15D).
+   * what disables this thread's composer.
    */
   'runs.list': {
     input: z.void(),
@@ -1110,7 +1135,7 @@ export const ipcContract = {
     output: z.array(z.string())
   },
 
-  // --- Repo binding (Phase 6, blueprint §9.1) -----------------------------
+  // --- Repo binding -------------------------------------------------------
   // Two routes to the same outcome: a path on disk for a Contact to work in.
   'repos.list': {
     input: z.void(),
@@ -1127,9 +1152,11 @@ export const ipcContract = {
     output: boundRepoSchema.nullable()
   },
 
-  // --- Branches (Phase 12, docs/plan/12-worktree-isolation.md) ---------------
-  // Layers 1 and 2 of that phase are automatic; this is layer 3, the part with
-  // a human in it. Nothing here merges without an explicit call.
+  // --- Branches -----------------------------------------------------------
+  // Worktree isolation gives each writing Contact its own checkout and its own
+  // branch automatically; this is the part with a human in it, where one
+  // checkout's work lands somewhere else. Nothing here merges, commits or
+  // discards without an explicit call.
 
   'branches.list': {
     input: z.void(),
@@ -1155,8 +1182,8 @@ export const ipcContract = {
     output: z.object({ merged: z.boolean() })
   },
   /**
-   * Per-file content for a branch's diff (Phase 19, review A1): merge-base →
-   * tip, renames detected, binaries flagged, budgets stated on fileDiffSchema.
+   * Per-file content for a branch's diff: merge-base → tip, renames detected,
+   * binaries flagged, budgets stated on fileDiffSchema.
    */
   'branches.diff': {
     input: z.object({ repoPath: z.string(), branch: z.string() }),
@@ -1168,8 +1195,8 @@ export const ipcContract = {
   },
   /**
    * Lands a branch's uncommitted work as a commit — the one way this app ever
-   * authors one, and it is a human click (Phase 19, review A4). Author is the
-   * persona; committer is the user's own git identity.
+   * authors one, and it is a human click. Author is the persona; committer is
+   * the user's own git identity.
    */
   'branches.commit': {
     input: z.object({ repoPath: z.string(), branch: z.string(), message: z.string().min(1) }),
@@ -1187,7 +1214,7 @@ export const ipcContract = {
     output: z.object({ opened: z.boolean() })
   },
 
-  // --- Local paths (Phase 19, review A2) ----------------------------------
+  // --- Local paths --------------------------------------------------------
   // Both validated in main against the roots the app actually knows — bound
   // repos and its own worktrees — so this never becomes a general "open
   // whatever the renderer says" primitive, the same rule openExternal set.
@@ -1202,7 +1229,7 @@ export const ipcContract = {
     output: z.object({ revealed: z.boolean() })
   },
 
-  // --- Export (review §G2) --------------------------------------------------
+  // --- Export -------------------------------------------------------------
   /**
    * Writes text to a file the *user* picks, and returns where it went.
    *

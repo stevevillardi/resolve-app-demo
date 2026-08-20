@@ -6,13 +6,13 @@ import type { Section } from '@/store/useUiStore'
 /**
  * What the resting screen teaches, worked out here rather than in the component.
  *
- * Home used to answer a fresh install with one sentence and a button. That is
- * an accurate description of the state and a useless description of the app:
- * nothing on screen said what a Contact is for, that a repo has a shared
- * thread, that work arrives on a branch rather than in the chat, or that any
- * of the five keyboard bindings exist. The nouns in this app are unusual
- * enough that a first launch has to be told them somewhere, and the one screen
- * every launch opens on — `section` is not persisted — is the place.
+ * A fresh install answered with one sentence and a button would be an accurate
+ * description of the state and a useless description of the app: nothing on
+ * screen would say what a Contact is for, that a repo has a shared thread, that
+ * work arrives on a branch rather than in the chat, or that any of the five
+ * keyboard bindings exist. The nouns in this app are unusual enough that a
+ * first launch has to be told them somewhere, and the one screen every launch
+ * opens on — `section` is not persisted — is the place.
  *
  * Pure because the renderer Vitest project matches `*.test.ts` only, so
  * anything left in the `.tsx` cannot be covered. The two things worth being
@@ -48,16 +48,15 @@ export interface GuideConcept {
  */
 const BLURBS: Record<GuideSection, string> = {
   chats:
-    'Message one contact — a persona bound to one repository — or open a repo group, the shared thread where every contact working in that repo posts what it decided.',
+    'Message one contact — a persona bound to one repository. Or open a repo group: the shared thread where everyone working in that repo posts what they decided.',
   branches:
     'Work a persona has finished in its own checkout, waiting on you. Read the diff, then merge it or open a pull request.',
   personas:
-    'A backend, a system prompt, the instruction text it carries, and two independent permissions: what it may touch on disk, and what it may do on GitHub.',
-  skills:
-    'Reusable instruction text any persona can attach. Write the wording once and every persona carrying it gets the same wording.',
+    'Who a contact is before it is bound to anything: how it should work, and what it is allowed to do — on your files, and on GitHub.',
+  skills: 'Reusable instructions any persona can attach. Write the wording once and share it.',
   routines:
     'A schedule and a prompt. The contact wakes on its own, does the work while you are elsewhere, and reports back here.',
-  usage: 'Tokens and cost for every turn, split by persona, repo, model, and what asked for it.'
+  usage: 'What every turn cost, broken down by persona, repo and model.'
 }
 
 /**
@@ -136,7 +135,7 @@ export function firstSteps(progress: GuideProgress): GuideStep[] {
     {
       id: 'message',
       title: 'Say something to it',
-      body: 'A contact is a conversation. Ask it a question and the answer comes from a real session running in that repository.',
+      body: 'A contact is a conversation. Ask it a question and it answers from inside that repository.',
       done: progress.turns > 0
     }
   ]
@@ -153,7 +152,7 @@ export function firstSteps(progress: GuideProgress): GuideStep[] {
   steps.push({
     id: 'routine',
     title: 'Put work on a schedule',
-    body: 'A routine wakes a contact on a cron expression, unattended, and posts what it did to the repo group.',
+    body: 'A routine wakes a contact on a schedule, unattended, and posts what it did to the repo group.',
     done: progress.routines > 0
   })
 
@@ -175,10 +174,10 @@ export interface ShortcutHint {
 /**
  * The modifier as this platform writes it.
  *
- * `undefined` while `appInfo.get` is in flight. macOS is both this app's
- * primary target and what the palette footer has hardcoded since Phase 13, so
- * a first frame reading ⌘ is right far more often than one reading Ctrl — and
- * the query resolves before anyone finishes reading the sentence next to it.
+ * `undefined` while `appInfo.get` is in flight. macOS is this app's primary
+ * target, so a first frame reading ⌘ is right far more often than one reading
+ * Ctrl — and the query resolves before anyone finishes reading the sentence
+ * next to it.
  */
 export function modifierKey(platform: string | undefined): string {
   return platform === undefined || platform === 'darwin' ? '⌘' : 'Ctrl+'

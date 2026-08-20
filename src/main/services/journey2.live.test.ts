@@ -11,18 +11,22 @@ import type { AgentEvent } from '../../shared/agent'
 import type { PersonaBackend } from '../../shared/domain'
 
 /**
- * Blueprint §16 Journey 2, against real backends.
+ * Two personas coordinating on one repository through its Group, against real
+ * backends: a writer refactors and states a rationale, its durable summary
+ * posts to the Group, a second Contact bound to the same repo references the
+ * refactor without being told about it, and an @mention from the Group gets a
+ * live reply out of a third persona's real session.
  *
  * **Skipped unless `LIVE_JOURNEY2=1`.** It spends real credits, so it is not
  * part of `npm test` — same house rule as e2e/messaging.spec.ts. Run it with:
  *
  *   LIVE_JOURNEY2=1 npx vitest run --project main src/main/services/journey2.live.test.ts
  *
- * It exists because Journey 2 is the one thing in Phase 7 that cannot be
- * faked. Every mechanism here has unit tests against a scripted adapter, and
- * those tests prove the wiring is consistent with itself — they cannot prove
- * that a real model, handed a colleague's summary in its system prompt,
- * actually uses it. That is the question the phase was built to answer.
+ * It exists because that hand-off is the one thing here that cannot be faked.
+ * Every mechanism below has unit tests against a scripted adapter, and those
+ * tests prove the wiring is consistent with itself — they cannot prove that a
+ * real model, handed a colleague's summary in its system prompt, actually uses
+ * it. Only a real model can answer that.
  *
  * The database, the group, and the repo are all real; only `electron` is
  * stubbed, because nothing here needs a window.
@@ -190,16 +194,17 @@ describe.skipIf(!LIVE)('Journey 2, live', () => {
     console.log(`\nsummary: [${summary.category}] ${summary.content}`)
 
     expect(summary.contactId).toBe('contact-writer')
-    // §6's rule: a decision or a tradeoff is durable, routine work is not. A
+    // The rule: a decision or a tradeoff is durable, routine work is not. A
     // real code change should not classify as routine.
     expect(summary.durable).toBe(true)
     expect(['decision', 'tradeoff']).toContain(summary.category)
   }, 300_000)
 
   it('lets a second persona reference that work without being told', async () => {
-    // The whole point of §5's injection, and the answer to "is this actually
-    // multi-agent or just three windows". Nothing in this prompt mentions
-    // caching, the token, or Refactor Buddy.
+    // The whole point of injecting a repo's durable summaries into every
+    // session on it, and the answer to "is this actually multi-agent or just
+    // three windows". Nothing in this prompt mentions caching, the token, or
+    // Refactor Buddy.
     const { runId } = sendMessage(
       'contact-reader',
       'What has anyone changed in this repo recently? Answer from what you already know, without reading any files.'

@@ -5,7 +5,7 @@ import { usageKey, usageRootKey } from './useMessages'
 import type { UsageEvent } from '@/types'
 
 /**
- * Per-turn spend (blueprint §4), real as of Phase 6.
+ * Per-turn spend.
  *
  * Omit the contact id for every event across the app — that is what the usage
  * dashboard reads.

@@ -14,9 +14,9 @@ export type {
   GroupMessageType,
   SystemSummaryCategory,
   UsageSource,
-  /** Where a Contact's session runs — see docs/plan/12-worktree-isolation.md. */
+  /** Where a Contact's session runs — your checkout, or a worktree of its own. */
   Isolation,
-  /** What a Contact lets its repository say to it — Phase 14, opt-in per Contact. */
+  /** What a Contact lets its repository say to it. Opt-in, one Contact at a time. */
   RepoTrust,
   Skill,
   PersonaTemplate,

@@ -100,9 +100,9 @@ describe('buildTrayMenu', () => {
     expect(three.find((item) => item.id === 'running')?.label).toBe('3 turns running')
   })
 
-  // Phase 25: a count that listed nobody made the tray answer "how many"
-  // while dodging "who" — while the scheduled section below it names five
-  // routines. Running turns get the same treatment.
+  // By design the tray names who as well as how many: a count on its own
+  // answers "how many" while dodging "who", and the scheduled section below it
+  // already names five routines. Running turns get the same treatment.
   it('names each running turn with its contact, origin, and absolute start', () => {
     const items = buildTrayMenu([], {
       running: [turn({ contactName: 'Refactor Buddy', origin: 'routine', startedAt: NOW })],
@@ -110,7 +110,7 @@ describe('buildTrayMenu', () => {
     })
     const row = items.find((item) => item.id === 'run')
     expect(row?.enabled).toBe(true)
-    expect(row?.label).toContain('Refactor Buddy — routine since ')
+    expect(row?.label).toContain('Refactor Buddy — a routine since ')
     // Absolute local time, never a countdown — the same no-counting rule as
     // the scheduled section, because a static menu cannot tick.
     expect(row?.label).toMatch(/since \d{1,2}:\d{2}/)

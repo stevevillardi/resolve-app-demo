@@ -2,7 +2,7 @@ import { sqliteTable, integer, real, text, index, uniqueIndex } from 'drizzle-or
 import type { RepoTrust, TurnWork } from '../../shared/domain'
 
 /**
- * Blueprint §12, one table per bullet. The column shapes mirror the Zod
+ * One table per entity in the data model. The column shapes mirror the Zod
  * schemas in src/shared/domain.ts — that file is the contract, this one is how
  * it lands on disk, and src/main/db/mappers.ts converts between them.
  *
@@ -12,8 +12,8 @@ import type { RepoTrust, TurnWork } from '../../shared/domain'
  */
 
 /**
- * App-level key/value state (Phase 3). Permanent, unlike the Phase 1
- * `_bootstrap_check` table this migration drops.
+ * App-level key/value state. Permanent, unlike the `_bootstrap_check` table
+ * this migration drops.
  *
  * Non-secret metadata ONLY. Tokens and API keys live in the OS keychain via
  * src/main/services/secrets.ts and must never be written here, so that
@@ -58,10 +58,10 @@ export const personaTemplates = sqliteTable('persona_templates', {
   model: text('model'),
   systemPrompt: text('system_prompt').notNull(),
   /**
-   * A JSON array rather than a join table, per blueprint §4. Skills are
-   * injected text with no relational queries over them, and the ordering the
-   * user picked is worth keeping — a join table would lose it or need a
-   * position column to fake it back.
+   * An ordered JSON array rather than a join table. Skills are injected text
+   * with no relational queries over them, and the order they are injected in
+   * is the persona's — a join table would lose that order, or need a position
+   * column to fake it back.
    */
   skillIds: text('skill_ids', { mode: 'json' }).$type<string[]>().notNull(),
   /**
@@ -90,7 +90,7 @@ export const contacts = sqliteTable(
       .references(() => personaTemplates.id, { onDelete: 'restrict' }),
     /**
      * The canonical repo. Keeps that meaning even once the session runs
-     * somewhere else, so blueprint §4's "one Group per repo" and the
+     * somewhere else, so the one-Group-per-repository rule and the
      * groups_repo_path_unique index below are untouched by worktrees.
      */
     repoPath: text('repo_path').notNull(),
@@ -110,19 +110,18 @@ export const contacts = sqliteTable(
     /**
      * The branch its worktree is on.
      *
-     * Outlives `worktree_path`, which it did not before Phase 22: de-isolating
-     * a Contact removes the checkout and keeps the branch, because
-     * `git worktree remove` leaves the commits and the Branches panel
-     * attributes a branch to a Contact by matching this column. Nulling it
-     * would turn that Contact's own committed work into an orphan branch with
-     * no owner. Every reader gates on `worktree_path` or on
+     * Outlives `worktree_path`: de-isolating a Contact removes the checkout
+     * and keeps the branch, because `git worktree remove` leaves the commits
+     * and the Branches panel attributes a branch to a Contact by matching this
+     * column. Nulling it would turn that Contact's own committed work into an
+     * orphan branch with no owner. Every reader gates on `worktree_path` or on
      * `isolationOf(...) === 'worktree'` first, so a branch with no checkout is
      * inert until the Contact is isolated again — at which point it is
      * deliberately the same branch.
      */
     branch: text('branch'),
     /**
-     * Where the session runs, chosen per Contact at bind time (§4) — the same
+     * Where the session runs, chosen per Contact at bind time — the same
      * persona may want isolation on one repo and not another.
      *
      * Null reads as `shared`, which is what every row written before this column
@@ -135,7 +134,7 @@ export const contacts = sqliteTable(
      */
     isolation: text('isolation', { enum: ['shared', 'worktree', 'exclusive'] }),
     /**
-     * A model just for this Contact, overriding its persona's (Phase 22).
+     * A model just for this Contact, overriding its persona's.
      *
      * Null means "whatever the persona says", which is every row written before
      * this column and most rows after it. The persona is still where a model is
@@ -167,11 +166,11 @@ export const contacts = sqliteTable(
      */
     repoTrust: text('repo_trust', { mode: 'json' }).$type<RepoTrust>(),
     /**
-     * When this thread was last on screen (Phase 20). The unread boundary:
-     * rows after it count, rows at or before it are read. Migration 0016
-     * backfills existing rows to its own run time — an upgrade must land with
-     * zero badges, not a wall of stale ones — and creation stamps new rows,
-     * so null is defensive only and reads as "everything read".
+     * When this thread was last on screen. The unread boundary: rows after it
+     * count, rows at or before it are read. Migration 0016 backfills existing
+     * rows to its own run time — an upgrade must land with zero badges, not a
+     * wall of stale ones — and creation stamps new rows, so null is defensive
+     * only and reads as "everything read".
      */
     lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' })
   },
@@ -186,7 +185,7 @@ export const groups = sqliteTable(
     /** Same contract as contacts.lastReadAt — see that comment. */
     lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' }),
     /**
-     * A name the user gave this group, overriding the repository's own (§G5).
+     * A name the user gave this group, overriding the repository's own.
      *
      * Null is not "unnamed" — it means *derive from `repo_path`*, which is what
      * every group displayed before this column and what a group still displays
@@ -201,7 +200,7 @@ export const groups = sqliteTable(
      */
     name: text('name'),
     /**
-     * Whether this group is kept out of the conversation list (§G5).
+     * Whether this group is kept out of the conversation list.
      *
      * Groups are created implicitly — `ensureGroupForRepo` runs inside
      * `createContact`, so binding a second persona to a repository silently
@@ -218,7 +217,7 @@ export const groups = sqliteTable(
      */
     hidden: integer('hidden', { mode: 'boolean' })
   },
-  // Blueprint §4: exactly one Group per repo. Enforced here rather than only
+  // Exactly one Group per repository, enforced by this index rather than only
   // in ensureGroupForRepo(), so a second writer can't race a duplicate in.
   (table) => [uniqueIndex('groups_repo_path_unique').on(table.repoPath)]
 )
@@ -243,21 +242,19 @@ export const groupMessages = sqliteTable(
     durable: integer('durable', { mode: 'boolean' }),
     /**
      * The branch a `system_summary`'s work landed on, when the session named
-     * one. Nullable and unwritten in practice until worktrees land: every
-     * Contact shares one checkout today, so there is rarely a branch worth
-     * reporting.
+     * one. Nullable: a Contact working directly in the repository's own
+     * checkout has no branch worth reporting.
      *
-     * Added now rather than later because this column is how the rest of the
-     * repo finds out that a writer produced work nobody can see on disk — see
-     * docs/plan/12-worktree-isolation.md, which is built on Phase 7 already
-     * injecting these rows into every session on the repo. Retrofitting it
-     * would mean a migration plus a re-summarisation pass over history.
+     * This column is how the rest of the app finds out that a writer produced
+     * work nobody can see on disk. These summaries are already injected into
+     * every session on the repository, so a branch named here reaches the
+     * other Contacts bound to it without any further plumbing.
      */
     branch: text('branch'),
     /**
-     * `branch_request` only (Phase 19): stamped when the branch it asks about
-     * is merged or discarded, which is what stops an answered ask reading
-     * forever as a standing one.
+     * `branch_request` only: stamped when the branch it asks about is merged
+     * or discarded, which is what stops an answered ask reading forever as a
+     * standing one.
      */
     resolvedAt: integer('resolved_at', { mode: 'timestamp_ms' })
   },
@@ -275,15 +272,15 @@ export const messages = sqliteTable(
     content: text('content').notNull(),
     timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
     /**
-     * What the turn ending in this assistant message did to the working tree
-     * (Phase 19), stamped from git in finish(). Null on user rows and on turns
-     * that changed nothing, so a chip row only ever appears when there is work
-     * to show. JSON because the five fields are written and read together.
+     * What the turn ending in this assistant message did to the working tree,
+     * stamped from git in finish(). Null on user rows and on turns that
+     * changed nothing, so a chip row only ever appears when there is work to
+     * show. JSON because the five fields are written and read together.
      */
     work: text('work', { mode: 'json' }).$type<TurnWork>(),
     /**
-     * The backend session that answered this message (Phase 22) — what makes a
-     * session boundary drawable in the thread.
+     * The backend session that answered this message — what makes a session
+     * boundary drawable in the thread.
      *
      * Stamped at turn end for *both* rows of the turn, never at insert. The id
      * does not exist yet when the user's row is written on the first turn of a
@@ -306,15 +303,14 @@ export const messages = sqliteTable(
 )
 
 /**
- * The durable record of what a turn *called* (Phase 17, doc 15 item 1;
- * widened in Phase 19).
+ * The durable record of what a turn *called*.
  *
- * Phase 17 chose name and status only. Phase 19 reverses that deliberately —
- * the workflow review made the cost concrete: the morning after an MCP
- * routine, "what did it write" had no answer. The rows now carry *bounded*
- * detail and output excerpts, never full arguments; the caps live beside the
- * writer in messaging.ts. These rows exist for the reload and the morning
- * after an unattended routine.
+ * Name and status alone are not enough: the morning after an unattended
+ * routine, "what did it write" has to have an answer, and a live stream that
+ * has since scrolled away is not one. So the rows carry *bounded* detail and
+ * output excerpts alongside the name and status — never full arguments, and
+ * the caps live beside the writer in messaging.ts. These rows exist for the
+ * reload and for the morning after.
  *
  * `messageId` is stamped when the turn's assistant message is written; a row
  * still `running` with a null messageId is a turn that died mid-call, and the
@@ -335,11 +331,13 @@ export const toolCalls = sqliteTable(
     status: text('status', { enum: ['running', 'completed', 'failed'] }).notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     /**
-     * Bounded excerpts (Phase 19, reversing doc 15 item 1 — see 00-progress):
-     * `detail` is what the call was asked (the command line, the path), capped
-     * at TOOL_DETAIL_MAX; `output` is how it answered, capped at
-     * TOOL_OUTPUT_MAX. Both nullable — rows from before the columns existed
-     * read as absent, and a turn that reported neither stores neither.
+     * Bounded excerpts: `detail` is what the call was asked (the command line,
+     * the path), capped at TOOL_DETAIL_MAX; `output` is how it answered,
+     * capped at TOOL_OUTPUT_MAX. Excerpts rather than the whole thing because
+     * these are written on every call of every turn and read back with the
+     * thread — enough to answer "what did it do", short of storing a turn's
+     * entire I/O in the database. Both nullable: rows from before the columns
+     * existed read as absent, and a turn that reported neither stores neither.
      */
     detail: text('detail'),
     output: text('output')
@@ -361,19 +359,19 @@ export const routines = sqliteTable(
     lastRunSummary: text('last_run_summary'),
     /**
      * Run history, like the two above — never writable through the editor.
-     * Misses accumulate here (Phase 20) because node-cron does not catch up a
-     * missed fire (a Phase 8 decision that stands) and the armed handles are
-     * destroyed and re-created on every routine edit, so an in-memory counter
-     * would zero itself whenever anything was saved. Any recorded attempt
-     * resets the count — Run now is the catch-up.
+     * Misses accumulate here, durably, because node-cron deliberately does not
+     * catch up a missed fire and the armed handles are destroyed and re-created
+     * on every routine edit, so an in-memory counter would zero itself whenever
+     * anything was saved. Any recorded attempt resets the count — Run now is
+     * the catch-up.
      */
     missedRunCount: integer('missed_run_count').notNull().default(0),
     lastMissedAt: integer('last_missed_at', { mode: 'timestamp_ms' }),
     /**
-     * Soft monthly spend threshold in USD, null = no budget (Phase 20).
-     * User-editable, unlike the run history above — it travels the draft and
-     * update shapes and updateRoutine's explicit column list. Alerts only:
-     * crossing it notifies and banners, and nothing is ever stopped.
+     * Soft monthly spend threshold in USD, null = no budget. User-editable,
+     * unlike the run history above — it travels the draft and update shapes
+     * and updateRoutine's explicit column list. Alerts only: crossing it
+     * notifies and banners, and nothing is ever stopped.
      */
     monthlyBudgetUsd: real('monthly_budget_usd')
   },
@@ -386,19 +384,19 @@ export const usageEvents = sqliteTable(
     id: text('id').primaryKey(),
     /**
      * Nullable, and `set null` rather than `cascade` — the same choice
-     * group_messages makes, for a stronger reason. Deleting a Contact used to
-     * take its spend with it, so a total covering last month shrank when
-     * somebody tidied up a Contact this month. Spend is a financial record: it
-     * describes money that was actually spent, and no later bookkeeping makes
-     * that untrue.
+     * group_messages makes, for a stronger reason. Spend outlives what spent
+     * it: a monthly total covering a Contact somebody has since tidied up is
+     * still a correct total, so deleting the Contact severs the link instead
+     * of taking the rows. Spend is a financial record — it describes money
+     * that was actually spent, and no later bookkeeping makes that untrue.
      */
     contactId: text('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
     /**
-     * Which routine's fire spent this, when the turn's origin was a routine
-     * (Phase 20). Same non-FK rule as personaTemplateId below and for the same
-     * reason: spend outlives its attribution target, and a routine deleted
-     * next week must not take last month's figures with it. Null on rows from
-     * before the column existed — honestly unattributed, never guessed.
+     * Which routine's fire spent this, when the turn's origin was a routine.
+     * Same non-FK rule as personaTemplateId below and for the same reason:
+     * spend outlives its attribution target, and a routine deleted next week
+     * must not take last month's figures with it. Null on rows from before the
+     * column existed — honestly unattributed, never guessed.
      */
     routineId: text('routine_id'),
     /**
@@ -406,8 +404,8 @@ export const usageEvents = sqliteTable(
      * foreign keys.
      *
      * Their whole purpose is to outlive the rows they were copied from: a FK
-     * would reintroduce exactly the coupling that made deletion destructive,
-     * and a `restrict` one would make a persona undeletable for as long as any
+     * would be exactly the coupling that makes deletion destructive, and a
+     * `restrict` one would make a persona undeletable for as long as any
      * turn had ever run on it. So these are plain text and may name a persona
      * or a repo that no longer exists — which is the point, because "what was
      * this spent on" stays answerable either way.
@@ -416,10 +414,9 @@ export const usageEvents = sqliteTable(
     repoPath: text('repo_path'),
     timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
     /**
-     * What spent the tokens. `mention` and `summary` joined the original two
-     * in Phase 7 and needed no migration: the column is plain `text NOT NULL`
-     * in 0002 with no CHECK behind it, so the enum is a Drizzle/Zod assertion
-     * rather than a database constraint.
+     * What spent the tokens. The column is plain `text NOT NULL` in 0002 with
+     * no CHECK behind it, so the enum is a Drizzle/Zod assertion rather than a
+     * database constraint — a fifth kind of origin needs no migration.
      *
      * Worth separating rather than folding into `message`: a summary turn is
      * spend the user never asked for directly, and the usage dashboard should
@@ -432,7 +429,9 @@ export const usageEvents = sqliteTable(
     /**
      * REAL, not INTEGER — a turn costs fractions of a cent, and INTEGER
      * affinity on a dollar amount is the kind of thing that reads fine until
-     * someone rounds it. Null when the model has no published price (§3).
+     * someone rounds it. Null when there is no dollar figure to record: a
+     * backend may return token counts only, and a model may have no published
+     * price to compute one from.
      */
     costUsd: real('cost_usd'),
     /**
@@ -467,10 +466,10 @@ export const usageEvents = sqliteTable(
      */
     sessionId: text('session_id'),
     /**
-     * The assistant message this turn produced, so the thread can show what a
-     * single turn cost (review §G6). Until now only aggregates were reachable:
-     * the data was per-event all along, but nothing tied an event to the reply
-     * it paid for.
+     * The assistant message this turn produced, so a single turn's cost is
+     * reachable in the thread and not only in aggregates. The data is per-event
+     * either way; this is the column that ties an event to the reply it paid
+     * for.
      *
      * Written in `finish()`, where the id is already in hand — the same place
      * and moment the turn's tool rows and session stamp are written.
@@ -483,10 +482,10 @@ export const usageEvents = sqliteTable(
      *
      * `set null` on delete rather than `cascade`, and this is the load-bearing
      * half: `messages` cascades from `contacts`, so a cascading FK here would
-     * delete the spend record whenever a contact is deleted. Phase 10's rule is
-     * that spend outlives what spent it — `contact_id` is `set null` for
-     * exactly this reason, and this column has to match, or the usage
-     * dashboard's history quietly loses a month every time someone tidies up.
+     * delete the spend record whenever a contact is deleted. The rule is that
+     * spend outlives what spent it — `contact_id` is `set null` for exactly
+     * this reason, and this column has to match, or the usage dashboard's
+     * history quietly loses a month every time someone tidies up.
      *
      * Null means "not recorded": every row written before this column existed,
      * and every turn that legitimately has no reply to point at.

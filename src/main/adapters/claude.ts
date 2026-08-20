@@ -34,14 +34,15 @@ import type {
  * `streamsToolProgress` means "the protocol can carry it", which is what a UI
  * needs in order to decide whether to render a progress affordance at all.
  *
- * Blueprint §3 records a flat "known gap" here — that the SDK emits nothing
- * during tool execution. That is no longer the whole story: 0.3.233 defines
- * SDKToolProgressMessage with `tool_name` and `elapsed_time_seconds`, and this
- * adapter maps it. What has *not* been observed is it actually firing: every
- * probe run so far used fast tools (`git diff`, `Read`), and none produced
- * one, which is consistent with it being a heartbeat for long-running calls.
- * So the mapping is ready and the flag is honest about capability, but §3's
- * caution about faking progress Claude may not have still stands.
+ * The SDK streams nothing during tool execution itself, only around it, so a
+ * long tool call looks like silent thinking — which is why a running tool gets
+ * its own loading state here rather than a fabricated progress figure. What the
+ * protocol does carry is 0.3.233's SDKToolProgressMessage, with `tool_name` and
+ * `elapsed_time_seconds`, and this adapter maps it. What has *not* been observed
+ * is it actually firing: every probe run so far used fast tools (`git diff`,
+ * `Read`), and none produced one, which is consistent with it being a heartbeat
+ * for long-running calls. So the mapping is ready and the flag is honest about
+ * capability, while the UI still assumes it may hear nothing at all.
  */
 export const CLAUDE_CAPABILITIES: AgentCapabilities = {
   streamsTextDeltas: true,
@@ -71,7 +72,7 @@ interface ContentBlock {
 }
 
 /**
- * How a tool call answered, as bounded text (Phase 19).
+ * How a tool call answered, as bounded text.
  *
  * A tool_result's `content` is either a plain string or an array of content
  * parts; only the text parts are worth keeping — an image result excerpted to
@@ -102,8 +103,8 @@ export function toolDetail(input: Record<string, unknown> | undefined): string {
 
 /**
  * Maps the SDK's assistant-level error codes onto our kinds. The renderer
- * already distinguishes rate limits and network failures in its error bubble
- * (blueprint §15C), so the classification has to survive normalization.
+ * already distinguishes rate limits and network failures in its error bubble,
+ * so the classification has to survive normalization.
  */
 export function classifyClaudeError(code: string | undefined): AgentErrorKind {
   switch (code) {
@@ -126,11 +127,10 @@ export function classifyClaudeError(code: string | undefined): AgentErrorKind {
  *
  * The unknown-model sentence ends "Run --model to pick a different model" —
  * there is no `--model` anywhere in this app; the model lives on the persona.
- * Phase 17 set the precedent for not surfacing raw vendor strings (the dead
- * resume key); this closes the same gap for the error the CLI reports as a
- * successful result (captured live 2026-08-18, Phase 11 F6). Anything
- * unrecognised passes through untouched — a wrong rewording is worse than
- * vendor wording.
+ * A raw vendor string whose advice cannot be acted on from here is never shown
+ * as-is, and the error the CLI reports as a successful result is the one that
+ * reaches a user most often (captured live 2026-08-18). Anything unrecognised
+ * passes through untouched — a wrong rewording is worse than vendor wording.
  */
 export function rewordCliErrorProse(text: string): string {
   const model = /issue with the selected model \(([^)]+)\)/i.exec(text)
@@ -161,10 +161,12 @@ interface ResultLike {
  * Reads the turn's usage off a result message.
  *
  * Deliberately reads `modelUsage` rather than summing the per-step assistant
- * messages that blueprint §3 warns about deduping: the SDK's own type
- * annotations say `usage` is main-loop-only and that `modelUsage` is "the
- * correct field for token/cost accounting". Summing assistant messages is the
- * thing not to do at all, so there is nothing to dedupe.
+ * messages. Those can share one id across the steps of a single turn, so
+ * anything summing them has to dedupe by id first or the turn is billed twice;
+ * and the SDK's own type annotations say `usage` is main-loop-only while
+ * `modelUsage` is "the correct field for token/cost accounting". Summing
+ * assistant messages is the thing not to do at all, so there is nothing here to
+ * dedupe.
  */
 export function usageFromResult(result: ResultLike): AgentUsage | null {
   const entries = Object.entries(result.modelUsage ?? {})
@@ -281,9 +283,10 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
         // The layer that actually enforces the level; canUseTool below is the
         // second one. See the header of sandbox.ts for why it is this way round.
         ...(sandbox.sandbox ? { sandbox: sandbox.sandbox } : {}),
-        // `env` REPLACES the subprocess environment rather than merging, so
-        // process.env has to be spread explicitly (the same trap Phase 3 hit
-        // in claude-auth.ts) or the CLI loses PATH and HOME.
+        // `env` REPLACES the subprocess environment rather than merging: nothing
+        // is inherited unless process.env is spread explicitly, and a CLI spawned
+        // without PATH and HOME does not start. claude-auth.ts spawns under the
+        // same rule.
         env: { ...process.env, ...config.env } as Record<string, string>,
         canUseTool: async (toolName, input) => {
           // GitHub first, and separately: evaluateToolUse opens with
@@ -328,8 +331,9 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
     const toolNames = new Map<string, string>()
 
     // A failure can arrive as a thrown error rather than a result message —
-    // a missing CLI, a dead network, an expired login. Blueprint §15C wants
-    // every failure visible in the thread, so none escapes as an exception.
+    // a missing CLI, a dead network, an expired login. Every failure has to
+    // reach the thread as a visible error bubble rather than a silent stop or a
+    // line in a console, so none escapes as an exception.
     try {
       yield* drain()
     } catch (error) {
@@ -443,8 +447,8 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
               // The CLI reports some failures as a *successful* result whose
               // text is its own error prose — a model this account cannot use,
               // most visibly. Left on the reply path it renders as an ordinary
-              // bubble, becomes the sidebar preview, and never offers retry
-              // (Phase 11, F6) — so it goes down the error path instead.
+              // bubble, becomes the sidebar preview, and never offers retry — so
+              // it goes down the error path instead.
               if (message.is_error) {
                 emittedError = true
                 yield {
@@ -475,7 +479,8 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
   }
 
   /**
-   * One schema-constrained turn (blueprint §6 compaction).
+   * One schema-constrained turn: the compaction summary a session is asked for
+   * as it ends.
    *
    * Three things here are not obvious from run() and are load-bearing:
    *
@@ -570,11 +575,11 @@ export function createClaudeAdapter(config: AdapterConfig = {}): AgentAdapter {
  *
  * The MCP names are here for exactly that reason. The summariser is never
  * passed `mcpServers`, so today no `mcp__*` tool exists in its session at all —
- * but this was a list of bare tool names that no qualified MCP name could ever
- * have matched, which would have made it look like a guard covering a case it
- * did not cover. It runs after every single turn; an MCP handshake per turn is
- * a cost nobody asked for, and a summariser that could comment on an issue is
- * a capability nobody granted.
+ * but a list of bare tool names could never match a qualified MCP name, and a
+ * guard that looks like it covers a case it does not cover is worse than no
+ * guard. It runs after every single turn; an MCP handshake per turn is a cost
+ * nobody asked for, and a summariser that could comment on an issue is a
+ * capability nobody granted.
  */
 const SUMMARY_DISALLOWED_TOOLS = [
   'Bash',
@@ -592,10 +597,10 @@ const SUMMARY_DISALLOWED_TOOLS = [
 /**
  * The SDK takes an AbortController, callers hand us an AbortSignal.
  *
- * `dispose` matters because a caller's signal can outlive one turn — Phase 6
- * will hold one per conversation. A listener that only unregisters when it
- * fires would accumulate one dead controller per turn on any signal that never
- * aborts, which is the common case.
+ * `dispose` matters because a caller's signal can outlive one turn: a
+ * conversation holds a single signal across every turn it runs. A listener that
+ * only unregisters when it fires would accumulate one dead controller per turn
+ * on any signal that never aborts, which is the common case.
  */
 /**
  * The path or command a denied tool call was aiming at, if it named one.

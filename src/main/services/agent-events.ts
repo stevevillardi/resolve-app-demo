@@ -7,7 +7,7 @@ import {
 import { getMainWindow } from '../main-window'
 
 /**
- * The main→renderer half of the IPC layer (Phase 6).
+ * The main→renderer half of the IPC layer.
  *
  * Everything else in this app answers a question the renderer asked. A turn
  * doesn't: it produces events for as long as the model keeps talking, so main

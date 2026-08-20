@@ -1,8 +1,8 @@
 import type { ActiveRun } from '../../../shared/ipc-contract'
 
 /**
- * The decisions behind every surface that names a running turn (Phase 25):
- * which run belongs to a routine, what a turn's origin is called on screen,
+ * The decisions behind every surface that names a running turn: which run
+ * belongs to a routine, what a turn's origin is called on screen,
  * and where clicking a run should land. In lib/ because the renderer test
  * project reaches only `lib/*.test.ts` — the components stay presentational.
  */

@@ -145,7 +145,7 @@ describe('updateRoutine', () => {
         enabled: true,
         monthlyBudgetUsd: null
       })
-    ).toThrow(/No such routine/)
+    ).toThrow(/no longer exists/)
   })
 })
 

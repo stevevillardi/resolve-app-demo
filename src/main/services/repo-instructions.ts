@@ -31,9 +31,9 @@ export const REPO_INSTRUCTIONS_MAX_BYTES = 32 * 1024
  * Checked in this order. A repo shipping both with identical content — the
  * common case, one file for each tool's convention — is read once and named by
  * the first. Two files that genuinely differ are BOTH read, concatenated under
- * headers (doc 15 item 6): the first-hit-wins rule this replaced silently
- * dropped whichever file lost, and a repo whose two files disagree is exactly
- * the repo whose second file matters.
+ * headers, because taking only the preferred file silently drops whichever one
+ * loses, and a repo whose two files disagree is exactly the repo whose second
+ * file matters.
  */
 const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const
 
@@ -87,9 +87,11 @@ export interface RepoSkill {
  * saying otherwise costs nothing and is the difference between a cap and a
  * corruption.
  *
- * Not resolved: `@path` imports, which CLAUDE.md supports and which would mean
- * following references out of the file we showed the user for approval. That is
- * a deliberate omission, recorded in docs/plan/14-agent-capability-surface.md.
+ * Not resolved: `@path` imports, which CLAUDE.md supports. The file is read,
+ * capped and injected exactly as it stands, so an `@`-reference to another file
+ * arrives as inert text. Resolving one would mean following a repo-authored
+ * list of paths out of the very file the user was shown for approval, which is
+ * the one thing this module is here to prevent — so the omission is deliberate.
  */
 export function readRepoInstructions(workingPath: string): RepoInstructions | null {
   const found: { fileName: string; path: string; raw: string }[] = []

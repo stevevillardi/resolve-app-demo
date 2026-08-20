@@ -10,9 +10,12 @@ import {
 import { branchDiff } from '../../services/diffs'
 
 /**
- * Layer 3 of docs/plan/12-worktree-isolation.md — the only part of the phase
- * with a human in it. Reading another persona's branch needs nothing from here;
- * moving its work into a working copy is a decision, so it goes through a click.
+ * The part of worktree isolation a human drives.
+ *
+ * Isolating a writing Contact into its own worktree, and reconciling what git
+ * actually did afterwards, both happen automatically — and reading another
+ * persona's branch needs nothing from here. Moving that work into a working
+ * copy is a decision, so it goes through a click.
  */
 
 registerProcedure('branches.list', () => listPersonaBranches())

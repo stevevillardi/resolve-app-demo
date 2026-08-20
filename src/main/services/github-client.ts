@@ -3,13 +3,13 @@ import { REPO_FETCH_LIMIT, REPO_PAGE_SIZE } from '../../shared/repos'
 import { markTokenGood, markTokenRejected } from './github-token-state'
 
 /**
- * The GitHub REST surface this app uses, as a port (blueprint §9.2).
+ * The GitHub REST surface this app uses, as a port.
  *
  * Kept apart from the services that call it for the same reason `cron-engine.ts`
  * is kept apart from `scheduler.ts`: the policy is worth testing and the vendor
- * binding is not, so the binding is the thin half. Before this file, `Octokit`
- * was constructed inline in two places, which is why `repos.ts` had no tests at
- * all — there was nothing to substitute.
+ * binding is not, so the binding is the thin half. It is also what makes
+ * `repos.ts` testable at all — with `Octokit` constructed inline in the calling
+ * service, there is nothing to substitute for a live API call.
  *
  * It is also the single place a GitHub status code is read. Every call the app
  * makes can fail with a token that was revoked on github.com since the device
@@ -78,13 +78,13 @@ export function gitHubClient(token: string): GitHubClient {
 }
 
 /**
- * The real client, and now the only `new Octokit` in the app.
+ * The real client, and the only `new Octokit` in the app.
  *
- * `github-auth.ts` used to keep its own instance for `users.getAuthenticated()`
- * during the device flow, on the grounds that the call happens before the token
- * is stored. But the factory takes the token as an argument, so it never needed
- * to — and keeping it outside the port meant the one call that could have told
- * us whether a token works was the one call no test could substitute.
+ * The device flow's `users.getAuthenticated()` goes through here too, even
+ * though that call happens before the token is stored: the factory takes the
+ * token as an argument, so it needs no instance of its own — and keeping it
+ * outside the port would leave the one call that can tell us whether a token
+ * works as the one call no test can substitute.
  */
 export function octokitClient(token: string): GitHubClient {
   const octokit = new Octokit({ auth: token })
@@ -100,15 +100,15 @@ export function octokitClient(token: string): GitHubClient {
        * Sorted by push rather than by name, because the repo you want to bind
        * is almost always one you touched recently.
        *
-       * Paged rather than searched (review §G3). GitHub's search endpoint is
-       * the obvious answer to "the picker only sees 100" and the wrong one
-       * here: `/search/repositories` has no notion of "repositories I can
-       * reach", so it needs the viewer's login *and* every org they belong to
-       * spliced into the query as qualifiers — an extra API call to build,
-       * stale the moment someone joins an org, and silently returning all of
-       * public GitHub if a qualifier is ever dropped. It also reads an index
-       * that lags a freshly created repository by minutes, which is precisely
-       * when someone is trying to bind one.
+       * Paged rather than searched. GitHub's search endpoint is the obvious
+       * answer to "the picker only sees 100" and the wrong one here:
+       * `/search/repositories` has no notion of "repositories I can reach", so
+       * it needs the viewer's login *and* every org they belong to spliced into
+       * the query as qualifiers — an extra API call to build, stale the moment
+       * someone joins an org, and silently returning all of public GitHub if a
+       * qualifier is ever dropped. It also reads an index that lags a freshly
+       * created repository by minutes, which is precisely when someone is
+       * trying to bind one.
        *
        * Paging the same endpoint keeps the affiliation filter that already
        * makes this list *correct*, and turns the cap from a question about

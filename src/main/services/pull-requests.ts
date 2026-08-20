@@ -17,9 +17,10 @@ import { getPersonaTemplate } from './persona-templates'
 import { workingPathFor } from './run-lock'
 import type { PrRef } from './github-client'
 import type { Contact, PersonaTemplate } from '../../shared/domain'
+import { notFound } from './not-found'
 
 /**
- * Opening a pull request (blueprint §9.2, §16 Journey 3).
+ * Opening a pull request.
  *
  * The whole point of routing this through the app rather than letting a persona
  * shell out is that every one of these steps is a decision somebody should be
@@ -30,10 +31,11 @@ import type { Contact, PersonaTemplate } from '../../shared/domain'
  *
  * **`githubScope` is enforced here, not in the button.** `OpenPRButton` hides
  * itself for `read_only`, which is the right thing for a UI to do and worth
- * nothing on its own: the procedure behind it is callable regardless. Blueprint
- * §13 is clear that this is "a permission label on the persona, not hard-enforced
- * beyond what the token itself allows" — the app's job is to have exactly one
- * gate and to put it where the action happens.
+ * nothing on its own: the procedure behind it is callable regardless. Be
+ * honest about what that buys, though. `githubScope` is a permission label on
+ * the persona, not something hard-enforced beyond whatever the stored token
+ * itself allows — so the app's job is to have exactly one gate, and to put it
+ * where the action happens.
  *
  * **PR state is not stored.** GitHub already knows whether a branch has an open
  * pull request, and asking it cannot go stale, get orphaned by a branch deleted
@@ -114,7 +116,7 @@ export async function openPullRequest(contactId: string): Promise<PrResult> {
 
   // Deliberately not "commit it for them". The app has never authored a commit,
   // and the first one it authored should not be an unattended one made of work
-  // nobody has read — see docs/plan/09-github-remote-actions.md.
+  // nobody has read.
   const dirty = await dirtyFiles(workingPath)
   if (dirty.length > 0) {
     throw new Error(
@@ -167,10 +169,10 @@ export async function openPullRequest(contactId: string): Promise<PrResult> {
  */
 async function resolve(contactId: string): Promise<PrContext> {
   const contact = getContact(contactId)
-  if (!contact) throw new Error(`No such contact: ${contactId}`)
+  if (!contact) throw notFound('contact', contactId)
 
   const persona = getPersonaTemplate(contact.personaTemplateId)
-  if (!persona) throw new Error(`No such persona template: ${contact.personaTemplateId}`)
+  if (!persona) throw notFound('persona', contact.personaTemplateId)
 
   if (persona.githubScope === 'read_only') {
     throw new Error(
@@ -210,10 +212,10 @@ async function resolve(contactId: string): Promise<PrContext> {
 /**
  * The Contact's most recent end-of-session summary for this branch.
  *
- * Phase 7 already writes one per turn, so the PR body can say why the work
- * happened rather than only what changed — and it is the persona's own account
- * of it, not a paraphrase assembled from commit subjects. Null is normal: a
- * summariser call can fail, and the PR is still worth opening.
+ * One is already written per turn, so the PR body can say why the work happened
+ * rather than only what changed — and it is the persona's own account of it,
+ * not a paraphrase assembled from commit subjects. Null is normal: a summariser
+ * call can fail, and the PR is still worth opening.
  */
 function latestSummary(contactId: string, branch: string): string | null {
   const row = initDb()
@@ -244,8 +246,9 @@ function titleFor(
   if (commits?.length === 1) return truncate(commits[0], TITLE_MAX)
   if (summary) return truncate(firstSentence(summary), TITLE_MAX)
   // `branch` is what was actually pushed (read from the working copy's HEAD),
-  // not the row's registered name — the live Phase 11 run watched those
-  // diverge and the title name a branch the PR did not ship (F5).
+  // not the row's registered name. A session told to work on a branch can check
+  // out one of its own, and the two then diverge — leaving a title that names a
+  // branch the pull request did not ship.
   return truncate(`${contact.displayName}: changes on ${branch}`, TITLE_MAX)
 }
 

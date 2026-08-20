@@ -1,7 +1,7 @@
 /**
- * The conversation list's order (Phase 20): most recent message first, the
- * iMessage rule — an app whose sidebar is "conversations" had been sorting
- * them like a phone book. A user decision recorded in the phase doc.
+ * The conversation list's order: most recent message first, the iMessage rule.
+ * An app whose sidebar is "conversations" must not sort them like a phone book
+ * — the thread you touched a minute ago is the one you are coming back to.
  *
  * Rows that have never had a message sort after every row that has, and
  * alphabetically among themselves — a stable, predictable tail rather than an

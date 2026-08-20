@@ -16,10 +16,10 @@ export function initDb(): AppDatabase {
 }
 
 /**
- * Closes the underlying SQLite handle and forgets it (Phase 18, for the dev
- * reset). Deleting the file while a handle is open leaks an fd to a dead
- * inode on macOS and fails outright on Windows; nothing else may unlink the
- * database without coming through here first. The next initDb() reopens.
+ * Closes the underlying SQLite handle and forgets it, for the dev reset.
+ * Deleting the file while a handle is open leaks an fd to a dead inode on
+ * macOS and fails outright on Windows; nothing else may unlink the database
+ * without coming through here first. The next initDb() reopens.
  */
 export function closeDb(): void {
   if (!db) return

@@ -84,7 +84,7 @@ describe('update', () => {
     // A no-op update would leave the editor showing saved changes that were
     // never written.
     expect(() => updateSkill({ id: 'missing', name: 'x', description: '', content: '' })).toThrow(
-      /No such skill/
+      /no longer exists/
     )
   })
 })

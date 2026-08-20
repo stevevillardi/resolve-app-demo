@@ -8,10 +8,10 @@ import type { PersonaBackend } from '../../shared/domain'
  * list will go stale, and the LAST_VERIFIED marker is how anyone reading it
  * finds out.
  *
- * It is emphatically **not authoritative**. Phase 5 established that
- * availability depends on the *account*, not just the CLI version — a
- * ChatGPT-account Codex user is refused `gpt-5.2-codex` and `gpt-5.3-codex`
- * with a 400 while `gpt-5.5` works, and nothing in the SDK says so in advance.
+ * It is emphatically **not authoritative**: availability depends on the
+ * *account*, not just the CLI version — a ChatGPT-account Codex user is refused
+ * `gpt-5.2-codex` and `gpt-5.3-codex` with a 400 while `gpt-5.5` works, and
+ * nothing in the SDK says so in advance.
  * So the real failure mode is a 400 on first use, which arrives as a normal
  * `error` event and lands in the thread like any other failure. Treat this list
  * as a menu of plausible choices, not a promise.
@@ -60,7 +60,7 @@ export function modelsForBackend(backend: PersonaBackend): string[] {
 }
 
 /**
- * The model that writes end-of-session summaries (blueprint §6), per backend.
+ * The model that writes end-of-session summaries, per backend.
  *
  * Deliberately not the persona's model. Compaction runs after *every* turn, so
  * pinning it to the persona would roughly double the cost of an Opus-class
@@ -88,9 +88,9 @@ export const SUMMARY_MODELS: Record<PersonaBackend, string> = {
    * so there is no transcript size at which the old choice wins.
    *
    * The risk this carries is quality, not cost, and it is worth naming because
-   * nothing in the test suite can see it: a summariser picks a category, and
-   * Phase 7 found a mis-categorised summary silently drops a turn's work out of
-   * every colleague's context. That failure is invisible in the thread the turn
+   * nothing in the test suite can see it: a summariser picks a category, and a
+   * mis-categorised summary silently drops a turn's work out of every
+   * colleague's context. That failure is invisible in the thread the turn
    * happened in and shows up later as a colleague missing something it should
    * have known. If summaries start reading thin or landing in the wrong
    * category, this line is the first thing to suspect.

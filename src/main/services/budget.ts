@@ -1,5 +1,5 @@
 /**
- * Monthly budget arithmetic, pure (Phase 20, review §C3).
+ * Monthly budget arithmetic, pure.
  *
  * The money rules mirror the renderer's `aggregateUsage` on purpose: a null
  * `costUsd` means "no published price", which is not the same as free — so a

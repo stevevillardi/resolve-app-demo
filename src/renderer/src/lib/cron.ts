@@ -1,10 +1,10 @@
 /**
  * Turning a cron expression into something a picker can edit, and back.
  *
- * Blueprint §10 specifies `RoutineEditor` as a "schedule picker + prompt field".
- * The picker was never built — a five-character expression got a plain text
- * input — so anyone who does not already know cron could not set up a routine,
- * and anyone who does had no confirmation they had typed what they meant.
+ * `RoutineEditor` is a schedule picker plus a prompt field, not a text box for
+ * a cron expression. A five-character expression in a plain text input leaves
+ * anyone who does not already know cron unable to set up a routine at all, and
+ * anyone who does with no confirmation they typed what they meant.
  *
  * **node-cron stays in main and this file never imports it.** `cron.ts` in the
  * main process records that reasoning at length: `src/shared/` has exactly one

@@ -5,9 +5,9 @@ import type { TurnWork } from '../../shared/domain'
 
 /**
  * What one turn did to its working tree, measured by git — never claimed by
- * the model (Phase 19). The same rule recordOfWork() set for summaries, applied
- * per turn: heads are read before the run and after it, and the difference is
- * the turn's committed work.
+ * the model. The same rule recordOfWork() set for summaries, applied per turn:
+ * heads are read before the run and after it, and the difference is the turn's
+ * committed work.
  *
  * Uncommitted work is attributed more carefully than it looks. `dirty` carries
  * only paths that were clean before the turn and dirty after it — a path

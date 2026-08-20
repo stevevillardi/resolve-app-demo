@@ -2,7 +2,8 @@
  * Whether the app is on its way out.
  *
  * Closing the window hides it rather than destroying it, so routines keep
- * firing (blueprint §15E) and reopening is instant — no renderer reboot, no
+ * firing — they run in this process, and an app that quits when its window
+ * closes cannot fire one — and reopening is instant: no renderer reboot, no
  * splash, no `auth.getStatus` round trip. That makes "close" and "quit" two
  * different intents which the `close` event alone cannot tell apart, and this
  * flag is the difference.

@@ -9,7 +9,7 @@ interface RoutineRunNoticeProps {
 
 /**
  * A log entry, not a conversation turn — this ran on a schedule while nobody
- * was watching (blueprint §8/§10).
+ * was watching.
  *
  * Shaped accordingly: a fixed monospace timestamp gutter, a glyph, and a
  * hairline rule down the left the way a terminal log or a CI run reads. It is

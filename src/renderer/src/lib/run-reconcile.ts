@@ -1,5 +1,5 @@
 /**
- * Which contacts' live turns no longer exist, according to main (Phase 11, F7).
+ * Which contacts' live turns no longer exist, according to main.
  *
  * useRunStore learns that a turn ended from the turn's own `done` event — but
  * that event only reaches the store through a mounted subscriber, and both
@@ -26,7 +26,7 @@ export function staleTurnContacts(
 }
 
 /**
- * The symmetric half (Phase 25): active runs the store has never heard of.
+ * The symmetric half: active runs the store has never heard of.
  *
  * A turn the renderer did not start — a routine fire (scheduled or Run now),
  * or any turn surviving a renderer reload — has no `begin()` caller, so

@@ -15,9 +15,9 @@ import type { Contact, Isolation, PersonaTemplate } from './domain'
  * — so an isolated Contact, whose lock key is its worktree, was blocked by runs
  * it can never collide with and unblocked by the ones it can — and it consulted
  * neither run's lock mode, so a `read_only` Contact refused by nobody had its
- * composer disabled whenever anything else touched the repo. That is the
- * reviewer-plus-writer pair blueprint §16 Journey 2 is built on, and the lock
- * was narrowed twice specifically to keep it running.
+ * composer disabled whenever anything else touched the repo. A reviewer reading
+ * a repo while a writer works it is the pair this app is built around, and the
+ * lock was narrowed twice specifically to keep it running.
  *
  * A rule stated twice is a rule that will diverge; the point of this file is
  * that there is nothing left to keep in step.
@@ -46,10 +46,10 @@ export function workingPathFor(contact: Contact): string {
  *
  * Isolation decides *where* a session runs, not whether it locks — the two are
  * separate axes and conflating them is easy to do. A `workspace_write` Contact
- * left in the main tree still has to take the lock, or Phase 12 would have
- * quietly unlocked every writer that opted out of worktrees. The one exception
- * is `exclusive`, which exists to demand the main tree to itself, and so locks
- * even for a reader.
+ * left in the main tree still has to take the lock — reading the mode off the
+ * isolation instead would quietly unlock every writer that opted out of a
+ * worktree. The one exception is `exclusive`, which exists to demand the main
+ * tree to itself, and so locks even for a reader.
  *
  * Worth knowing how strong the read-only half is, because it differs by
  * backend and this function cannot tell you: Codex's `--sandbox read-only` is
@@ -65,11 +65,10 @@ export function lockModeFor(persona: PersonaTemplate, isolation: Isolation | nul
 /**
  * The run that would refuse `mode` on `workingPath`, or null if none would.
  *
- * **Only writer-vs-writer serializes** — `00-progress.md` and
- * `07-group-coordination.md` both say so in those words. A shared run is never
- * refused, and an exclusive run is refused only by another exclusive holder. A
- * `read_only` persona cannot mutate the tree, so it is neither a hazard to
- * others nor entitled to protection from them.
+ * **Only writer-vs-writer serializes.** A shared run is never refused, and an
+ * exclusive run is refused only by another exclusive holder. A `read_only`
+ * persona cannot mutate the tree, so it is neither a hazard to others nor
+ * entitled to protection from them.
  *
  * The symmetry is the point. A reader may start while a writer holds, and a
  * writer may start while a reader holds; either way the reader can observe a
@@ -95,14 +94,14 @@ export function blockingRun<T extends { workingPath: string; mode: LockMode }>(
 /**
  * What a refusal says, once.
  *
- * "Here" rather than "in this repo": since Phase 12 a refusal means the two
- * share a working *directory*, which is a narrower thing than sharing a repo —
- * two Contacts in their own worktrees never collide at all, and telling one of
- * them its repo is busy would describe a rule the app no longer has.
+ * "Here" rather than "in this repo": a refusal means the two share a working
+ * *directory*, which is a narrower thing than sharing a repo — two Contacts in
+ * their own worktrees never collide at all, and telling one of them its repo is
+ * busy would describe a rule the app does not have.
  *
- * Main threw one wording and the composer rendered another, flagged but not
- * fixed when Phase 21 found them (`00-progress.md`, "Drafts clear on
- * acceptance"). They were two statements of one rule, so now there is one.
+ * One function because the refusal is one rule, and it is stated where the rule
+ * is: main throws this text and the composer renders it, so the sentence a user
+ * sees cannot depend on which side noticed.
  */
 export function lockRefusal(holderName: string | null): string {
   return holderName

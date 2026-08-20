@@ -4,9 +4,10 @@ import { initDb } from '../db'
 import { toSkill } from '../db/mappers'
 import { personaTemplates, skills } from '../db/schema'
 import type { Skill, SkillDraft } from '../../shared/domain'
+import { notFound } from './not-found'
 
 /**
- * Skill library CRUD (blueprint §4). A Skill is reusable instruction text
+ * Skill library CRUD. A Skill is reusable instruction text
  * referenced by id from persona templates — it has no owner and no lifecycle
  * of its own beyond this file.
  */
@@ -33,7 +34,7 @@ export function updateSkill(skill: Skill): Skill {
     .where(eq(skills.id, skill.id))
     .run()
 
-  if (result.changes === 0) throw new Error(`No such skill: ${skill.id}`)
+  if (result.changes === 0) throw notFound('skill', skill.id)
   return skill
 }
 
@@ -41,11 +42,11 @@ export function updateSkill(skill: Skill): Skill {
  * Deletes a skill and detaches it from every persona that referenced it.
  *
  * Detaching rather than blocking is the deliberate choice: `skill_ids` is a
- * JSON array (§4) with no foreign key behind it, and a skill is only injected
- * text — losing one degrades a persona's instructions rather than breaking the
- * persona. Blocking would instead force the user to hand-unattach it
- * everywhere first. `SkillLibraryView` shows the "Used by" list so the blast
- * radius is visible before the click.
+ * JSON array with no foreign key behind it, and a skill is only injected text —
+ * losing one degrades a persona's instructions rather than breaking the
+ * persona. Blocking would instead force the user to hand-unattach it everywhere
+ * first. `SkillLibraryView` shows the "Used by" list so the blast radius is
+ * visible before the click.
  *
  * Both halves run in one transaction so a crash can't leave personas pointing
  * at a skill that no longer exists.
@@ -65,7 +66,7 @@ export function deleteSkill(id: string): void {
 }
 
 /**
- * The skills a persona injects, resolved from its `skillIds` (blueprint §5).
+ * The skills a persona injects, resolved from its `skillIds`.
  *
  * Adapters may not touch the database, so somebody has to turn ids into content
  * before a session starts — this is that somebody, and the messaging service is

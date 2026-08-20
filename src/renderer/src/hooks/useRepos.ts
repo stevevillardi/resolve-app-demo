@@ -3,8 +3,8 @@ import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
 import type { BoundRepo, RepoOption } from '../../../shared/ipc-contract'
 
 /**
- * The two ways to bind a repo (blueprint §9.1): browse GitHub, or point at a
- * folder that is already on disk.
+ * The two ways to bind a repo: browse GitHub, or point at a folder that is
+ * already on disk.
  *
  * The GitHub list is only fetched when the picker asks for it — it is a network
  * round trip that most sessions never need, and fetching it on mount would make

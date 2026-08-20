@@ -29,11 +29,11 @@ import { useUiStore } from '@/store/useUiStore'
 /**
  * ⌘K — jump to anything, or start anything.
  *
- * A console is keyboard-first, and before this the app had exactly one shortcut
- * (⌘B, bound by the sidebar). Every row carries the identity of what it opens
- * rather than being flattened to a string: personas bring their scope chips,
- * conversations their persona colour and repo. Recognising the thing you want
- * is most of what a palette is for.
+ * A console is keyboard-first, so this is the one surface that has to reach
+ * everything. Every row carries the identity of what it opens rather than being
+ * flattened to a string: personas bring their scope chips, conversations their
+ * persona colour and repo. Recognising the thing you want is most of what a
+ * palette is for.
  *
  * Filtering is ours, not cmdk's (`shouldFilter={false}`), so that group order
  * is fixed and scoring is testable — see lib/command-palette.ts.

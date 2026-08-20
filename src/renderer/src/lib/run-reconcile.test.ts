@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { missingTurnRuns, staleTurnContacts } from './run-reconcile'
 
 /**
- * Phase 11, F7: a turn that finished while no subscriber was mounted leaked
- * its useRunStore entry and rendered as a "working…" block that outlived
- * navigation and remounts. These pin the decision half of the sweep: what is
- * stale is exactly what main no longer lists.
+ * A turn that finishes while no subscriber is mounted leaks its useRunStore
+ * entry and renders as a "working…" block that outlives navigation and
+ * remounts. These pin the decision half of the sweep: what is stale is exactly
+ * what main no longer lists.
  */
 describe('staleTurnContacts', () => {
   it('names the contacts whose runs main no longer lists', () => {
@@ -38,9 +38,9 @@ describe('staleTurnContacts', () => {
 })
 
 /**
- * Phase 25: the symmetric half. A routine fire (scheduled or Run now) and a
- * renderer reload mid-turn both produce active runs no renderer mutation ever
- * began — sweeping them in is what makes background work render live.
+ * The symmetric half. A routine fire (scheduled or Run now) and a renderer
+ * reload mid-turn both produce active runs no renderer mutation ever began —
+ * sweeping them in is what makes background work render live.
  */
 describe('missingTurnRuns', () => {
   it('reports an active run the store has never heard of', () => {

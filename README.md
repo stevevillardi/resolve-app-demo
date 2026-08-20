@@ -7,10 +7,10 @@ on the same repository share a **Group** where their work summaries land, a
 **Routine** wakes a Contact on a schedule while the app sits in the tray, and
 every turn's tokens and dollars are on the **Usage** dashboard.
 
-Backends: Claude (Agent SDK) and Codex (Codex SDK). The blueprint this app
-implements is [`persona-router-blueprint.md`](persona-router-blueprint.md);
-build history and every decision that shaped it live in
-[`docs/plan/00-progress.md`](docs/plan/00-progress.md).
+Backends: Claude (Agent SDK) and Codex (Codex SDK). How it is put together,
+and why — the process boundary, the two adapters, the sandbox and GitHub
+permission axes, and what the app deliberately refuses to do — is
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Run it
 
@@ -44,8 +44,8 @@ The full follow-along version — timings, expected outputs, the provoked
 failure cases, and a recovery playbook — is
 [`docs/demo-runbook.md`](docs/demo-runbook.md). The short form:
 
-The three blueprint §16 journeys, back to back, on any repo you can take
-branches and PRs on. Each exercises a different slice of the architecture.
+Three journeys, back to back, on any repo you can take branches and PRs on.
+Each exercises a different slice of the architecture.
 
 ### Journey 1 — scoped work (persona → contact → real review)
 

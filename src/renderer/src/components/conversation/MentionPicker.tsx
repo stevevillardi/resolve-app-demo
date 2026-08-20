@@ -19,10 +19,11 @@ interface MentionPickerProps {
   trigger: React.ReactElement
 }
 
-// Single-select only — v1 explicitly forbids @mention broadcast to multiple
-// contacts at once (blueprint §10 / docs/plan/07-group-coordination.md).
-// Real filtering by the group's repoPath lands in Phase 7; this filters the
-// mock list the same way so the prop shape doesn't change later.
+// Single-select only. An @mention routes to exactly one contact's session;
+// broadcasting one message to every persona in a repo is deliberately not a
+// thing this app can do, because there would be no one thread that answered it.
+// The roster is filtered to the group's repoPath — a persona bound elsewhere
+// cannot be addressed from here.
 export function MentionPicker({
   contacts,
   personaTemplates,

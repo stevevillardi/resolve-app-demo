@@ -1,5 +1,5 @@
 /**
- * Notification copy, pure (Phase 20).
+ * Notification copy, pure.
  *
  * Same split as tray-menu.ts / tray.ts: the words are data and get tests, the
  * electron binding beside this file stays thin. Nothing here may import

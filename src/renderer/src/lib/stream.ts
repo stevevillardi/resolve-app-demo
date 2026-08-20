@@ -7,8 +7,8 @@ import type { MessageBubbleError } from '@/types/message'
  * A pure reducer on purpose, and kept out of the component for a concrete
  * reason: the renderer test project matches `*.test.ts` only and there is no
  * component-testing library in the project, so logic that lives inside a `.tsx`
- * cannot be tested at all. This is the most intricate new logic in the phase,
- * so it lives where it can be.
+ * cannot be tested at all. This is the most intricate logic behind the thread
+ * view, so it lives where it can be tested.
  */
 
 /**
@@ -23,7 +23,7 @@ export interface ToolCall {
   name: string
   /** The command line, the path, the query — whatever the backend named. */
   detail: string
-  /** How it answered — the bounded excerpt tool_end carried (Phase 19). */
+  /** How it answered — the bounded excerpt `tool_end` carried. */
   output?: string
   status: 'running' | 'completed' | 'failed'
 }
@@ -40,9 +40,10 @@ export interface ThreadStream {
    * Every tool call this turn has made, in the order they started.
    *
    * Live only, and dropped when the turn's persisted rows are refetched. The
-   * honest consequence is recorded rather than hidden: a routine firing at 3am
-   * leaves a record of what it concluded and none of what it called. See
-   * docs/plan/15-deferred-capability-work.md.
+   * honest consequence is stated rather than hidden: whatever this array held
+   * and main did not write down is gone the moment the turn ends, so a turn
+   * nobody watched can leave a record of what it concluded and none of what it
+   * called.
    */
   toolCalls: ToolCall[]
   /** What the agent is doing right now, for StreamingIndicator. */
@@ -53,7 +54,7 @@ export interface ThreadStream {
   finished: boolean
   /**
    * The model thinking aloud, accumulated for the streaming bubble's
-   * collapsed disclosure (review §B7). Live only, like toolCalls — never
+   * collapsed disclosure. Live only, like toolCalls — never
    * persisted, dropped when end() clears the turn. Codex is the only backend
    * that emits the event; on Claude this simply stays empty.
    */

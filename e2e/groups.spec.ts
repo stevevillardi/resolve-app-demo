@@ -119,7 +119,7 @@ test('an unknown contact is refused without touching the group', async () => {
 
   await expect(
     invoke(window, 'groups.mention', { groupId, contactId: 'nobody', content: 'hello' })
-  ).rejects.toThrow(/No such contact/)
+  ).rejects.toThrow(/no longer exists/)
 
   await expect(invoke(window, 'groupMessages.list', { groupId })).resolves.toEqual([])
 })

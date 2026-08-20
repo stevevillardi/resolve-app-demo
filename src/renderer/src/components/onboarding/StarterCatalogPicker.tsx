@@ -4,15 +4,15 @@ import { CheckRow } from '@/components/common/CheckRow'
 import type { SeedCatalog } from '@/hooks/useSeed'
 
 /**
- * The starter-catalog choosers (Phase 17), shared between onboarding's persona
- * and skill steps and the starter library dialog.
+ * The starter-catalog choosers, shared between onboarding's persona and skill
+ * steps and the starter library dialog.
  *
  * Both are controlled and hold no selection of their own — the parent owns
  * which ids are on, because onboarding needs the choice to survive moving
  * between steps and the library dialog needs it to survive nothing at all.
  *
- * Vocabulary note (CLAUDE.md): everything here is an app Skill — injected
- * prose. Executable repo skills never appear in a catalog.
+ * Vocabulary note: everything here is an app Skill — injected prose.
+ * Executable repo skills never appear in a catalog.
  */
 
 /** First sentence of the system prompt — the persona card's one-liner. */

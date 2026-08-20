@@ -102,9 +102,9 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
   const { data: routines = [], isPending } = useRoutines()
   const contacts = useContacts().data ?? []
   const personaTemplates = usePersonas().data ?? []
-  // Live state: a routine mid-fire must not read "Last run 3 days ago" — that
-  // was the Phase 25 complaint in one sentence. Elapsed ticks only while
-  // something is actually running.
+  // Live state: a routine mid-fire must not read "Last run 3 days ago", which
+  // is what a row shows if it only ever reads the stored schedule. Elapsed
+  // ticks only while something is actually running.
   const { data: runs = [] } = useActiveRuns()
   const anyRoutineRunning = runs.some((run) => run.origin === 'routine')
   const now = useNow(anyRoutineRunning)

@@ -4,8 +4,8 @@ import { callProcedure } from '@/lib/ipc-client'
 import type { AuthStatus, DeviceFlowState } from '../../../shared/ipc-contract'
 
 /**
- * Auth state for the renderer (Phase 3). Everything here reads through the
- * IPC layer — the renderer never sees a token, only whether one exists.
+ * Auth state for the renderer. Everything here reads through the IPC layer —
+ * the renderer never sees a token, only whether one exists.
  */
 
 export const authStatusKey = ['auth', 'status'] as const

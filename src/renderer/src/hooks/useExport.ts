@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { callProcedure, ipcErrorMessage } from '@/lib/ipc-client'
 
 /**
- * Saving an export to disk (review §G2).
+ * Saving an export to disk.
  *
  * A mutation rather than a bare call so a failed write reports itself. The
  * cancel case is deliberately silent: `files.saveText` answers a cancelled

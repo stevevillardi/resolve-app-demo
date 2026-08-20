@@ -29,7 +29,7 @@ import { repoTrustOf, type Contact, type PersonaTemplate } from '../../shared/do
  * git is async.
  *
  * A curated registry, not an add-a-server-by-URL field. One entry today. An
- * arbitrary server is a trust surface with no gate behind it, and this phase
+ * arbitrary server is a trust surface with no gate behind it, and this module
  * is entirely about what stands behind the gates.
  */
 

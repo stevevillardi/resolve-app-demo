@@ -35,7 +35,7 @@ interface MessageBubbleProps {
   activity?: string | null
   /**
    * The model thinking aloud, shown collapsed while `status` is `streaming`
-   * and never persisted (review §B7). Only Codex emits it; on Claude the
+   * and never persisted. Only Codex emits it; on Claude the
    * disclosure simply never appears.
    */
   reasoning?: string
@@ -44,9 +44,10 @@ interface MessageBubbleProps {
    *
    * Distinct from `activity` above, which is one current line that is replaced
    * as work moves on. This is the record, and it is what makes a tool call
-   * visible as work rather than something to infer from the reply — the thing
-   * blueprint §9 objects to, and sharpest for an MCP call, which can read or
-   * write GitHub while leaving no trace in the text at all.
+   * visible as work rather than something to infer from the reply. A side
+   * effect you can only infer is exactly what this app refuses to ship, and it
+   * is sharpest for an MCP call, which can read or write GitHub while leaving
+   * no trace in the text at all.
    */
   toolCalls?: ToolCall[]
 }
@@ -81,8 +82,8 @@ export function MessageBubble({
 }: MessageBubbleProps): React.JSX.Element {
   const isOutbound = role === 'user'
 
-  // Failures render in the thread, not a console (blueprint §15C) — but as a
-  // notice with a title and a way forward, not a red bubble. A bubble implies
+  // Failures render in the thread, not a console — but as a notice with a
+  // title and a way forward, not a red bubble. A bubble implies
   // someone said something; nobody said this.
   if (status === 'error') {
     return (

@@ -12,10 +12,10 @@ interface CodeBlockProps {
 
 const THEMES = { light: 'github-light', dark: 'github-dark' } as const
 
-// A single highlighter, created once and shared. The previous revision called
-// codeToHtml() on every mount, which re-instantiates the WASM engine and the
-// grammar for each block — fine for one fixture, ruinous once Phase 6 streams
-// a code fence token by token.
+// A single highlighter, created once and shared. Calling codeToHtml() per
+// mount re-instantiates the WASM engine and the grammar for each block — fine
+// for one fixture, ruinous when a streaming reply emits a code fence token by
+// token.
 let highlighterPromise: Promise<Highlighter> | null = null
 const loadedLanguages = new Set<string>(['text'])
 

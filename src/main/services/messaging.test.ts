@@ -225,8 +225,8 @@ describe('sendMessage', () => {
   it('carries what the persona was granted and the Contact trusts', async () => {
     // The join capabilitiesFor() cannot prove on its own: that the turn loop
     // actually consults it, per turn, and puts the result on the spec the
-    // adapter reads. Both halves were tested in isolation before Phase 14 and
-    // the join between them is the shape of hole that leaves.
+    // adapter reads. Each half passes its own tests in isolation, and the join
+    // between them is the shape of hole that leaves.
     const repo = mkdtempSync(join(tmpdir(), 'messaging-caps-'))
     mkdirSync(join(repo, '.claude', 'skills', 'review'), { recursive: true })
     writeFileSync(
@@ -274,7 +274,7 @@ describe('sendMessage', () => {
   })
 
   it('rejects an unknown contact', () => {
-    expect(() => sendMessage('nope', 'go')).toThrow(/No such contact/)
+    expect(() => sendMessage('nope', 'go')).toThrow(/no longer exists/)
   })
 })
 
@@ -337,9 +337,9 @@ describe('session resumption', () => {
     expect(db.select().from(contacts).all()[0].backendSessionId).toBeNull()
   })
 
-  // Phase 22. The claim is "the session that *answered* it", which is why this
-  // is written at the end of the turn rather than as each row goes in, and why
-  // the question is stamped as well as the reply.
+  // The claim is "the session that *answered* it", which is why this is written
+  // at the end of the turn rather than as each row goes in, and why the question
+  // is stamped as well as the reply.
   it('stamps both rows of the turn with the session that answered', async () => {
     sendMessage('contact-a', 'go')
     await settle()
@@ -600,9 +600,9 @@ describe('the concurrency lock', () => {
     expect(() => sendMessage('contact-b', 'go')).not.toThrow()
   })
 
-  // Journey 2's pair, and the acceptance check on an @mentioned reader in
-  // 07-group-coordination.md. Under blueprint §15D's literal repo-wide lock
-  // this fails.
+  // The literal rule is one active session per repo; this app narrows it
+  // deliberately, so readers are unlimited and only a writer can block anybody.
+  // Under the literal repo-wide lock this case fails.
   it('lets a reader run while a writer holds the repo', () => {
     seedPersona(db, 'persona-write', 'workspace_write')
     seedContact(db, 'contact-w', 'persona-write')
@@ -613,10 +613,10 @@ describe('the concurrency lock', () => {
   })
 
   // And the other direction, which is the same claim read the other way round:
-  // "only writer-vs-writer serializes" (00-progress.md, 07-group-coordination.md).
-  // A reader holding the repo has nothing to serialize against — the worst it
-  // suffers is a mid-write snapshot, which it can already get by starting under
-  // a writer. Refusing here would let one long review block every writer.
+  // only writer-vs-writer serializes. A reader holding the repo has nothing to
+  // serialize against — the worst it suffers is a mid-write snapshot, which it
+  // can already get by starting under a writer. Refusing here would let one
+  // long review block every writer.
   it('lets a writer run while a reader holds the repo', () => {
     seedPersona(db, 'persona-write', 'workspace_write')
     seedContact(db, 'contact-w', 'persona-write')
@@ -669,10 +669,10 @@ describe('the concurrency lock', () => {
 })
 
 describe('cancelRun', () => {
-  // The adapter is reached a microtask after the send rather than during it:
-  // since Phase 12 a turn resolves its working directory first, and that means
-  // running git. The lock and the run entry are still taken synchronously, so
-  // nothing user-visible waits — only the stream itself starts a tick later.
+  // The adapter is reached a microtask after the send rather than during it: a
+  // turn resolves its working directory first, and that means running git. The
+  // lock and the run entry are still taken synchronously, so nothing
+  // user-visible waits — only the stream itself starts a tick later.
   it('passes an abort signal to the adapter', async () => {
     sendMessage('contact-a', 'go')
     await settle()
@@ -860,9 +860,9 @@ describe('listActiveRuns', () => {
     expect(runs[0]).toMatchObject({ runId, contactId: 'contact-a', mode: 'shared' })
   })
 
-  // Phase 25: the wire row names what started the turn. Before this, no
-  // surface could tell a routine fire from a chat — which is why the Routines
-  // pane could not say "running" about its own routine.
+  // The wire row names what started the turn. Without it no surface could tell
+  // a routine fire from a chat, and the Routines pane could not say "running"
+  // about its own routine.
   it('names a user message as the origin', () => {
     harness.gate = holdOpen()
     sendMessage('contact-a', 'go')
@@ -958,9 +958,8 @@ describe('end-of-turn compaction', () => {
 
 describe('group context injection', () => {
   it('passes the repo history into the session spec', async () => {
-    // Blueprint §5. The adapter cannot query for it — nothing under
-    // src/main/adapters/ may touch the database — so the service must resolve
-    // it and hand it over.
+    // The adapter cannot query for it — nothing under src/main/adapters/ may
+    // touch the database — so the service must resolve it and hand it over.
     db.insert(groups).values({ id: 'g1', repoPath: REPO }).run()
     db.insert(groupMessages)
       .values({
@@ -1045,8 +1044,8 @@ describe('mentionInGroup', () => {
   })
 
   it('resumes the contact existing session rather than starting a new one', async () => {
-    // "Routes to that Contact's real session" (§8) — a mention that started a
-    // fresh session would give the persona amnesia mid-conversation.
+    // A mention routes to that Contact's real session — one that started a
+    // fresh session instead would give the persona amnesia mid-conversation.
     seedGroup()
     sendMessage('contact-a', 'first')
     await settle()
@@ -1071,9 +1070,9 @@ describe('mentionInGroup', () => {
     expect(listMessages('contact-w2')).toEqual([])
   })
 
-  // Journey 2's pair, through the mention path: an @mentioned reader is never
-  // blocked by a writer. This is the acceptance check Step 1's lock fix exists
-  // to satisfy.
+  // The same claim through the mention path: an @mentioned reader is never
+  // blocked by a writer, which is what narrowing the repo lock to
+  // writer-vs-writer exists to make true.
   it('lets an @mentioned reader run while a writer holds the repo', () => {
     seedGroup()
     seedPersona(db, 'persona-write', 'workspace_write')
@@ -1087,7 +1086,7 @@ describe('mentionInGroup', () => {
 
   it('rejects an unknown contact without touching the group', () => {
     seedGroup()
-    expect(() => mentionInGroup(GROUP, 'nobody', 'hi')).toThrow(/No such contact/)
+    expect(() => mentionInGroup(GROUP, 'nobody', 'hi')).toThrow(/no longer exists/)
     expect(listGroupMessages(GROUP)).toEqual([])
   })
 })
@@ -1098,8 +1097,9 @@ describe('runRoutineTurn', () => {
   })
 
   // A routine fire IS a message to that Contact — same lock, same session, same
-  // rows. Blueprint §7 wants opening the Contact to show what it did while
-  // asleep, and an assistant bubble with no question above it reads as a glitch.
+  // rows. Its result is appended to the Contact's ordinary message history, so
+  // opening the Contact shows what it did while nobody was watching, and an
+  // assistant bubble with no question above it reads as a glitch.
   it('writes the prompt and the reply to the contact thread', async () => {
     runRoutineTurn('routine-1', 'contact-a', 'sweep the lint errors')
     await settle()
@@ -1136,13 +1136,13 @@ describe('runRoutineTurn', () => {
 
     const [event] = db.select().from(usageEvents).all()
     expect(event.source).toBe('routine')
-    // And to *which* routine (Phase 20) — the per-routine budget check reads
-    // exactly this column.
+    // And to *which* routine — the per-routine budget check reads exactly this
+    // column.
     expect(event.routineId).toBe('routine-1')
   })
 })
 
-describe('turn-finish notifications (Phase 20)', () => {
+describe('turn-finish notifications', () => {
   // Whether anyone was looking is notifications.ts's decision (mocked here);
   // what this file owns is that the turn loop hands over every non-routine
   // finish, with its origin and failure intact.
@@ -1263,11 +1263,11 @@ describe('tool-call persistence', () => {
     expect(rows.every((row) => row.messageId === reply?.id)).toBe(true)
   })
 
-  it('stores bounded detail and output excerpts — the Phase 19 reversal of doc 15 item 1', async () => {
-    // The predecessor of this test pinned "the detail string never reaches the
-    // database". Phase 19 reversed that decision on purpose (see
-    // 19-review-landing.md): what it pins now is that the excerpts arrive
-    // *bounded*, so the reversal cannot quietly become unbounded storage.
+  it('stores bounded detail and output excerpts', async () => {
+    // Tool detail and output are persisted on purpose, so the morning after an
+    // overnight routine "what did it write" has an answer. What this pins is
+    // that the excerpts arrive *bounded*, so persisting them cannot quietly
+    // become unbounded storage.
     harness.script = [
       { type: 'session_started', sessionId: 'session-abc' },
       { type: 'tool_start', toolCallId: 'call-1', name: 'Read', detail: 'x'.repeat(2000) },
@@ -1317,7 +1317,7 @@ describe('tool-call persistence', () => {
   })
 })
 
-describe('work records (Phase 19)', () => {
+describe('work records', () => {
   /**
    * The join test the denyReadPaths lesson asks for: turn-work.test.ts proves
    * the capture and this proves finish() actually stamps it — both halves

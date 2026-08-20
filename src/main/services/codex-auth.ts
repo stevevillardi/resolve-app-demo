@@ -7,13 +7,14 @@ import { resolveVendored } from './vendored-binaries'
 /**
  * Codex backend auth.
  *
- * Blueprint §15A assumed `@openai/codex-sdk` would handle this itself ("its own
- * device-code browser login if none exists"). Verified against v0.147.0: the
- * SDK exports only Codex/Thread/CodexOptions and has NO login API at all — that
- * behaviour belongs to the `codex` CLI. The SDK does vendor that CLI
- * (dependency @openai/codex), so we drive the binary directly.
+ * The SDK was expected to handle this itself — its own device-code browser
+ * login when no credential exists. It does not: verified against
+ * `@openai/codex-sdk` v0.147.0, the SDK exports only Codex/Thread/CodexOptions
+ * and has NO login API at all, because that behaviour belongs to the `codex`
+ * CLI. The SDK does vendor that CLI (dependency @openai/codex), so we drive the
+ * binary directly.
  *
- * Confirmed by running the vendored binary during Phase 3:
+ * Confirmed by running the vendored binary:
  *   codex login status        -> exit 0 "Logged in using ChatGPT" / exit 1 "Not logged in"
  *   codex login --device-auth -> prints a verification URL and a one-time code,
  *                                exits 0 once the browser side completes
@@ -56,12 +57,12 @@ let resolvedBinary: string | undefined
  * under app.asar.unpacked (see asarUnpack in electron-builder.yml), which bare
  * module resolution from inside the asar would miss — and worse, would resolve
  * to an in-archive path that `existsSync` accepts and `spawn` refuses. The
- * roots and that guard now live in `vendored-binaries.ts`, shared with Claude's
- * resolver, which was missing entirely until a packaged build proved it.
+ * roots and that guard live in `vendored-binaries.ts`, shared with Claude's
+ * resolver.
  *
- * Only a successful resolution is memoized. A miss used to be cached forever,
- * which turned one badly-timed stat during startup into "Codex is not
- * installed" for the rest of the session.
+ * Only a successful resolution is memoized: caching a miss would turn one
+ * badly-timed stat during startup into "Codex is not installed" for the rest of
+ * the session.
  */
 export function resolveCodexBinary(): string | null {
   if (resolvedBinary !== undefined) return resolvedBinary
@@ -123,8 +124,8 @@ function probeLoginStatus(): CodexAuthStatus {
   // parse error — is detection failing, which is not the same as being logged
   // out. Chats run off the same credentials regardless of what this probe
   // managed to observe, so say what actually happened instead of "connect
-  // Codex" to someone who already did. (This exact false negative is why the
-  // probe was reworked: a cold 220MB binary can outlive the timeout.)
+  // Codex" to someone who already did. That false negative is not theoretical:
+  // a cold 220MB binary can outlive the timeout.
   const apiKey = getSecret('openai_api_key') ?? import.meta.env.MAIN_VITE_OPENAI_API_KEY ?? null
   const reason = result.error
     ? result.error.message.includes('ETIMEDOUT')
@@ -139,11 +140,11 @@ function probeLoginStatus(): CodexAuthStatus {
 }
 
 /**
- * A sentence a person can read, from stderr a CLI dumped. The raw text used to
- * reach the Home banner verbatim — four lines of WARNING and an absolute
- * CODEX_HOME path is diagnostics, not a status. Warning noise is skipped, the
- * first substantive line wins, and anything still oversized is truncated; the
- * full stderr goes to the console, where diagnostics belong.
+ * A sentence a person can read, from stderr a CLI dumped. Raw, that text
+ * reaches the Home banner verbatim — four lines of WARNING and an absolute
+ * CODEX_HOME path, which is diagnostics, not a status. Warning noise is
+ * skipped, the first substantive line wins, and anything still oversized is
+ * truncated; the full stderr goes to the console, where diagnostics belong.
  */
 function describeCliFailure(stderr: string, status: number | null): string {
   const lines = stderr

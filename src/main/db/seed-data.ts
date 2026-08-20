@@ -5,7 +5,7 @@ import type { PersonaTemplate, Skill } from '../../shared/domain'
  * machine-independent, so seeding them is offering sensible starting content
  * rather than fabricating state. Contacts and Groups are deliberately absent:
  * they bind to a real local repo path, which nothing can know until the user
- * picks one (Phase 6).
+ * picks one.
  *
  * Skill content is injected into sessions verbatim (context.ts renders each
  * as `### <name>` under a `## Skills` heading), so every body here is written
@@ -13,15 +13,15 @@ import type { PersonaTemplate, Skill } from '../../shared/domain'
  * they earn their tokens, and explicit non-goals. There is no length cap short
  * of the model's context window — thinness is a defect, padding is too.
  *
- * Rewritten in Phase 18. The content is deliberately generic-good-practice
- * rather than this-repo-specific: seeds land in every user's library and are
- * edited from there.
+ * The content is deliberately generic good practice rather than
+ * this-repo-specific: seeds land in every user's library and are edited from
+ * there.
  */
 
 /**
- * Phase 17 split the catalog in two tiers. The RECOMMENDED sets are what a
- * fresh install gets with no questions asked; the rest exists to be *chosen* —
- * onboarding's picker and the starter library offer the whole catalog, and
+ * The catalog is two tiers. The RECOMMENDED sets are what a fresh install gets
+ * with no questions asked; the rest exists to be *chosen* — onboarding's
+ * picker and the starter library offer the whole catalog, and
  * applyStarterSelection() aligns the installed set with what was picked.
  */
 export const RECOMMENDED_SKILL_IDS = new Set([
@@ -539,8 +539,8 @@ relitigate scope. It verifies readiness; it does not judge worth.`
 // with hues picked to stay distinguishable beside it. All capabilities start
 // closed (no MCP servers, no model pin, nothing above workspace_write) —
 // a seeded persona must earn nothing by default.
-// avatarSeed = id throughout: the robot each of these shipped with, made
-// explicit now that the seed is user-editable.
+// avatarSeed = id throughout: the seed is user-editable, so each seeded
+// persona pins its robot explicitly rather than leaning on the id fallback.
 export const SEED_PERSONA_TEMPLATES: PersonaTemplate[] = [
   {
     id: 'persona-code-reviewer',

@@ -10,7 +10,8 @@ import { buildTrayMenu, type TrayMenuItem } from './tray-menu'
 import { navigateTo } from './main-window'
 
 /**
- * The menu-bar presence that makes routines worth having (blueprint §15E).
+ * The menu-bar presence that makes routines worth having: a routine that could
+ * only fire while a window happened to be open would not be worth scheduling.
  *
  * Without it the app is resident but unreachable once the window is closed:
  * macOS already keeps the process alive, so this is not what *enables*

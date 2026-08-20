@@ -5,10 +5,11 @@ import { toRoutine } from '../db/mappers'
 import { routines } from '../db/schema'
 import { cronErrorMessage } from './cron'
 import type { Routine, RoutineDraft, RoutineUpdate } from '../../shared/domain'
+import { notFound } from './not-found'
 
 /**
- * Routine CRUD (blueprint §7). A Routine is a cron expression plus a prompt,
- * bound to a Contact — what that Contact should do on wake.
+ * Routine CRUD. A Routine is a cron expression plus a prompt, bound to a
+ * Contact — what that Contact should do on wake.
  *
  * The scheduler lives next door in `scheduler.ts` and depends on this module;
  * this one must never depend on it, or the cycle makes both untestable. Whoever
@@ -77,10 +78,10 @@ export function updateRoutine(update: RoutineUpdate): Routine {
     .where(eq(routines.id, update.id))
     .run()
 
-  if (result.changes === 0) throw new Error(`No such routine: ${update.id}`)
+  if (result.changes === 0) throw notFound('routine', update.id)
 
   const saved = getRoutine(update.id)
-  if (!saved) throw new Error(`No such routine: ${update.id}`)
+  if (!saved) throw notFound('routine', update.id)
   return saved
 }
 
@@ -109,11 +110,11 @@ export function recordRunOutcome(id: string, summary: string, at = Date.now()): 
 }
 
 /**
- * Records a fire node-cron skipped outright (Phase 20, review §C2).
+ * Records a fire node-cron skipped outright.
  *
- * The policy stands from Phase 8: a missed fire is never run late and never
- * caught up on wake. What changed is the silence around it — a daily 9:00
- * routine on a laptop that sleeps could miss for a month while its row read
+ * The policy is that a missed fire is never run late and never caught up on
+ * wake. What must not follow from that is silence — a daily 9:00 routine on a
+ * laptop that sleeps could otherwise miss for a month while its row read
  * exactly like a healthy one. `lastMissedAt` keeps the most recent miss;
  * the count accumulates until any attempt resets it.
  */

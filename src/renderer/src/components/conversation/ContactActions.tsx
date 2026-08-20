@@ -53,7 +53,7 @@ import type { Contact, Isolation, PersonaBackend } from '@/types'
 
 /**
  * The contact actions, shared between the thread header's ⋯ menu and the
- * conversation list's right-click menu (Phase 17).
+ * conversation list's right-click menu.
  *
  * One source for the items and one for the dialogs, so the two menus cannot
  * offer different verbs for the same contact. The parent owns a single
@@ -111,8 +111,8 @@ export function ContactActionItems({
         <UserRoundPen />
         Change persona…
       </Item>
-      {/* Beside Change persona because that is where this used to hide: until
-          Phase 22 a rebind's resume-key clear was the only way to get one. */}
+      {/* Beside Change persona because that is the other action that drops the
+          backend session — this one does it without changing the persona. */}
       <Item disabled={!hasSession} onClick={() => onOpen('freshSession')}>
         <RotateCcw />
         Start a fresh session…
@@ -137,8 +137,8 @@ export function ContactActionItems({
         Recreate…
       </Item>
       <Separator />
-      {/* Review §G2. Beside Delete on purpose: the moment anyone is most
-          likely to want a copy of a conversation is just before removing it. */}
+      {/* Beside Delete on purpose: the moment anyone is most likely to want a
+          copy of a conversation is just before removing it. */}
       <Item onClick={() => onOpen('export')}>
         <Download />
         Export conversation…
@@ -270,8 +270,7 @@ function FreshSessionDialog({
           </DialogDescription>
         </DialogHeader>
         <p className="text-muted-foreground text-row">
-          That is also what makes the next message cheap again: a turn is billed for the entire
-          conversation its session can still see.
+          It also makes the next message cheaper — a long conversation costs more every turn.
         </p>
         {error && <p className="text-destructive text-row">{error}</p>}
         <DialogFooter>
@@ -296,13 +295,13 @@ function FreshSessionDialog({
 }
 
 /**
- * A model for this Contact alone (Phase 22).
+ * A model for this Contact alone.
  *
  * A persona is reusable across repositories and a model choice frequently is
  * not — the same reviewer can be worth an expensive model on the codebase that
- * pays for it and a cheap one everywhere else. Saying so used to mean editing
- * the persona, which changed it for every Contact bound to that persona,
- * including ones on repositories the user was not thinking about.
+ * pays for it and a cheap one everywhere else. Without this, saying so means
+ * editing the persona, which changes it for every Contact bound to that
+ * persona, including ones on repositories the user was not thinking about.
  *
  * "Follow the persona" is a real option rather than an empty state, because it
  * is the default and going back to it is a decision worth being able to make.
@@ -343,7 +342,7 @@ function ContactModelDialog({
           >
             <p className="text-sm font-medium">Follow the persona</p>
             <p className="text-muted-foreground font-mono text-meta">
-              {personaModel ?? "default (backend's choice)"}
+              {personaModel ?? 'default model'}
             </p>
           </ListRow>
           {models.map((model) => (
@@ -378,7 +377,7 @@ function ContactModelDialog({
 }
 
 /**
- * Moves a Contact between working in your checkout and its own (Phase 22).
+ * Moves a Contact between working in your checkout and its own.
  *
  * The options are `NewContactFlow`'s own list, imported rather than restated,
  * so the screen that sets this at bind time and the screen that changes it
@@ -520,8 +519,8 @@ function DeleteContactDialog({
 }
 
 /**
- * The persona rebind (Phase 17) — the one binding change contacts.update's
- * narrow shape deliberately left out, now that it has a safe dedicated path.
+ * The persona rebind — the one binding change contacts.update's narrow shape
+ * deliberately leaves out, because it needs a path of its own to be safe.
  * Main clears the resume key in the same transaction and refuses mid-turn;
  * this dialog's job is to say the consequence out loud before asking.
  */
@@ -544,7 +543,7 @@ function RebindPersonaDialog({
         <DialogHeader>
           <DialogTitle>Change persona</DialogTitle>
           <DialogDescription>
-            Starts a fresh backend session under the new persona. The repository, its worktree, and
+            Starts a fresh session under the new persona. The repository, its working folder, and
             the conversation history all stay.
           </DialogDescription>
         </DialogHeader>
@@ -605,7 +604,7 @@ function RebindPersonaDialog({
 }
 
 /**
- * Exporting a conversation (review §G2).
+ * Exporting a conversation.
  *
  * A dialog rather than a straight-to-save-panel action, for one reason: the
  * export carries what each turn cost, and that is the app's most sensitive

@@ -28,10 +28,10 @@ import {
 import { createSkill, deleteSkill, getSkill, listSkills, updateSkill } from '../../services/skills'
 
 /**
- * Phase 4 CRUD. Every handler is a one-liner over a service — the interesting
- * behaviour (delete rules, group auto-creation, id minting) lives in
- * src/main/services/, and validation is already handled by registerProcedure
- * against the schemas in src/shared/domain.ts.
+ * CRUD. Every handler is a one-liner over a service — the interesting behaviour
+ * (delete rules, group auto-creation, id minting) lives in src/main/services/,
+ * and validation is already handled by registerProcedure against the schemas in
+ * src/shared/domain.ts.
  */
 
 registerProcedure('skills.list', () => listSkills())

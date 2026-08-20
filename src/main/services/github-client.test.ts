@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * call()'s token-state side effects need the real state machine observable, so
- * app-state is a Map and octokit is a scriptable double. This half of the file
- * landed in Phase 18 — call() previously had no direct coverage at all.
+ * app-state is a Map and octokit is a scriptable double: a request can be made
+ * to succeed, to 401, or to fail some other way, and the verdict it leaves
+ * behind can then be read directly.
  */
 const appStateStore = new Map<string, string>()
 vi.mock('./app-state', () => ({
@@ -179,12 +180,13 @@ describe('call() and the token verdict', () => {
 })
 
 /**
- * The repository picker's ceiling (review §G3).
+ * The repository picker's ceiling.
  *
- * The picker used to ask for one page of 100 and present the result as the
- * account, so anyone past a hundred repositories was told theirs did not exist.
- * Paging the same endpoint was chosen over GitHub's search API because search
- * has no "repositories I can reach" concept — the reasoning is in `listRepos`.
+ * Asking for one page of 100 and presenting the result as the account tells
+ * anyone past a hundred repositories that theirs does not exist. Paging the
+ * same endpoint is chosen over GitHub's search API because search has no
+ * "repositories I can reach" concept, and lags a freshly created repository by
+ * minutes — the reasoning is in `listRepos`.
  *
  * What is worth pinning is not that paging happens but that it *stops*, and
  * stops at a number this app chose rather than one the paginator happened to
@@ -226,9 +228,9 @@ describe('listRepos', () => {
    * precisely on REPO_FETCH_LIMIT only while that is a whole number of pages. A
    * limit of 250 would quietly return 300 — and `isPossiblyTruncated` compares
    * a list's length against REPO_FETCH_LIMIT, so it would stop firing and a
-   * genuinely truncated list would be presented as the whole account. That is
-   * the original §G3 bug, reachable again through a plausible edit to a
-   * constant in a different file.
+   * genuinely truncated list would be presented as the whole account — the
+   * exact failure the ceiling exists to prevent, reachable again through a
+   * plausible edit to a constant in a different file.
    *
    * This started life as a defensive `.slice()` in `listRepos`.
    * Mutation-checking it showed the slice could not be made to fail — with

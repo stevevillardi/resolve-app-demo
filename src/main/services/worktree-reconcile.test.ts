@@ -17,8 +17,8 @@ import type { Contact } from '../../shared/domain'
  * process has been mutating, and a mocked `currentBranch` would only prove the
  * code agrees with a guess.
  *
- * The claim under test is Phase 11's F5: a session that creates and checks out
- * its own branch inside its worktree — which nothing prevents — must not leave
+ * The claim under test: a session that creates and checks out its own branch
+ * inside its worktree — which nothing prevents — must not leave
  * `contacts.branch` pointing at a name whose checkout has moved away, because
  * the Branches panel, the summary stamps, the PR title, and the Merge button
  * all read that row.

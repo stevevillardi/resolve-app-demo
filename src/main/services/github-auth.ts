@@ -13,11 +13,11 @@ import {
 } from './secrets'
 
 /**
- * GitHub OAuth Device Flow (blueprint §9). No local redirect server, no client
- * secret — the client ID is build-time config, not a credential.
+ * GitHub OAuth Device Flow. No local redirect server, no client secret — the
+ * client ID is build-time config, not a credential.
  *
- * This phase only acquires and stores the token. Repo listing is Phase 6 and
- * push/PR is Phase 9; both read the token back via getGitHubToken().
+ * This module only acquires and stores the token. Every consumer — repo
+ * listing, push, pull requests — reads it back through `getGitHubToken()`.
  */
 
 const DEFAULT_SCOPES = ['repo', 'read:user']
@@ -45,7 +45,7 @@ function clientId(): string | null {
 function clientIdWarning(): string | null {
   const id = clientId()
   if (id !== null && /^Iv/.test(id)) {
-    return 'The configured GitHub client ID looks like a GitHub App (Iv…). Its tokens expire after 8 hours and this app cannot refresh them — use an OAuth App client ID with device flow enabled.'
+    return 'GitHub sign-in is misconfigured in this build of Switchboard, so the connection will drop after a few hours.'
   }
   return null
 }
@@ -60,22 +60,23 @@ function scopes(): string[] {
   return configured.split(/[\s,]+/).filter(Boolean)
 }
 
-/** Phases 6 and 9 read the token through here rather than touching secrets.ts. */
+/** The one read path for the token. Nothing else reaches into secrets.ts for it. */
 export function getGitHubToken(): string | null {
   return getSecret('github_token')
 }
 
 export const LOCKED_TOKEN_MESSAGE =
-  "This build can't unlock the stored GitHub credential (the app binary changed). Reconnect once to re-save it."
+  "Switchboard can't unlock your saved GitHub sign-in. Reconnect once to save it again."
 
 /**
  * The sentence to throw when getGitHubToken() came back null.
  *
  * Null has two causes with opposite remedies: nothing stored (Connect) and
  * stored-but-unreadable by this build's keychain identity (Reconnect once).
- * The features that need a token used to collapse both into "Connect GitHub
- * first", which told a user whose credential merely predates the current
- * binary to do the wrong thing — the run that surfaced it is Phase 11's F1.
+ * Collapsing both into "Connect GitHub first" tells a user whose credential is
+ * merely locked — stored fine, but not decryptable by this binary — to do the
+ * one thing that is not the remedy.
+ *
  * getGitHubToken() must have been asked before this call for the unreadable
  * verdict to exist; callers always have, since null is what brought them here.
  */
@@ -259,7 +260,7 @@ export function startDeviceFlow(): DeviceFlowState {
 function describeDeviceFlowError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   if (/unsupported_grant_type/i.test(message)) {
-    return 'GitHub rejected the device flow. Enable "Device Flow" in the OAuth App settings on github.com.'
+    return 'GitHub refused the sign-in. Switchboard is misconfigured for device sign-in in this build.'
   }
   if (/expired_token|expired/i.test(message)) {
     return 'The device code expired before it was authorized. Try again.'

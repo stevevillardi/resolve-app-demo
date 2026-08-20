@@ -4,13 +4,13 @@ import { cn } from '@/lib/utils'
 import type { UsageEvent } from '@/types'
 
 /**
- * What one turn cost, under the reply it bought (review §G6).
+ * What one turn cost, under the reply it bought.
  *
  * The third question in the set the other two usage surfaces answer:
  * `UsageBadge` says what a conversation has cost in total, `ContextMeter` says
- * how much room is left, and this says what *that* answer cost. The data has
- * been there since Phase 5 — a `usage_events` row per turn — but nothing linked
- * a row to a message, so it could only ever be summed.
+ * how much room is left, and this says what *that* answer cost. The figures are
+ * a `usage_events` row per turn; what makes them readable one at a time rather
+ * than only summable is the link from a row to the message it paid for.
  *
  * Deliberately the quietest thing in the thread. It renders under every
  * assistant bubble, so anything with a border, a background or a colour would
@@ -61,24 +61,16 @@ export function TurnCost({
           )}
           {event.model && <span className="mt-0.5 font-mono opacity-70">{event.model}</span>}
           {/*
-            Which kind of number the money is. `sdk` came from the backend and
-            `computed` from this app's own price table (adapters/pricing.ts);
-            the usage dashboard has always kept those apart and a per-turn
-            figure is exactly where the difference is most visible.
+            The em dash on the figure, explained. Whether a cost came from the
+            model's own reporting or from this app's price table is a
+            distinction the reader cannot act on, so it is recorded per row and
+            not shown; an unknown price is the one difference that changes how
+            the number should be read.
           */}
-          {event.costUsd === null ? (
+          {event.costUsd === null && (
             <span className="mt-0.5 max-w-48 opacity-70">
-              This model has no published price, so the cost is unknown rather than zero. The token
-              counts are exact.
+              This model has no published price. The token counts are exact.
             </span>
-          ) : (
-            event.costSource && (
-              <span className="mt-0.5 max-w-48 opacity-70">
-                {event.costSource === 'sdk'
-                  ? 'Reported by the backend.'
-                  : 'Estimated from this app’s price table.'}
-              </span>
-            )
           )}
         </div>
       </TooltipContent>

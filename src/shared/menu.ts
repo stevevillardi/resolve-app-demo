@@ -1,5 +1,5 @@
 /**
- * The application-menu → renderer channel (Phase 17).
+ * The application-menu → renderer channel.
  *
  * Menu items that are app features rather than OS window verbs (new contact,
  * settings, the command palette) can't run in main — the state they open lives

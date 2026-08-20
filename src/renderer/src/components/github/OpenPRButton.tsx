@@ -19,9 +19,10 @@ interface OpenPRButtonProps {
   onOpen: () => void
 }
 
-// githubScope is an independent permission axis from the filesystem sandbox
-// (blueprint §9). read_only hides write actions entirely rather than just
-// disabling them — a stronger, clearer signal than a greyed-out button. The
+// githubScope is an independent permission axis from the filesystem sandbox:
+// what a persona may do on GitHub is set separately from what it may touch on
+// disk. read_only hides write actions entirely rather than just disabling
+// them — a stronger, clearer signal than a greyed-out button. The
 // real gate is in the main process (pull-requests.ts); this is the UI half of
 // the same decision, not the enforcement.
 export function OpenPRButton({

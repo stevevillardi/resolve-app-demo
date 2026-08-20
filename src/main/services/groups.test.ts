@@ -4,7 +4,10 @@ import { personaTemplates } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 
 /**
- * Renaming and hiding a group (review §G5).
+ * Renaming and hiding a group. A rename stores an override over the name
+ * derived from the repository path, so clearing it is the reset; hiding is
+ * deliberately not deletion, because a group is a view of the contacts on a
+ * repository.
  *
  * The claims worth executing are the ones about *null*, because in both columns
  * null carries the meaning rather than standing in for a missing value: a null
@@ -88,7 +91,7 @@ describe('renameGroup', () => {
   })
 
   it('refuses an id that is not a group', () => {
-    expect(() => renameGroup('nope', 'Checkout')).toThrow(/No such group/)
+    expect(() => renameGroup('nope', 'Checkout')).toThrow(/no longer exists/)
   })
 })
 
@@ -130,7 +133,7 @@ describe('setGroupHidden', () => {
   })
 
   it('refuses an id that is not a group', () => {
-    expect(() => setGroupHidden('nope', true)).toThrow(/No such group/)
+    expect(() => setGroupHidden('nope', true)).toThrow(/no longer exists/)
   })
 })
 

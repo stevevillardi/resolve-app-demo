@@ -9,11 +9,13 @@ import type { AgentUsage } from '../../shared/agent'
 import type { UsageEvent, UsageSource } from '../../shared/domain'
 
 /**
- * Per-turn spend (blueprint §4).
+ * Per-turn spend.
  *
- * Logged per turn and never aggregated in place, which §4 is explicit about:
- * it keeps a full history for the spend-over-time view and avoids racing on a
- * running total. Phase 10 reads these; Phase 6 writes the first ones.
+ * Logged per turn and never aggregated in place, deliberately: one row per turn
+ * keeps the full history a spend-over-time view needs, and there is no running
+ * total for two concurrent turns to race on. Every turn — message, mention,
+ * routine fire and compaction's own summary — writes here, and the usage
+ * dashboard and the budget alerts read it back.
  */
 
 export function listUsageEvents(contactId?: string): UsageEvent[] {
@@ -29,10 +31,10 @@ export function listUsageEvents(contactId?: string): UsageEvent[] {
  *
  * Nothing is recomputed here, and that is the point. Claude's figure comes from
  * the SDK's own price table and Codex's from src/main/adapters/pricing.ts; both
- * were settled in Phase 5 against real turns. Re-deriving either at this layer
- * would replace a measured number with a guess — and Phase 5 measured what
- * happens when you try: summing Claude's per-step assistant messages reads 80x
- * low, because that `usage` field is a running snapshot rather than a per-step
+ * were settled against real turns. Re-deriving either at this layer would
+ * replace a measured number with a guess — and what happens when you try was
+ * measured too: summing Claude's per-step assistant messages reads 80x low,
+ * because that `usage` field is a running snapshot rather than a per-step
  * total.
  *
  * `costUsd: null` is carried through as null. It means "this model has no
@@ -46,7 +48,8 @@ export function recordUsage(
   sessionId?: string | null,
   routineId?: string | null,
   /**
-   * The assistant message this turn produced, when it produced one (§G6).
+   * The assistant message this turn produced, when it produced one, so a usage
+   * row links back to the reply it paid for rather than only to an aggregate.
    *
    * Optional because two callers legitimately have nothing to pass: a turn that
    * ends without final text is still billable, and compaction's `summary` spend
@@ -71,8 +74,9 @@ export function recordUsage(
     source,
     ...(sessionId ? { sessionId } : {}),
     ...(messageId ? { messageId } : {}),
-    // The routine id was always in hand at the call site (TurnOrigin carries
-    // it) and simply discarded until Phase 20 needed per-routine budgets.
+    // Recorded because a per-routine budget needs to know which routine spent
+    // what; the id is in hand at the call site either way, since TurnOrigin
+    // carries it.
     ...(routineId ? { routineId } : {}),
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
@@ -100,11 +104,11 @@ export function recordUsage(
   // announcing first would race the row it is announcing. Same ordering the
   // turn loop uses for `done`.
   //
-  // Budget caps (blueprint §13) are still not *enforced* anywhere. What hangs
-  // off this seam since Phase 20 is the soft alert — see budget-alerts.ts,
-  // which honours the rule this comment has always carried: a summary with
-  // unpriced turns is a lower bound, so the alert says "at least $X" and no
-  // floor ever stops anything. Wrapped because an alert must never fail the
+  // Hard budget caps are deliberately not enforced anywhere in this app. What
+  // hangs off this seam is a soft alert — see budget-alerts.ts, which honours
+  // the rule this comment carries: a month with unpriced turns in it is only a
+  // lower bound, so the alert says "at least $X" and no floor ever stops,
+  // pauses or refuses anything. Wrapped because an alert must never fail the
   // turn whose spend it is reacting to.
   emitUsageChanged()
   try {

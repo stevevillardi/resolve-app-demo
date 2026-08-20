@@ -3,7 +3,7 @@ import { exportFileName, threadToMarkdown, usageToCsv, USAGE_CSV_HEADER } from '
 import type { PersistedMessage, UsageEvent } from '@/types'
 
 /**
- * The export formats (review §G2).
+ * The export formats.
  *
  * One rule here outranks everything about layout: an unknown cost must not
  * leave this app as a zero. Inside the app a null is `—` next to a tooltip
@@ -165,7 +165,7 @@ describe('usageToCsv', () => {
     expect(freeRow.split(',')[USAGE_CSV_HEADER.indexOf('cost_usd')]).toBe('0.000000')
   })
 
-  // Spend outlives its contact (Phase 10), so a deleted one is a null id. An
+  // Spend outlives its contact, so a deleted one is a null id. An
   // empty cell states that accurately; inventing a placeholder would not.
   it('leaves the contact empty for spend whose contact is gone', () => {
     const [, row] = usageToCsv([event({ contactId: null })], NAMES).split('\n')

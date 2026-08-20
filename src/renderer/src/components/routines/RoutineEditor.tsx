@@ -57,9 +57,9 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
   const { save, isPending: saving, error: saveError } = useUpdateRoutine()
   const { remove } = useDeleteRoutine()
   const { runNow, isPending: starting, skipped } = useRunRoutineNow()
-  // The live half (Phase 25): a routine mid-fire used to be indistinguishable
-  // from an idle one in its own editor — the button stayed clickable and the
-  // pane showed the PREVIOUS run's summary as if it were current.
+  // The live half: without it a routine mid-fire is indistinguishable from an
+  // idle one in its own editor — the button stays clickable and the pane shows
+  // the PREVIOUS run's summary as if it were current.
   const { data: runs = [] } = useActiveRuns()
   const liveRun = routineRun(runs, routine.id)
   const now = useNow(Boolean(liveRun))
@@ -80,10 +80,9 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
 
   return (
     <div className="bg-background flex h-full min-h-0 flex-col">
-      {/* The subtitle is the repo's name with the path on hover. Phase 13 fixed
-          exactly this in ThreadView and missed this pane: an absolute macOS temp
-          checkout is 80 characters and takes the whole header to say what its
-          last segment already says. */}
+      {/* The subtitle is the repo's name with the path on hover, the same as
+          ThreadView: an absolute macOS temp checkout is 80 characters and takes
+          the whole header to say what its last segment already says. */}
       <PaneHeader
         leading={<Clock className="text-muted-foreground size-4 shrink-0" />}
         title={persona?.name ?? 'Routine'}
@@ -231,9 +230,9 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
           </FieldGridSpan>
         </FieldGrid>
 
-        {/* Blueprint §7: an unattended task should propose via PR, not push
-            unsupervised. The persona is where githubScope lives, so this steers
-            rather than silently overriding what the persona was set up with. */}
+        {/* An unattended task should propose via PR, not push unsupervised.
+            The persona is where githubScope lives, so this steers rather than
+            silently overriding what the persona was set up with. */}
         {persona?.githubScope === 'full_access' && (
           <p className="text-muted-foreground border-border rounded-lg border border-dashed p-3 text-xs">
             {persona.name} can push directly. For something that runs unattended, a persona scoped
@@ -284,10 +283,10 @@ function RoutineForm({ routine }: { routine: Routine }): React.JSX.Element {
           ) : (
             <p className="text-muted-foreground text-xs">Hasn&apos;t run yet.</p>
           )}
-          {/* The silence review §C2 ends: a laptop asleep at 9:00 skips the
-              fire outright (a recorded Phase 8 decision), and until now the
-              only trace was a console.warn. Run now — the button above — is
-              the catch-up, and clears this. */}
+          {/* Ends a silence: a laptop asleep at 9:00 skips the fire outright,
+              missed fires are never run late, and without this the only trace
+              is a console.warn. Run now — the button above — is the catch-up,
+              and clears this. */}
           {routine.missedRunCount > 0 && (
             <div className="border-scope-elevated/40 bg-scope-elevated-bg/30 rounded-lg border p-3">
               <p className="text-scope-elevated text-meta font-medium">

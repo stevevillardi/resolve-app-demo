@@ -23,10 +23,10 @@ export type BranchSelection = { repoPath: string; branch: string } | null
 /**
  * What the usage dashboard is scoped to.
  *
- * Persona and repo are the two axes blueprint §10 asks for, and they are the
- * two a Contact sits at the intersection of — so they belong in the master
- * list, leaving the detail pane for the range, source and metric controls
- * rather than stacking six filters into one header.
+ * Persona and repo are the two axes the dashboard breaks spend down by, and
+ * they are the two a Contact sits at the intersection of — so they belong in
+ * the master list, leaving the detail pane for the range, source and metric
+ * controls rather than stacking six filters into one header.
  */
 export type UsageScope =
   { kind: 'all' } | { kind: 'persona'; id: string } | { kind: 'repo'; repoPath: string }
@@ -92,7 +92,7 @@ interface UiState {
 
   /**
    * When set, the new-contact dialog opens prefilled from this contact — the
-   * guided recreate (Phase 17). Repo and isolation are immutable on a live
+   * guided recreate. Repo and isolation are immutable on a live
    * contact, so "change" means "make a new one like it"; this makes that a
    * thirty-second act instead of a memory test. Cleared when the dialog closes.
    */
@@ -104,15 +104,15 @@ interface UiState {
 }
 
 // Local-only UI state — never touches IPC. Only the chrome preferences are
-// persisted; selection stays ephemeral per blueprint §10 (a relaunch should
-// land on the empty state, not resurrect a stale conversation id). Pane widths
-// are persisted separately by react-resizable-panels' own autoSaveId.
+// persisted; selection stays ephemeral, so a relaunch lands on the empty state
+// rather than resurrecting a stale conversation id. Pane widths are persisted
+// separately by react-resizable-panels' own autoSaveId.
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       // Launches on Home rather than Chats. `section` is not persisted, so this
-      // *is* the launch screen — and Chats with nothing selected was only ever
-      // showing the overview as a fall-through anyway.
+      // *is* the launch screen — and Chats with nothing selected only shows
+      // the overview as a fall-through anyway.
       section: 'home',
       setSection: (section) => set({ section }),
 

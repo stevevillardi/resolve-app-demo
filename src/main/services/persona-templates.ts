@@ -5,11 +5,12 @@ import { toPersonaTemplate } from '../db/mappers'
 import { contacts, personaTemplates } from '../db/schema'
 import { assertNoActiveRun } from './run-lock'
 import type { PersonaTemplate, PersonaTemplateDraft } from '../../shared/domain'
+import { notFound } from './not-found'
 
 /**
- * PersonaTemplate CRUD (blueprint §4). A template is the reusable definition —
- * prompt, skills, and the two permission axes. Binding one to a repo produces
- * a Contact, which is Phase 6's job.
+ * PersonaTemplate CRUD. A template is the reusable definition — prompt, skills,
+ * and the two permission axes. Binding one to a repo produces a Contact, which
+ * the contacts service owns.
  */
 
 export function listPersonaTemplates(): PersonaTemplate[] {
@@ -27,7 +28,7 @@ export function getPersonaTemplate(id: string): PersonaTemplate | null {
 }
 
 /**
- * The Phase 17 scope rule, checked here as well as at the Zod boundary: under
+ * The scope pairing rule, checked here as well as at the Zod boundary: under
  * full_access neither the MCP tool filter nor the shell guard runs, so a
  * narrower githubScope there is a promise nothing can keep. Existing rows were
  * normalized by migration 0010.
@@ -58,7 +59,7 @@ export function updatePersonaTemplate(persona: PersonaTemplate): PersonaTemplate
     .from(personaTemplates)
     .where(eq(personaTemplates.id, persona.id))
     .get()
-  if (!existing) throw new Error(`No such persona: ${persona.id}`)
+  if (!existing) throw notFound('persona', persona.id)
 
   // Only the backend switch is refused, because only the backend switch races.
   // The clear below and a finishing turn's own `setBackendSessionId` write the

@@ -6,9 +6,9 @@ import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
 /**
- * The invariant under test is blueprint §4's "one Group per repo". A Contact
- * is the only thing that creates a Group, so it has to hold from the very
- * first contact bound to a path — not be reconciled later.
+ * The invariant under test is one Group per repo. A Contact is the only thing
+ * that creates a Group, so it has to hold from the very first contact bound to
+ * a path — not be reconciled later.
  */
 
 let db: AppDatabase
@@ -69,8 +69,8 @@ beforeEach(() => {
 
 describe('create', () => {
   it('mints an id and starts with no session', () => {
-    // §4: backendSessionId is a resume key, and there is nothing to resume
-    // until a turn has actually run (Phase 6).
+    // backendSessionId is a resume key, and there is nothing to resume until a
+    // turn has actually run.
     const contact = createContact(draft('~/code/app', 'Code Reviewer · app'))
     expect(contact.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(contact.backendSessionId).toBeNull()
@@ -236,10 +236,10 @@ describe('rename', () => {
     // anything else moving here is a live worktree or a live session orphaned.
     //
     // The session id and the worktree have to be *set* for this to have teeth.
-    // The first version of this test renamed a fresh contact, whose
-    // backendSessionId and worktreePath are both null — so a mutation that
-    // nulled them on every rename passed it. A row where every load-bearing
-    // column is already null cannot detect a function that clears them.
+    // Renaming a fresh contact would not do it: its backendSessionId and
+    // worktreePath are both null, so a mutation that nulled them on every
+    // rename would pass. A row where every load-bearing column is already null
+    // cannot detect a function that clears them.
     const contact = createContact({
       personaTemplateId: PERSONA_ID,
       repoPath: '~/code/app',
@@ -272,7 +272,7 @@ describe('rename', () => {
   })
 
   it('throws on an unknown id rather than silently doing nothing', () => {
-    expect(() => renameContact('nope', 'Reviewer')).toThrow(/No such contact/)
+    expect(() => renameContact('nope', 'Reviewer')).toThrow(/no longer exists/)
   })
 
   it('re-sorts the list, because listContacts orders by display name', () => {
@@ -294,14 +294,14 @@ describe('ensureGroupForRepo', () => {
   })
 
   it('is guarded by a unique index, not just by the check', () => {
-    // A duplicate slipping past ensureGroupForRepo would break §4's
+    // A duplicate slipping past ensureGroupForRepo would break the
     // one-group-per-repo rule everywhere downstream.
     ensureGroupForRepo('~/code/app')
     expect(() => db.insert(groups).values({ id: 'dupe', repoPath: '~/code/app' }).run()).toThrow()
   })
 })
 
-describe('read state (Phase 20)', () => {
+describe('read state', () => {
   it('is born read — a new thread has nothing unread in it', () => {
     const contact = createContact(draft('~/code/app', 'Code Reviewer · app'))
     expect(contact.lastReadAt).not.toBeNull()
@@ -340,8 +340,8 @@ describe('read state (Phase 20)', () => {
   })
 
   it('refuses an unknown id rather than inventing a row', () => {
-    expect(() => markContactRead('nope')).toThrow(/No such contact/)
-    expect(() => markGroupRead('nope')).toThrow(/No such group/)
+    expect(() => markContactRead('nope')).toThrow(/no longer exists/)
+    expect(() => markGroupRead('nope')).toThrow(/no longer exists/)
   })
 })
 
@@ -393,7 +393,7 @@ describe('repo trust', () => {
 
   it('refuses a contact that does not exist', () => {
     expect(() => setRepoTrust('nope', { instructions: true, skills: [] })).toThrow(
-      /No such contact/
+      /no longer exists/
     )
   })
 })
@@ -463,21 +463,23 @@ describe('rebindPersona', () => {
     const contact = createContact(draft('~/code/app', 'Reviewer · app'))
     setBackendSessionId(contact.id, 'session-abc123')
 
-    expect(() => rebindContactPersona(contact.id, 'persona-invented')).toThrow(/No such persona/)
+    expect(() => rebindContactPersona(contact.id, 'persona-invented')).toThrow(/no longer exists/)
     expect(getContact(contact.id)?.backendSessionId).toBe('session-abc123')
   })
 
   it('rejects an unknown contact', () => {
     seedOtherPersona()
-    expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(/No such contact/)
+    expect(() => rebindContactPersona('contact-invented', OTHER_PERSONA)).toThrow(
+      /no longer exists/
+    )
   })
 })
 
 describe('recreateContact', () => {
   /**
-   * The review's complaint, which was true: `messages` is ON DELETE CASCADE, so
-   * recreating a contact to change the one immutable thing left — its repo —
-   * traded a month of conversation for a path.
+   * What this exists to prevent: `messages` is ON DELETE CASCADE, so recreating
+   * a contact to change the one immutable thing left — its repo — would trade a
+   * month of conversation for a path.
    */
   function seedThread(contactId: string, ids: string[]): void {
     for (const id of ids) {
@@ -518,8 +520,8 @@ describe('recreateContact', () => {
     expect(listContacts()).toHaveLength(1)
   })
 
-  // The old behaviour, kept: a genuinely fresh start is a reasonable want, and
-  // should not require deleting the contact twice to get.
+  // A genuinely fresh start is a reasonable want, and should not require
+  // deleting the contact twice to get.
   it('leaves the history behind when asked to', async () => {
     const original = createContact(draft('~/code/app', 'Reviewer · app'))
     seedThread(original.id, ['m1', 'm2'])
@@ -557,9 +559,9 @@ describe('recreateContact', () => {
     expect(moved[0].enabled).toBe(false)
   })
 
-  // Phase 10 made spend outlive its contact so a total covering last month
-  // cannot shrink when somebody tidies up this month. Re-pointing it would move
-  // money the old contact really did spend.
+  // Usage rows outlive the contact that produced them so a total covering last
+  // month cannot shrink when somebody tidies up this month. Re-pointing them
+  // would move money the old contact really did spend.
   it('leaves spend attributed to the contact that spent it', async () => {
     const original = createContact(draft('~/code/app', 'Reviewer · app'))
     db.insert(usageEvents)
@@ -615,16 +617,16 @@ describe('recreateContact', () => {
   it('rejects an unknown original', async () => {
     await expect(
       recreateContact('contact-invented', draft('~/code/moved', 'X'), true)
-    ).rejects.toThrow(/No such contact/)
+    ).rejects.toThrow(/no longer exists/)
   })
 })
 
 describe('setContactIsolation', () => {
   /**
-   * The claim this reverses: isolation was documented as immutable in four
-   * places because "a real checkout on disk points at it". ensureWorktree makes
-   * that false — the checkout is created on the first writing turn, not at bind
-   * time — so the row is the durable thing and the disk follows it.
+   * Isolation looks like it has to be immutable, on the grounds that a real
+   * checkout on disk points at it. ensureWorktree makes that false — the
+   * checkout is created on the first writing turn, not at bind time — so the
+   * row is the durable thing and the disk follows it.
    */
   it('plans a worktree when a shared contact becomes isolated', async () => {
     const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
@@ -681,8 +683,8 @@ describe('setContactIsolation', () => {
   })
 
   // The session was opened against a working directory that no longer applies.
-  // Same reasoning as rebindContactPersona — and since Phase 22 the thread
-  // draws a divider where it happens, so the consequence is visible.
+  // Same reasoning as rebindContactPersona — and the thread draws a divider
+  // where it happens, so the consequence is visible.
   it('clears the resume key in both directions', async () => {
     const contact = createContact({ ...draft('~/code/app', 'Reviewer · app'), isolation: 'shared' })
     setBackendSessionId(contact.id, 'session-abc')
@@ -725,7 +727,7 @@ describe('setContactIsolation', () => {
 
   it('rejects an unknown contact', async () => {
     await expect(setContactIsolation('contact-invented', 'worktree')).rejects.toThrow(
-      /No such contact/
+      /no longer exists/
     )
   })
 })
@@ -778,7 +780,7 @@ describe('startFreshSession', () => {
   })
 
   it('rejects an unknown contact', () => {
-    expect(() => startFreshSession('contact-invented')).toThrow(/No such contact/)
+    expect(() => startFreshSession('contact-invented')).toThrow(/no longer exists/)
   })
 })
 

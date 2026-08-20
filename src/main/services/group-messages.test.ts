@@ -87,7 +87,9 @@ describe('insertGroupMessage', () => {
 
   it('round-trips the branch a summary reported', () => {
     // Unwritten until worktrees land, but the column has to survive the
-    // mapper round-trip now or Phase 12 finds out the hard way.
+    // mapper round-trip now: if it does not, a summary written from a
+    // worktree loses the branch it names, and the next session is told about
+    // work it cannot find on disk.
     summary('Moved the token cache', 'decision', { branch: 'persona/refactor-buddy' })
     expect(listGroupMessages(GROUP)[0].branch).toBe('persona/refactor-buddy')
   })
@@ -99,8 +101,9 @@ describe('insertGroupMessage', () => {
 })
 
 describe('appendToGroupMessage', () => {
-  // Phase 11 F4: the scheduler amends a routine_run with the app's own PR
-  // outcome after the summariser has already posted the model's account.
+  // The scheduler amends a routine_run with the app's own PR outcome after the
+  // summariser has already posted the model's account — so the Group never
+  // ends up asserting a PR failed while the PR it opened sits open on GitHub.
   it('appends the line and announces the change', () => {
     const row = insertGroupMessage({
       groupId: GROUP,
@@ -163,8 +166,8 @@ describe('contextForRepo', () => {
 
   // The property the two-query split exists for. Under a single
   // `ORDER BY timestamp DESC LIMIT n` a burst of routine chatter would push
-  // the decision log out of context entirely, which is the one thing §6 says
-  // must not happen.
+  // the decision log out of context entirely, and a durable entry is meant to
+  // be kept indefinitely and always injected.
   it('keeps decisions injected however much routine chatter buries them', () => {
     summary('the decision that matters', 'decision')
     for (let i = 0; i < ROUTINE_CONTEXT_LIMIT * 10; i += 1) summary(`noise ${i}`, 'routine')
@@ -173,8 +176,10 @@ describe('contextForRepo', () => {
   })
 
   it('caps durable entries too, as a bound rather than a policy', () => {
-    // §6 says durable entries are always injected; this limit only stops an
-    // append-only log from growing past what a turn can hold. See §14.
+    // Durable entries are kept indefinitely and always injected; this limit
+    // is not a retention policy, only a bound stopping an append-only log
+    // from growing past what a turn can hold. What to do when a repo reaches
+    // it — prune, or re-summarise the decision log itself — is unsolved.
     for (let i = 0; i < DURABLE_CONTEXT_LIMIT + 5; i += 1) summary(`decision ${i}`, 'decision')
 
     const injected = contextForRepo(REPO)
@@ -184,9 +189,9 @@ describe('contextForRepo', () => {
 
   // Written from the claim, not the query: a routine posts its summary as
   // `routine_run` instead of `system_summary`, and unattended work is exactly
-  // what §6 has to carry across Contact boundaries. If this filter ever
-  // narrows back to `system_summary`, every routine goes silently invisible to
-  // its colleagues and nothing else in the suite would notice.
+  // what the Group log has to carry across Contact boundaries. If this filter
+  // ever narrows back to `system_summary`, every routine goes silently
+  // invisible to its colleagues and nothing else in the suite would notice.
   it('carries a routine run to a colleague, same as any other durable summary', () => {
     now += 1000
     vi.setSystemTime(now)

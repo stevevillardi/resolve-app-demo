@@ -1,5 +1,5 @@
 /**
- * The "everything below arrived while you were away" line (Phase 20).
+ * The "everything below arrived while you were away" line.
  *
  * DaySeparator's shape — a centred pill over a hairline — but in the accent
  * colour and not sticky: a date labels a region you scroll through, while this

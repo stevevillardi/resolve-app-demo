@@ -1,10 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 /**
- * The IPC layer is the whole process boundary (blueprint §11) — if dispatch or
- * validation regresses, every phase after this one breaks in a way that only
- * shows up at runtime. These tests drive the real handler that
- * `ipcMain.handle` receives, rather than calling registered functions directly.
+ * The IPC layer is the whole process boundary: the renderer never touches the
+ * filesystem, SQLite, the SDKs or the scheduler, and only calls typed
+ * procedures across this seam. If dispatch or validation regresses, everything
+ * built on top of it breaks in a way that only shows up at runtime. These
+ * tests drive the real handler that `ipcMain.handle` receives, rather than
+ * calling registered functions directly.
  */
 
 const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
@@ -33,7 +35,7 @@ beforeEach(() => {
 
 describe('initIpc', () => {
   it('registers exactly one channel for every procedure', () => {
-    // The design goal from Phase 1: no bespoke per-procedure preload method.
+    // The design goal: no bespoke per-procedure preload method.
     expect([...handlers.keys()]).toEqual(['ipc-invoke'])
   })
 })

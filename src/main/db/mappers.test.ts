@@ -132,7 +132,7 @@ describe('toPersonaTemplate', () => {
 
 describe('toContact', () => {
   it('keeps a null backendSessionId null rather than dropping the key', () => {
-    // "No session yet" is meaningful state (§4) — an absent key would read as
+    // "No session yet" is meaningful state — an absent key would read as
     // unknown, and the persona editor prints one differently from the other.
     seedContact()
     const contact = toContact(db.select().from(contacts).all()[0])
@@ -287,7 +287,7 @@ describe('toUsageEvent', () => {
   })
 
   it('keeps a null cost null and omits absent cached tokens', () => {
-    // Codex reports tokens but no dollar figure (§3).
+    // A backend can report tokens and no dollar figure at all.
     seedContact()
     db.insert(usageEvents)
       .values({
@@ -306,9 +306,9 @@ describe('toUsageEvent', () => {
   })
 
   it('carries every field an adapter reports, so none is dropped on the way in', () => {
-    // The table used to keep tokens and cost only, which meant AgentUsage
-    // (src/shared/agent.ts) could not be persisted as produced — the model
-    // that served the turn went unrecorded, leaving its spend unattributable.
+    // AgentUsage (src/shared/agent.ts) has to persist exactly as produced:
+    // a field with no column is a field silently discarded, and an unrecorded
+    // model leaves that turn's spend unattributable and unpriceable.
     seedContact()
     db.insert(usageEvents)
       .values({

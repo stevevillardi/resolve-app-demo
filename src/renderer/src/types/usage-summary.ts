@@ -1,6 +1,6 @@
 /**
  * A rollup of UsageEvents for display — computed in the renderer by
- * lib/usage.ts, never stored. Blueprint §4 logs events per turn precisely so
+ * lib/usage.ts, never stored. Usage is logged one event per turn precisely so
  * totals stay derived rather than maintained.
  */
 export interface UsageSummary {

@@ -103,8 +103,8 @@ describe('create and read', () => {
 
 describe('update', () => {
   it('persists a change on both permission axes independently', () => {
-    // Blueprint §4 is explicit that sandbox and githubScope are independent —
-    // changing one must not drag the other along.
+    // `sandbox` and `githubScope` are independent axes — changing one must not
+    // drag the other along.
     const persona = createPersonaTemplate(DRAFT)
     updatePersonaTemplate({ ...persona, sandbox: 'workspace_write' })
 
@@ -204,7 +204,7 @@ describe('update', () => {
 
   it('throws for a persona that no longer exists', () => {
     expect(() => updatePersonaTemplate({ id: 'missing', avatarSeed: 'missing', ...DRAFT })).toThrow(
-      /No such persona/
+      /no longer exists/
     )
   })
 

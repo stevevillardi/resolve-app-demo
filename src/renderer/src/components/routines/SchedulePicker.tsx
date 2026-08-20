@@ -31,8 +31,7 @@ interface SchedulePickerProps {
 }
 
 /**
- * A schedule picker, per blueprint §10 — which has specified one since the
- * beginning, while the field was a plain text input holding five characters of
+ * A schedule picker, rather than a plain text input holding five characters of
  * cron.
  *
  * The design constraint that shapes everything here: **the expression is the
@@ -49,8 +48,8 @@ interface SchedulePickerProps {
  * rewritten into something the picker can display.
  *
  * The generated expression stays visible in every mode. A picker you cannot
- * check is worse than the text box it replaced for anyone who already knows
- * cron, and the next-fire times below it come from node-cron in main rather
+ * check is worse than a plain text box for anyone who already knows cron, and
+ * the next-fire times below it come from node-cron in main rather
  * than from our reading of what we just built.
  */
 export function SchedulePicker({
@@ -194,7 +193,7 @@ export function SchedulePicker({
           )}
         />
         <span className="text-muted-foreground text-xs">
-          {error ? '' : parsed ? describeSchedule(parsed) : 'Editing the expression directly.'}
+          {error ? '' : parsed ? describeSchedule(parsed) : 'Custom schedule.'}
         </span>
       </div>
 

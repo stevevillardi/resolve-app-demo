@@ -9,7 +9,8 @@ import {
   recentActivity,
   spendBarPercents,
   spendWindow,
-  upcomingRuns
+  upcomingRuns,
+  type DailySpendPoint
 } from './home'
 import type { Contact, PersistedMessage, PersonaTemplate, UsageEvent } from '@/types'
 
@@ -306,7 +307,7 @@ describe('dailySpend', () => {
 })
 
 describe('spendBarPercents', () => {
-  function points(...costs: number[]) {
+  function points(...costs: number[]): DailySpendPoint[] {
     return costs.map((cost, i) => ({ day: i, label: `d${i}`, cost }))
   }
 

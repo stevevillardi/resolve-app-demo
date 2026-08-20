@@ -20,10 +20,10 @@ import type { Contact } from '../../shared/domain'
  * Where each Contact works, and what its branch is called.
  *
  * Worktrees live under the app's own data directory rather than beside the
- * user's repo (docs/plan/12-worktree-isolation.md): the user's checkout and its
- * parent directory stay untouched, orphans are enumerable from one root, and a
- * reset of the profile takes the worktrees with it. The names are readable
- * rather than uuids so the directory is still navigable by a human:
+ * user's repo: the user's checkout and its parent directory stay untouched,
+ * orphans are enumerable from one root, and a reset of the profile takes the
+ * worktrees with it. The names are readable rather than uuids so the directory
+ * is still navigable by a human:
  *
  *     <userData>/worktrees/<repo-name>/<persona-slug>-<short-id>
  *
@@ -198,26 +198,30 @@ export interface WorkRecord {
 /**
  * What a Contact's branch is carrying that nobody else can see yet.
  *
- * Asked of git rather than of the model. The summariser's JSON schema has had a
- * `branch` field since Phase 7 and it has always come back null, because nothing
- * ever told the model what the branch was — and a model-reported branch would be
+ * Asked of git rather than of the model. The summariser's JSON schema carries a
+ * `branch` field and it comes back null every time, because nothing ever tells
+ * the model what the branch is — and a model-reported branch would be
  * unverifiable even when it arrived. Main knows the branch from the row, and the
  * head and the file list are two cheap deterministic commands.
  *
- * Null when there is nothing to report: a Contact in the main tree writes where
- * everyone can already see it, so §6's "filesystem state is free" still holds
- * for it and there is no branch worth naming.
+ * Null when there is nothing to report. Filesystem state is free between
+ * Contacts that share the main tree: every session reads the same checkout, so
+ * a change is visible to all of them for nothing, and there is no branch worth
+ * naming. A worktree is what degrades that — a writer's work sits on a branch
+ * checked out nowhere anybody else can see, so only what it has committed and
+ * had merged is free, and the rest has to be said out loud.
  */
 /**
  * Makes the Contact's registered branch agree with the worktree's actual HEAD.
  *
  * Nothing stops a session from creating and checking out its own branch inside
- * its worktree — the Phase 11 live run watched a routine do exactly that when
- * told to "fix it on a branch" — and every reader of `contacts.branch` then
- * drifts from reality at once: the Branches panel lists a branch whose
- * checkout has "moved away", summaries stamp the stale name, the PR title
- * names a branch the PR does not ship, and the Merge button offers commits
- * behind the ones actually pushed (F5). Same principle as recordOfWork's
+ * its worktree, and a session told to "fix it on a branch" has been seen doing
+ * exactly that in a live run — leaving the branch the app registered and the
+ * branch the work actually landed on divergent. Every reader of
+ * `contacts.branch` then drifts from reality at once: the Branches panel lists
+ * a branch whose checkout has "moved away", summaries stamp the stale name, the
+ * PR title names a branch the PR does not ship, and the Merge button offers
+ * commits behind the ones actually pushed. Same principle as recordOfWork's
  * header: git's answer wins over the row.
  *
  * Called at turn end, before the summariser reads the row. Never throws — a

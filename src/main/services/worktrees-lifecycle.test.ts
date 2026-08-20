@@ -95,8 +95,8 @@ describe('ensureWorktree', () => {
 
     const paths = await ensureWorktree(contact)
 
-    // Every one of them is outside the working directory — the finding this
-    // whole phase turns on.
+    // Every one of them is outside the working directory — the finding
+    // worktree isolation turns on.
     expect(paths.length).toBeGreaterThan(0)
     expect(paths.every((path) => !path.startsWith(contact.worktreePath!))).toBe(true)
   })
@@ -123,7 +123,7 @@ describe('ensureWorktree', () => {
     expect(await worktreeList(repo)).toHaveLength(1)
   })
 
-  // Two writers on one repo, which is the contention this phase exists to end.
+  // Two writers on one repo, which is the contention separate checkouts end.
   it('gives two writers separate checkouts of the same repo', async () => {
     const a = writer('Refactor Buddy · my-app')
     const b = writer('Refactor Buddy 2 · my-app')

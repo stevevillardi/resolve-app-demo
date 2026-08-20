@@ -7,8 +7,9 @@ import type { ToolCall } from '@/lib/stream'
 /**
  * What the agent actually did this turn, as work rather than as a summary.
  *
- * Blueprint §9 objects to side effects you have to infer from a reply, and an
- * MCP call is the sharpest version of that: a persona reading GitHub issues or
+ * A side effect you have to infer from a reply is the thing this app refuses
+ * to ship, and an MCP call is the sharpest version of that: a persona reading
+ * GitHub issues or
  * commenting on one leaves no trace in the text beyond whatever it chooses to
  * mention. This is the trace.
  *
@@ -21,8 +22,8 @@ import type { ToolCall } from '@/lib/stream'
  * mcp__github__search_issues, each with a completion. So "what is happening
  * right now" stays backend-specific and "what has happened" does not.
  *
- * Since Phase 19 a row with more to say — a full command line, the bounded
- * output excerpt its tool_end carried — expands on click. The chevron only
+ * A row with more to say — a full command line, the bounded output excerpt its
+ * tool_end carried — expands on click. The chevron only
  * renders when expanding would reveal something, so a bare row still reads as
  * the whole truth. Persisted history carries the same excerpts, so the morning
  * after a routine reads like the turn did live.

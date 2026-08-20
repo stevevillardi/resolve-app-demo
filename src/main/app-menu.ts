@@ -2,7 +2,7 @@ import type { MenuItemConstructorOptions } from 'electron'
 import { MENU_ACCELERATORS, type MenuActionId } from '../shared/menu'
 
 /**
- * The application menu, as data (Phase 17).
+ * The application menu, as data.
  *
  * Same split as tray-menu.ts: this file decides what the menu says and index.ts
  * decides what Electron does about it, so the structure — which items exist on

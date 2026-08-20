@@ -6,8 +6,10 @@ import type { AgentErrorKind } from '../../shared/agent'
  * Both backends need this. Codex reports every turn failure as a message
  * string, and Claude throws for failures that happen outside the message
  * stream (a missing CLI, a dead socket). The renderer styles rate limits and
- * network blips differently from real errors (blueprint §15C), so the
- * distinction has to survive normalization.
+ * network blips differently from real errors — every failure renders as a
+ * distinct bubble in the same thread as everything else, never silently and
+ * never in a separate console — so the distinction has to survive
+ * normalization.
  *
  * Deliberately narrow: anything unrecognised stays `unknown` rather than being
  * guessed into a category the UI would then style misleadingly.

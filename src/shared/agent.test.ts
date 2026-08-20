@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { agentCapabilitiesSchema, agentEventSchema, agentUsageSchema } from './agent'
 
 /**
- * These schemas cross the process boundary in Phase 6, where main pushes
- * events to the renderer — so they are validated for the same reason the IPC
- * contract is, and the enum members are asserted because a typo in one would
- * only show up as a dropped event at runtime.
+ * These schemas cross the process boundary — main pushes events to the renderer
+ * over them — so they are validated for the same reason the IPC contract is,
+ * and the enum members are asserted because a typo in one would only show up as
+ * a dropped event at runtime.
  */
 
 describe('agentEventSchema', () => {
@@ -48,8 +48,9 @@ describe('agentEventSchema', () => {
   })
 
   it('covers every kind the renderer error bubble distinguishes', () => {
-    // MessageBubbleError['kind'] is rate_limit | sandbox_denied | network;
-    // Phase 6 maps straight across, so those three must stay valid here.
+    // MessageBubbleError['kind'] is assigned straight across from this enum
+    // with no translation table, so every kind it distinguishes — rate_limit,
+    // sandbox_denied, network among them — must stay valid here.
     for (const kind of ['rate_limit', 'sandbox_denied', 'network', 'auth', 'unknown']) {
       expect(agentEventSchema.safeParse({ type: 'error', kind, message: 'x' }).success, kind).toBe(
         true

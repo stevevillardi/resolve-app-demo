@@ -9,10 +9,11 @@ import { crossedBudget, monthKey, monthlyFloor, monthStart } from './budget'
 import { getRoutine } from './routines'
 
 /**
- * The soft-alert half of review §C3, hung off the seam usage-events.ts named
- * for it: every turn's spend passes through recordUsage, and this runs right
- * after each row lands. Alerts only — nothing here can stop, pause, or refuse
- * anything, and the copy says so.
+ * The soft monthly budget alert, hung off the seam usage-events.ts leaves for
+ * it: every turn's spend passes through recordUsage, and this runs right after
+ * each row lands. The app alerts and never enforces — nothing here, or
+ * anywhere else, stops, pauses or refuses work over a budget, and the copy
+ * says so.
  *
  * Edge-triggered, once per month per scope. recordUsage fires on every turn,
  * so a naive check would toast for the rest of the month after the first

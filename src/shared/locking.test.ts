@@ -13,9 +13,10 @@ import type { Contact, PersonaTemplate, SandboxLevel } from './domain'
  * was wrong in a direction no test of the pieces would have caught, because
  * every piece was right.
  *
- * Written from the claims in blueprint §15D and the two narrowings recorded in
- * 00-progress.md, not from the implementation: the cases that matter are the
- * ones the old renderer code got wrong while looking entirely reasonable.
+ * Written from the claims the lock makes — one writer at a time on a working
+ * copy, readers never refused and never refusing — rather than from the
+ * implementation: the cases that matter are the ones the old renderer code got
+ * wrong while looking entirely reasonable.
  */
 
 const REPO = '/Users/dev/my-app'
@@ -101,8 +102,8 @@ describe('blockingRun', () => {
 describe('what the composer would predict', () => {
   // The regression that shipped. A read_only persona takes a shared lock, and a
   // shared lock is refused by nothing — so this composer must stay live while a
-  // writer works. It is the exact pair blueprint §16 Journey 2 runs together,
-  // and the previous check disabled it.
+  // writer works. A reviewer reading a repo while a writer edits it is the pair
+  // this app is built around, and the previous check disabled it.
   it('leaves a reader typeable while a writer holds the same tree', () => {
     expect(wouldRefuse(contact(), persona('read_only'), [run('exclusive')])).toBeNull()
   })
@@ -113,9 +114,9 @@ describe('what the composer would predict', () => {
     expect(wouldRefuse(contact(), persona('workspace_write'), [run('exclusive')])).not.toBeNull()
   })
 
-  // Phase 12's entire purpose. An isolated Contact locks its own checkout, so a
-  // run in the main tree is not in its way — the old check compared against
-  // repoPath and blocked it anyway.
+  // The entire purpose of giving a Contact its own checkout. An isolated
+  // Contact locks that checkout, so a run in the main tree is not in its way —
+  // the old check compared against repoPath and blocked it anyway.
   it('leaves an isolated writer typeable while the main tree is busy', () => {
     const isolated = contact({
       worktreePath: WORKTREE,

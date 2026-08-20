@@ -8,14 +8,15 @@ import type { Contact, ContactDraft, Group, Isolation, RepoTrust } from '@/types
 import type { ContactContext, RepoOffers } from '../../../shared/ipc-contract'
 
 /**
- * The two entities the Chats list is built from (Phase 4).
+ * The two entities the Chats list is built from.
  *
- * Read-only here. Contacts are created by `NewContactFlow` in Phase 6, and a
- * Group is never created directly at all — main makes one implicitly the first
- * time a contact binds to a repo (blueprint §4).
+ * Read-only here. Contacts are created by `NewContactFlow`, and a Group is
+ * never created directly at all — main makes one implicitly the first time a
+ * contact binds to a repo, so there is one shared thread per repository whether
+ * or not anyone asked for it.
  *
- * Both are empty until Phase 6, which is correct rather than a gap: a contact
- * points at a real local repo path, and nothing can invent one.
+ * Both lists are empty on a fresh install, which is correct rather than a gap:
+ * a contact points at a real local repo path, and nothing can invent one.
  */
 
 export const contactsKey = ['contacts'] as const
@@ -29,7 +30,7 @@ export function useContacts(): UseQueryResult<Contact[]> {
 }
 
 /**
- * What a turn on this contact would inject (blueprint §5).
+ * What a turn on this contact would inject into its system prompt.
  *
  * `enabled` because this stats the filesystem for sibling branches in main —
  * cheap, but not free, and there is no reason to pay for it on every render of
@@ -111,11 +112,11 @@ export function useGroups(): UseQueryResult<Group[]> {
 }
 
 /**
- * Creates a contact bound to a repo (Phase 6).
+ * Creates a contact bound to a repo.
  *
  * Invalidates groups as well as contacts: main creates the repo's Group in the
- * same transaction when this is the first contact bound there (blueprint §4),
- * so the sidebar would otherwise show the contact without its group until
+ * same transaction when this is the first contact bound there, so the sidebar
+ * would otherwise show the contact without its group until
  * something else refetched.
  */
 export function useCreateContact(): {
@@ -174,7 +175,7 @@ export function useRenameContact(): {
 }
 
 /**
- * Moves a contact to another persona (Phase 17). Invalidates broadly: the
+ * Moves a contact to another persona. Invalidates broadly: the
  * conversation list shows the persona's name and avatar, the routine editor's
  * "Runs as" rows show it too, and the context panel's whole answer changes.
  */
@@ -202,7 +203,7 @@ export function useRebindPersona(): {
 }
 
 /**
- * Drops the backend's memory of the thread, and keeps the thread (Phase 22).
+ * Drops the backend's memory of the thread, and keeps the thread.
  *
  * Only `contactsKey` is invalidated, and that is the whole shape of the
  * feature: nothing about the messages, the routines or the spend has changed —
@@ -230,11 +231,11 @@ export function useStartFreshSession(): {
 }
 
 /**
- * Replaces a contact and brings its conversation across (Phase 22).
+ * Replaces a contact and brings its conversation across.
  *
- * One mutation where the flow used to call create and then delete: the rows are
- * re-pointed between them, so a failure partway used to leave either two
- * contacts or a deleted thread.
+ * One mutation rather than a create followed by a delete: the message rows are
+ * re-pointed between the two, and a failure partway through a client-side pair
+ * would leave either two contacts or a deleted thread.
  */
 export function useRecreateContact(): {
   recreate: (
@@ -277,7 +278,7 @@ export function useRecreateContact(): {
 }
 
 /**
- * Points a contact at its own model, or back at its persona's (Phase 22).
+ * Points a contact at its own model, or back at its persona's.
  *
  * Only the contact list is invalidated: nothing about the thread or the spend
  * has changed, and the model applies from the next turn.
@@ -304,7 +305,7 @@ export function useSetContactModel(): {
 }
 
 /**
- * Moves a contact between your checkout and its own (Phase 22).
+ * Moves a contact between your checkout and its own.
  *
  * Invalidates contacts and branches: de-isolating removes a checkout while
  * keeping the branch, so the Branches panel's view of what exists on disk has
@@ -387,7 +388,7 @@ export function useDeleteContact(): {
 }
 
 /**
- * Renames a group, or clears the override with null (review §G5).
+ * Renames a group, or clears the override with null.
  *
  * `null` is a real argument rather than a missing one — it is how a rename is
  * undone — so the signature takes `string | null` and the dialog's "use the

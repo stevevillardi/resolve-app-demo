@@ -10,8 +10,8 @@ interface StreamingIndicatorProps {
 /**
  * Claude's SDK doesn't emit events *during* tool execution — only around it —
  * so a long Bash call looks like silence. Codex's runStreamed() yields
- * CommandExecutionStatus mid-call. Blueprint §3 is explicit that these should
- * look different rather than faking progress Claude doesn't have.
+ * CommandExecutionStatus mid-call. The two are meant to look different rather
+ * than faking progress Claude doesn't have.
  *
  * So the difference is honest rather than decorative: Claude gets an
  * indeterminate pulse and the word "Working" (no claim about what); Codex gets

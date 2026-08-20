@@ -49,10 +49,10 @@ export function ConversationListItem({
       {...(contextMenu ? { contextMenu } : {})}
       {...(unread > 0
         ? {
-            // The one iMessage-blue badge in the app, a deliberate new idiom
-            // (recorded in the phase doc): RunIndicator's doc rejects the
-            // notification-badge look for RUN counts, but unread messages are
-            // precisely what that look was invented for.
+            // The one iMessage-blue badge in the app, and a deliberate
+            // exception: RunIndicator's doc rejects the notification-badge look
+            // for run counts, but unread messages are precisely what that look
+            // was invented for.
             trailing: (
               <span
                 aria-label={`${unread} unread`}
@@ -90,8 +90,8 @@ export function ConversationListItem({
             {showRepo && preview && <span> · </span>}
             {preview}
           </span>
-          {/* Spend sits in the sidebar per blueprint §10 — the point is that
-              cost is never something you have to go looking for. */}
+          {/* Spend sits in the sidebar, beside the conversation that incurred
+              it, so cost is never something you have to go looking for. */}
           {usage && (
             <span className="text-muted-foreground shrink-0 font-mono text-micro tabular-nums">
               {formatCostSummary(usage)}

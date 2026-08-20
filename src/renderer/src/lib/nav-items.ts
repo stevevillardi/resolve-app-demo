@@ -33,10 +33,10 @@ export const RAIL_BUTTON =
  * a non-component breaks React Fast Refresh.
  */
 export const NAV_ITEMS: NavItem[] = [
-  // First, and the one the app launches on. It used to be reachable only as the
-  // fall-through of Chats-with-nothing-selected — and since nothing ever clears
-  // the selection except deleting a contact, picking any conversation made the
-  // overview unreachable until the next relaunch.
+  // First, and the one the app launches on. It needs a rail entry of its own:
+  // as the fall-through of Chats-with-nothing-selected it would be unreachable
+  // the moment a conversation is picked, since nothing clears that selection
+  // except deleting the contact.
   { section: 'home', label: 'Home', icon: House },
   { section: 'chats', label: 'Chats', icon: MessagesSquare },
   { section: 'branches', label: 'Branches', icon: GitBranch },

@@ -34,8 +34,9 @@ describe('orderSkills', () => {
   })
 
   it('drops ids with no matching skill instead of producing holes', () => {
-    // A persona can reference a skill that was deleted — Phase 4 strips the id
-    // on delete, but a stale spec must not become `undefined` in the prompt.
+    // A persona can reference a skill that was deleted — the data layer strips
+    // the id on delete, but a stale spec must not become `undefined` in the
+    // prompt.
     const skills = [skill('a', 'A', 'ay')]
     expect(orderSkills(['a', 'gone'], skills).map((s) => s.id)).toEqual(['a'])
   })
@@ -132,7 +133,7 @@ describe('group context injection', () => {
 
   it('names the branch when a summary reported one', () => {
     // The whole point of carrying branch metadata: work on a branch nobody can
-    // see on disk is invisible without it (docs/plan/12-worktree-isolation.md).
+    // see on disk is invisible without it.
     expect(withContext([entry({ branch: 'persona/refactor-buddy' })])).toContain(
       'persona/refactor-buddy'
     )
@@ -185,8 +186,9 @@ describe('sibling branches', () => {
     expect(withSiblings([{ ...buddy, headSha: null }])).toContain('persona/refactor-buddy-a3f9')
   })
 
-  // This block exists to rescue blueprint §6, whose "filesystem state is free"
-  // stops being true the moment a writer has its own checkout. The rescue is
+  // Sessions normally see each other's code for free, by reading the one live
+  // repo on disk; a writer with its own checkout ends that, because its work
+  // sits on a branch checked out nowhere a reader can look. What rescues it is
   // that the object store is still shared — so the block has to say that the
   // work is readable without merging, or the model has no reason to look.
   it('says the work is readable without merging anything', () => {
@@ -254,11 +256,12 @@ describe('working context', () => {
   })
 
   /**
-   * Phase 11, F5: told to "fix it on a branch", a routine's session created
-   * and checked out its own branch inside its worktree — nothing had ever told
-   * it the assigned branch was load-bearing — and every reader of
-   * `contacts.branch` drifted from reality at once. Saying so is the cheap
-   * half of the fix; reconcileWorktreeBranch() is the backstop.
+   * Found in a live run: told to "fix it on a branch", a routine's session
+   * created and checked out its own branch inside its worktree — nothing had
+   * ever told it the assigned branch was load-bearing — so the branch the app
+   * had registered and the branch the work landed on diverged, and every
+   * reader of `contacts.branch` drifted from reality at once. Saying so is the
+   * cheap half of the fix; reconcileWorktreeBranch() is the backstop.
    */
   it('tells the session its branch is load-bearing and not to leave it', () => {
     const composed = composeInstructions({
@@ -273,11 +276,11 @@ describe('working context', () => {
   })
 
   /**
-   * The other half of the same mistake, found by Phase 9's Journey 3 check: a
-   * routine asked for `src/<file>.ts`, a directory that existed in neither
-   * checkout, and the model created it in the *repository* — the other path
-   * this block names. Naming a path is not the same as saying what may be done
-   * with it, so the block says it.
+   * The other half of the same mistake, found in another live run: a routine
+   * asked for `src/<file>.ts`, a directory that existed in neither checkout,
+   * and the model created it in the *repository* — the other path this block
+   * names. Naming a path is not the same as saying what may be done with it,
+   * so the block says it.
    */
   it('says the repository itself is out of bounds, not merely that it exists', () => {
     const composed = composeInstructions({
@@ -453,9 +456,9 @@ describe('capabilities granted but not reachable', () => {
 
   it('tells the model not to report an empty result as a checked one', () => {
     // The whole reason this block exists. A persona asked to check for new
-    // issues, handed no tool, otherwise answers that there are none — and
-    // Journey 3 opens with exactly that step, so the silent version is the one
-    // most likely to be seen.
+    // issues, handed no tool, otherwise answers that there are none — and an
+    // unattended routine very often opens with exactly that check, so the
+    // silent version is the one most likely to be seen.
     const composed = composeInstructions({
       ...spec(persona([]), []),
       unavailableServers: unreachable
@@ -538,14 +541,14 @@ describe('the cacheable prefix', () => {
 
 describe('the block order Codex receives', () => {
   /**
-   * Doc 15 item 6: Claude splices its cache boundary between prefix and
-   * suffix, but @openai/codex-sdk has no equivalent — Codex receives one
-   * joined string and the ordering below is pure convention with nothing in
-   * the SDK enforcing it. This test IS the enforcement: identity first
-   * (persona prompt, working directory, skills), then what the repository was
-   * trusted to say, then the volatile tail (unavailable servers, repo log,
-   * sibling branches) — stable-before-volatile is also what keeps the cached
-   * prefix cacheable on the backend that does have a boundary.
+   * Claude splices its cache boundary between prefix and suffix, but
+   * @openai/codex-sdk has no equivalent — Codex receives one joined string and
+   * the ordering below is pure convention with nothing in the SDK enforcing
+   * it. This test IS the enforcement: identity first (persona prompt, working
+   * directory, skills), then what the repository was trusted to say, then the
+   * volatile tail (unavailable servers, repo log, sibling branches) —
+   * stable-before-volatile is also what keeps the cached prefix cacheable on
+   * the backend that does have a boundary.
    */
   it('orders identity, then repo trust, then the volatile tail', () => {
     const full: SessionSpec = {

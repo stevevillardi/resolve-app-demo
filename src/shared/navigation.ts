@@ -1,5 +1,5 @@
 /**
- * The main → renderer "go here" channel (Phase 20).
+ * The main → renderer "go here" channel.
  *
  * MENU_ACTION_CHANNEL carries a bare verb; this carries a destination. It
  * exists for notification clicks: an OS toast about a routine's 3 a.m. run has

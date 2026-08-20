@@ -7,7 +7,7 @@ import { deleteBranch } from './git'
 import { assertNoActiveRun } from './run-lock'
 
 /**
- * Wipes the app back to a fresh install (Phase 18, the Settings dev reset).
+ * Wipes the app back to a fresh install — the Settings dev reset.
  *
  * Ordering is correctness, not caution: contacts go first, through the same
  * deleteContact path a user's delete takes, because worktreeRemove is what

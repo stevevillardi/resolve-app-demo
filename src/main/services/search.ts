@@ -2,9 +2,9 @@ import { sql } from 'drizzle-orm'
 import { initDb } from '../db'
 
 /**
- * Message-content search over the FTS5 tables migration 0017 maintains
- * (review §B4). Until now a *conversation* could be found by name and a
- * *message* could not be found at all.
+ * Message-content search over the FTS5 tables migration 0017 maintains. A
+ * conversation is findable by its name elsewhere; this is the only thing that
+ * makes an individual message findable by what it says.
  *
  * The service owns query hygiene: raw user text goes into MATCH, and FTS5
  * treats `-`, `:`, parens and quotes as syntax — so every term is wrapped in

@@ -75,9 +75,9 @@ describe('workingPathFor', () => {
     expect(workingPathFor(contact())).toBe(REPO)
   })
 
-  // The seam Phase 12 changed. Two writing personas stop contending because
-  // this stops returning the same string for both of them — not because the
-  // lock got more permissive.
+  // The seam that lets two writing personas on one repo stop contending: this
+  // returns a different string for each of them, rather than the lock being
+  // more permissive about writers.
   it('is the worktree path when the contact has one', () => {
     expect(workingPathFor(contact({ worktreePath: WORKTREE }))).toBe(WORKTREE)
   })
@@ -101,8 +101,8 @@ describe('lockModeFor', () => {
   })
 
   // Isolation says *where*, sandbox says whether it locks. A writer that opted
-  // out of worktrees is still a writer, and must not have been quietly unlocked
-  // by this phase.
+  // out of worktrees is still a writer, and must not be quietly unlocked by
+  // sharing the main tree with everybody else.
   it('still locks a writer left in the main tree', () => {
     expect(lockModeFor(persona('workspace_write'), 'shared')).toBe('exclusive')
     expect(lockModeFor(persona('workspace_write'), 'worktree')).toBe('exclusive')
@@ -128,11 +128,12 @@ describe('acquire', () => {
     expect(holdersOf(REPO)).toHaveLength(3)
   })
 
-  // The whole point of narrowing blueprint §15D: this pair is Journey 2, and
-  // under the blueprint's literal repo-wide lock it would not run. Written from
-  // the claim in 00-progress.md ("readers are unlimited and never refused"),
-  // not from the implementation — the previous version of this test asserted
-  // the reader was refused, which is the behaviour the claim rules out.
+  // The whole point of narrowing the lock: a writer and a reader on the same
+  // repository are exactly the pair that has to run together, and under a
+  // literal repo-wide "one turn at a time" they would not. Written from the
+  // claim — readers are unlimited and never refused — rather than from the
+  // implementation, which is what separates this from a test that asserts the
+  // reader is turned away.
   it('admits a reader while a writer holds', () => {
     expect(acquire(holder('exclusive'))).not.toBeNull()
     expect(acquire(holder('shared'))).not.toBeNull()
@@ -241,8 +242,8 @@ describe('release', () => {
 })
 
 describe('blockingHolder', () => {
-  // Replaces an earlier case that named the writer refusing a *reader*. That
-  // premise is gone: a reader is never refused, so there is no holder to name.
+  // A reader is never refused, so there is never a holder to name on its
+  // account. The only refusal this can report is one writer against another.
   it('names the writer that refuses another writer', () => {
     acquire(holder('exclusive', REPO, 'Refactor Buddy'))
     expect(blockingHolder(REPO, 'exclusive')?.contactName).toBe('Refactor Buddy')

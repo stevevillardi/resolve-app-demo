@@ -20,12 +20,12 @@ import type { Group } from '@/types'
 
 /**
  * The group actions, shared between the conversation list's right-click menu
- * and the group thread header's ⋯ menu (review §G5).
+ * and the group thread header's ⋯ menu.
  *
  * Modelled on `ContactActions` deliberately, down to the `Item` alias that lets
- * one definition serve both menu families: a group row acquiring a menu that
- * behaved differently from a contact row's would be a worse outcome than it
- * having none, which is what it had.
+ * one definition serve both menu families: a group row carrying a menu that
+ * behaves differently from a contact row's would be a worse outcome than it
+ * having none at all.
  *
  * Three verbs, and the two that are missing are the point. There is no delete,
  * because a group is a *view* of the contacts bound to a repository — deleting
