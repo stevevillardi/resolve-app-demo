@@ -165,7 +165,7 @@ concurrency, and **bounded rather than a bare `Promise.all`** because `branchesI
 is already unbounded within a repo: twenty repositories of five branches would ask
 the OS for three hundred concurrent subprocesses.
 
-**B4 — migration 0023**, three `CREATE INDEX`. `contacts.persona_template_id` had
+**B4 — migration 0024**, three `CREATE INDEX`. `contacts.persona_template_id` had
 been a foreign key since 0002 with no index on the referencing side, and the two
 columns 0008 denormalised onto `usage_events` so spend could be grouped by them
 were never indexed. Paired with `timestamp` rather than alone, because every
@@ -201,7 +201,7 @@ its conversation; Home's three fleet counts → the three sections that hold the
 
 ## Migration
 
-**0023** — three `CREATE INDEX`, nothing backfilled, no column moved. Covered by
+**0024** — three `CREATE INDEX`, nothing backfilled, no column moved. Covered by
 `upgrade.test.ts` with no new fixture, via the journal-prefix harness.
 
 ## Found by driving the built app
@@ -222,8 +222,7 @@ optional:
 
 ## Verification
 
-- `npm run build` — typecheck + unit suite + bundle. **1,948 passing**, up from
-  1,762.
+- `npm run build` — typecheck + unit suite + bundle. **1,979 passing**.
 - `npx playwright test --project=e2e` — 91 passing, 1 failing. That failure
   (`guide.spec.ts` "folds away and stays folded across a relaunch") **pre-exists
   on main**: verified by building main in a throwaway worktree and running the
