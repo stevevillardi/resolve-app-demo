@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 /**
  * The device-flow state machine. Octokit and the secret store are faked so the
  * transitions, the generation guard, and the error translation are what's
- * under test — not GitHub's API, which was verified live during Phase 3.
+ * under test — not GitHub's API itself, which is verified against the real
+ * service instead.
  */
 
 const secretStore = new Map<string, string>()
@@ -123,9 +124,9 @@ describe('status', () => {
 })
 
 /**
- * The defect these exist for: `connected` was computed from a token *file*
- * existing, so a token revoked on github.com kept a healthy dot indefinitely
- * and the connect dialog hid the button that would have fixed it.
+ * The defect these exist to prevent: computing `connected` from a token *file*
+ * existing, which leaves a token revoked on github.com showing a healthy dot
+ * indefinitely while the connect dialog hides the button that would fix it.
  *
  * The third case is the one worth being strict about. It is easy to write this
  * so that anything going wrong reads as "your token is bad", which would tell
@@ -158,7 +159,7 @@ describe('verifying the stored token', () => {
     expect(status.tokenState).toBe('rejected')
     expect(status.error).toMatch(/rejected the stored token/i)
     // Still `connected`: a token is stored, and the remedy is Reconnect rather
-    // than Connect. Collapsing the two is what the dialog got wrong.
+    // than Connect. Collapsing the two is the mistake this rules out.
     expect(status.connected).toBe(true)
   })
 
@@ -323,7 +324,7 @@ describe('error translation', () => {
     startAndVerify()
     authResult.reject(new Error('unsupported_grant_type'))
     await settle()
-    expect(github.getDeviceFlowState().error).toMatch(/Enable "Device Flow"/)
+    expect(github.getDeviceFlowState().error).toMatch(/misconfigured/i)
   })
 
   it('explains an expired code', async () => {
@@ -386,7 +387,7 @@ describe('disconnect', () => {
 })
 
 describe('getGitHubToken', () => {
-  it('is the read path Phases 6 and 9 use', () => {
+  it('is the read path every consumer uses', () => {
     secretStore.set('github_token', 'gho_forlater')
     expect(github.getGitHubToken()).toBe('gho_forlater')
   })
@@ -395,7 +396,7 @@ describe('getGitHubToken', () => {
 describe('a stored token this build cannot decrypt', () => {
   // macOS binds safeStorage ciphertext to the app signature; every rebuilt dev
   // Electron is a new signature. The credential is fine — the build changed.
-  it('reports locked, names the account, and blames the binary rather than GitHub', () => {
+  it('reports locked, names the account, and blames the app rather than GitHub', () => {
     secretStore.set('github_token', 'gho_x')
     appStateStore.set('github_account_login', 'stevevillardi')
     unreadableKeys.add('github_token')
@@ -406,7 +407,7 @@ describe('a stored token this build cannot decrypt', () => {
       tokenState: 'locked',
       login: 'stevevillardi'
     })
-    expect(status.error).toMatch(/this build/i)
+    expect(status.error).toMatch(/switchboard can.t unlock/i)
     expect(status.error).not.toMatch(/revoked|rejected/i)
   })
 
@@ -427,11 +428,12 @@ describe('a stored token this build cannot decrypt', () => {
     expect(github.getGitHubStatus().tokenState).not.toBe('locked')
   })
 
-  // Phase 11 F1: the repo picker told a locked-credential user to "Connect
-  // GitHub first" — the one remedy that was not the answer. Features that
-  // throw on a null token go through missingTokenError so the two causes of
-  // null keep their opposite remedies.
-  it('missingTokenError blames the binary when the credential is unreadable', () => {
+  // A locked credential — stored, but not decryptable by this build — must not
+  // be reported as if it simply needed connecting. "Connect GitHub first" is
+  // the one remedy that is not the answer. Features that throw on a null token
+  // go through missingTokenError so the two causes of null keep their opposite
+  // remedies.
+  it('missingTokenError blames the app when the credential is unreadable', () => {
     secretStore.set('github_token', 'gho_x')
     unreadableKeys.add('github_token')
 
@@ -455,7 +457,7 @@ describe('client-id sanity guard', () => {
     vi.stubEnv('MAIN_VITE_GITHUB_CLIENT_ID', 'Iv23liGITHUBAPPID')
     const status = github.getGitHubStatus()
     expect(status.connected).toBe(false)
-    expect(status.error).toMatch(/OAuth App/i)
+    expect(status.error).toMatch(/misconfigured/i)
   })
 
   it('stays quiet for an OAuth App id', () => {

@@ -18,9 +18,8 @@ interface GitHubConnectDialogProps {
 }
 
 /**
- * Real OAuth device flow (Phase 3). The four visual states are the same ones
- * the Phase 2 shell defined; they're now derived from main-process flow state
- * rather than passed in as props.
+ * Real OAuth device flow. The four visual states are derived from
+ * main-process flow state rather than passed in as props.
  */
 export function GitHubConnectDialog({
   open,
@@ -33,10 +32,10 @@ export function GitHubConnectDialog({
   const github = status?.github
   /**
    * `connected` means a token is stored, which is not the same as it working.
-   * This dialog used to branch on it alone, so a revoked token hid the Connect
-   * button behind a green "Connected as …" — leaving Disconnect as the only way
-   * to reach the flow that would have fixed it. Every branch below that offers
-   * the flow now keys on `healthy` instead.
+   * Branching on it alone would hide the Connect button behind a green
+   * "Connected as …" the moment a token is revoked — leaving Disconnect as the
+   * only way to reach the flow that would have fixed it. Every branch below
+   * that offers the flow keys on `healthy` instead.
    */
   const rejected = Boolean(github?.connected) && github?.tokenState === 'rejected'
   const locked = Boolean(github?.connected) && github?.tokenState === 'locked'
@@ -143,8 +142,7 @@ export function GitHubConnectDialog({
 
         {!configured && (
           <p className="text-destructive text-sm text-pretty">
-            No GitHub client ID is configured. Set MAIN_VITE_GITHUB_CLIENT_ID in .env — see
-            .env.example.
+            GitHub sign-in isn’t available in this build of Switchboard.
           </p>
         )}
 

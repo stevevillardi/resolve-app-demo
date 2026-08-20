@@ -53,9 +53,10 @@ interface NewContactFlowProps {
 }
 
 /**
- * Where the repo came from. Blueprint §9.1 describes the GitHub route, which is
- * the one that makes the app feel like it knows your work — but a local folder
- * is a first-class alternative rather than a fallback, because it removes both
+ * Where the repo came from. The GitHub route — browse your account, pick a
+ * repository, clone it if it isn't here yet — is the one that makes the app
+ * feel like it knows your work, but a local folder is a first-class
+ * alternative rather than a fallback, because it removes both
  * ways the GitHub route can fail before anything interesting happens (no token,
  * or a clone that doesn't complete).
  */
@@ -71,7 +72,7 @@ type Step = (typeof STEPS)[number]
 
 const STEP_COPY: Record<Step, { title: string; description: string }> = {
   persona: { title: 'Pick a persona', description: 'Which template should this contact use?' },
-  repo: { title: 'Bind a repo', description: 'The persona only ever works inside this repo.' },
+  repo: { title: 'Choose a repo', description: 'The persona only ever works inside this repo.' },
   // After the repo rather than before it, because the choice is only meaningful
   // once we know whether the binding is a git repo at all.
   isolation: {
@@ -82,7 +83,8 @@ const STEP_COPY: Record<Step, { title: string; description: string }> = {
 }
 
 /**
- * The name a contact gets when nobody types one (blueprint §4's example shape).
+ * The name a contact gets when nobody types one: the persona's name, then the
+ * repository's — "Code Reviewer · my-app".
  *
  * A function rather than an inline template because the confirm step's field
  * and `handleCreate` both need it, and a second copy is how a placeholder comes
@@ -130,7 +132,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
     ? (contacts.find((contact) => contact.id === recreateContactId) ?? null)
     : null
   const { recreate, error: recreateError } = useRecreateContact()
-  // Keeping the thread is the point of the flow now, so it is the default.
+  // Keeping the thread is the point of the flow, so it is the default.
   const [bringHistory, setBringHistory] = useState(true)
 
   /**
@@ -176,7 +178,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const [creatingPersona, setCreatingPersona] = useState(false)
 
   /**
-   * The contact's name, editable on the confirm step (§G4).
+   * The contact's name, editable on the confirm step.
    *
    * Null means "follow the derived name", so the field keeps tracking the
    * persona and repository while the user is still choosing them and stops the
@@ -191,7 +193,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
   const { create, isPending: creating, error: createError } = useCreateContact()
   // The first clone needs a workspace root, and main will open a native folder
   // dialog for one mid-clone if it has to — invisible behind a button that says
-  // "Cloning…" (Phase 11, F2). Known-unset is asked for up front instead, with
+  // "Cloning…". Known-unset is asked for up front instead, with
   // its own label; the mid-clone ask in cloneToWorkspace stays as the fallback
   // for the brief window where the root query hasn't resolved yet.
   const workspaceRoot = useWorkspaceRoot()
@@ -250,7 +252,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       const draft = {
         personaTemplateId: persona.id,
         repoPath: path,
-        // What the user typed, or blueprint §4's example shape — "Code Reviewer
+        // What the user typed, or the derived shape — "Code Reviewer
         // · my-app" — when they left it alone. `derivedName` is the same
         // expression the confirm step shows, so the field is never a preview of
         // something other than what gets created.
@@ -265,8 +267,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
       }
 
       // One call, not create-then-delete: main re-points the old contact's
-      // messages at the new one in between, and a failure partway used to
-      // leave either two contacts or a deleted conversation. A dirty worktree
+      // messages at the new one in between, and a failure partway through a
+      // create-then-delete would leave either two contacts or a deleted
+      // conversation. A dirty worktree
       // still refuses, which keeps the original intact rather than half-moved.
       if (recreateFrom) {
         return recreate({ fromId: recreateFrom.id, draft, bringHistory }, landOn)
@@ -322,7 +325,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                 compact
                 icon={Search}
                 title={`Nothing matches “${personaQuery.trim()}”`}
-                description="Try the name, the backend, or the scope."
+                description="Try the name, what it runs on, or its permissions."
               />
             )}
             {visiblePersonas.map((template) => (
@@ -355,7 +358,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
             ))}
             {/*
               The way out of "none of these". Without it the answer to the very
-              first question the app asks was to cancel, go to Personas, work
+              first question the app asks is to cancel, go to Personas, work
               out that a new persona means editing a blank draft, save, and
               start again from ⌘N.
             */}
@@ -449,9 +452,9 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                 {/*
                   Main's own words, not a paraphrase. It distinguishes a
                   rejected token from a rate limit from a network failure and
-                  says what to do about each — "check your connection and try
-                  again" was wrong for two of the three and useless for all of
-                  them. A stored token that has been revoked still reports
+                  says what to do about each — a blanket "check your connection
+                  and try again" is wrong for two of the three and useless for
+                  all of them. A stored token that has been revoked still reports
                   `connected: true`, because that only means a token exists, so
                   this message is the only place the user finds out.
                 */}
@@ -479,7 +482,7 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
                     compact
                     icon={Search}
                     title="No repositories found"
-                    description="This account has no repositories we can see."
+                    description="No repositories found for this account."
                   />
                 )}
                 {repos.isSuccess && repos.data.length > 0 && visibleRepos.length === 0 && (
@@ -576,12 +579,12 @@ export function NewContactFlow({ open, onOpenChange }: NewContactFlowProps): Rea
               </div>
             </div>
             {/*
-              Nameable at creation (§G4). It was derived and unaskable, so the
-              only way to name a contact was to make it, find it, and rename it
-              — and the derived name is mostly invisible anyway, since the
+              Nameable at creation. Left derived and unaskable, the only way to
+              name a contact would be to make it, find it, and rename it — and
+              the derived name is mostly invisible anyway, since the
               conversation list shows the persona's. That matters most for the
               case this flow makes easy: two contacts on the same persona and
-              the same repository, previously identical on screen.
+              the same repository, otherwise identical on screen.
             */}
             <Field label="Name" htmlFor="contact-display-name">
               <Input

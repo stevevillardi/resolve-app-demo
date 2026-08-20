@@ -240,6 +240,6 @@ describe('workDiff', () => {
       dirty: ['x']
     })
 
-    await expect(workDiff(contact.id, messageId)).rejects.toThrow(/No such message/)
+    await expect(workDiff(contact.id, messageId)).rejects.toThrow(/no longer exists/)
   })
 })

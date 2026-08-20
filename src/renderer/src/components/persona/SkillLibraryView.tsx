@@ -113,7 +113,7 @@ function SkillForm({
           className="border-input bg-background scrollbar-subtle focus-visible:border-ring focus-visible:ring-ring/40 placeholder:text-muted-foreground min-h-0 flex-1 resize-none rounded-lg border p-3 font-mono text-code leading-relaxed outline-none focus-visible:ring-2"
         />
         <p className="text-muted-foreground text-xs">
-          Markdown, injected verbatim into every session that attaches this skill.
+          Markdown, passed word for word to every session that attaches this skill.
         </p>
       </div>
 

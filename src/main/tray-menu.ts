@@ -5,8 +5,8 @@ import type { NavigateTarget } from '../shared/navigation'
  * What the tray menu says, as data.
  *
  * Pure and Electron-free so it can be tested directly — the native rendering is
- * the part that has to be looked at rather than asserted, and it belongs in the
- * phase doc's "verified live" section instead of in a mock of `Menu`.
+ * the part that has to be looked at rather than asserted, and a mock of `Menu`
+ * would only assert that the mock was called.
  */
 
 export interface TrayMenuItem {
@@ -69,9 +69,9 @@ export function buildTrayMenu(runs: NextRun[], state: TrayMenuState = {}): TrayM
       // invitation to look, not a fact to grey out.
       enabled: true
     })
-    // Named, like the scheduled section below — a count that lists nobody made
-    // the tray answer "how many" while dodging "who" (Phase 25). Absolute
-    // start times, same no-counting rule as everything else in this menu.
+    // Named, like the scheduled section below: a count on its own answers
+    // "how many" while dodging "who". Absolute start times, same no-counting
+    // rule as everything else in this menu.
     for (const turn of running.slice(0, ROUTINE_ROWS_MAX)) {
       items.push({
         id: 'run',
@@ -125,7 +125,7 @@ const PROMPT_MAX = 40
 
 /** The user-facing word for what started a turn — "chat" for a typed message. */
 function describeOrigin(origin: TrayRunningTurn['origin']): string {
-  return origin === 'message' ? 'chat' : origin
+  return origin === 'message' ? 'chat' : origin === 'routine' ? 'a routine' : 'a mention'
 }
 
 function localTime(at: number): string {

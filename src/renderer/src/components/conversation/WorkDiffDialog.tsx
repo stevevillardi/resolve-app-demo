@@ -10,7 +10,7 @@ import { useWorkDiff } from '@/hooks/useDiffs'
 import { ipcErrorMessage } from '@/lib/ipc-client'
 
 /**
- * One turn's diff, in place (Phase 19, review A6).
+ * One turn's diff, in place.
  *
  * A dialog rather than a navigation: the question "what did that reply
  * change" is asked mid-conversation, and the answer should not cost the
@@ -34,8 +34,8 @@ export function WorkDiffDialog({
         <DialogHeader>
           <DialogTitle>What this turn changed</DialogTitle>
           <DialogDescription>
-            Measured by git when the turn finished. Files marked live are read from the working tree
-            as it is now.
+            As git saw it when the turn finished. Files marked live are read from the folder as it
+            is now.
           </DialogDescription>
         </DialogHeader>
         <DiffPanel
@@ -43,7 +43,7 @@ export function WorkDiffDialog({
           filesOmitted={diff.data?.filesOmitted ?? 0}
           isLoading={diff.isLoading}
           error={diff.error ? ipcErrorMessage(diff.error) : null}
-          emptyText="This turn's record is empty — the change may have been merged or discarded since."
+          emptyText="Nothing to show — these changes may have been merged or discarded since."
           className="min-h-0 flex-1"
         />
       </DialogContent>

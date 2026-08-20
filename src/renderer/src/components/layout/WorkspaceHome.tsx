@@ -45,9 +45,9 @@ const UPCOMING_LIMIT = 3
  * `home` is the Home section: everything at rest, including spend. `chats` is
  * the Chats pane with nothing selected — the same live activity, minus the
  * money, because a section about conversations should not be where you find out
- * what the month cost. One component rather than two because the running-turn
- * and recent-activity blocks are identical, and two copies of them would drift
- * the way the four pane headers did before Phase 13.
+ * what the month cost. One component rather than two, because the running-turn
+ * and recent-activity blocks are identical on both screens and two copies of
+ * them would not stay that way.
  */
 type Variant = 'home' | 'chats'
 
@@ -55,10 +55,9 @@ type Variant = 'home' | 'chats'
  * The resting screen.
  *
  * This is the first thing seen on every launch — selection is deliberately not
- * persisted (`useUiStore`'s `partialize`), so the app always opens here, and it
- * used to be a single centred empty state in about a thousand by eight hundred
- * pixels of nothing. The data to fill it has existed since Phase 6 and every
- * query below is already being fetched by something else in the shell.
+ * persisted (`useUiStore`'s `partialize`), so the app always opens here. Every
+ * query below is already being fetched by something else in the shell, so
+ * filling a thousand by eight hundred pixels with a summary costs nothing.
  *
  * Quiet on purpose. Each block renders only when it has something to say, so
  * the screen grows into a summary as the fleet is used rather than presenting
@@ -107,9 +106,8 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
     variant === 'home' ? budgetBannerFor(events, monthlyBudgetUsd, routines, now) : null
   const repoCount = new Set(contacts.map((contact) => contact.repoPath)).size
   // Only the ones with something in them, and not yet landed. A merged branch
-  // is finished work, not waiting work — counting it kept the banner up
-  // forever (Phase 19). A branch with no diff against the
-  // repo is not waiting on anybody.
+  // is finished work, not waiting work — counting it keeps the banner up
+  // forever. A branch with no diff against the repo is not waiting on anybody.
   const waiting = variant === 'home' ? branches.filter((b) => b.files.length > 0 && !b.merged) : []
   // Whether there is a second column to make. On Chats all three of these are
   // empty by construction, and a 2fr column with nothing beside it is a third
@@ -240,10 +238,10 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
         {/*
           Two columns once the pane can hold them. The primary side carries the
           conversation — what is running, and what was last said — and the rail
-          carries the work waiting on a human. Before this the whole screen was
-          one column of full-width sections, so a single waiting branch drew at
-          half width and a single scheduled run at a third, for no reason a
-          reader could see, and the summary ran well past the fold.
+          carries the work waiting on a human. One column of full-width sections
+          instead would draw a single waiting branch at half width and a single
+          scheduled run at a third, for no reason a reader could see, and push
+          the summary well past the fold.
         */}
         <div
           className={cn(
@@ -254,8 +252,9 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
           {/*
             Its own container. `@container/pane` measures the whole pane, so
             Recent would go two-across at a width this column does not have
-            once the rail takes a third of it — the same mistake the four `sm:`
-            variants `PaneBody` replaced were making against the viewport.
+            once the rail takes a third of it. A container query has to measure
+            the box the content actually sits in, not the pane around it and not
+            the viewport.
           */}
           <div className="@container/main flex flex-col gap-6">
             {runs.length > 0 && (
@@ -273,10 +272,10 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
 
             {recent.length > 0 && (
               <Section title="Recent" description="The last thing said in each conversation.">
-                {/* Two across once there is room. Six rows down the left of a
-                  1200px pane is the same wasted width this pass exists to fix.
-                    Measured against `@container/main` — this column, not the
-                    pane, because the rail beside it takes a third of it. */}
+                {/* Two across once there is room: six rows down the left of a
+                    1200px pane throw away the rest of it. Measured against
+                    `@container/main` — this column, not the pane, because the
+                    rail beside it takes a third of it. */}
                 <div className="grid gap-x-4 @2xl/main:grid-cols-2">
                   {recent.map((item) => (
                     <ListRow
@@ -321,8 +320,8 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
               Work a persona finished that is now waiting on a human. Home only,
               and worth the extra query: a branch on disk with commits nobody has
               merged is the one thing in this app that quietly accumulates, and
-              until now it was visible only if you thought to open the Branches
-              section and look.
+              the only other place it shows is the Branches section, which nobody
+              opens to find out that there is something in it.
             */}
               {variant === 'home' && waiting.length > 0 && (
                 <Section
@@ -351,8 +350,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
                       >
                         <span className="block truncate font-mono text-meta">{branch.branch}</span>
                         {/* `contactName` is already "Persona · repo", so appending the
-                          repo again prints it twice — the exact thing Phase 13 fixed
-                          in BranchDetail's subtitle. Only added when it is missing. */}
+                          repo again prints it twice. Only added when it is missing. */}
                         <span className="text-muted-foreground block truncate text-xs">
                           {branch.contactName ?? `No contact · ${repoName(branch.repoPath)}`}
                         </span>
@@ -363,7 +361,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
               )}
 
               {/*
-              Fires that silently never happened (review §C2). Above Scheduled
+              Fires that silently never happened. Above Scheduled
               because outstanding beats upcoming, and in the warning register
               rather than the destructive one — nothing failed, something didn't
               run. Clicking lands in the editor, where Run now is the catch-up.
@@ -371,7 +369,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
               {variant === 'home' && missed.length > 0 && (
                 <Section
                   title={missed.length === 1 ? '1 routine missed its schedule' : 'Missed schedules'}
-                  description="Fires skipped while the app was closed or the machine slept. Run now catches up."
+                  description="Runs skipped while the app was closed or your machine was asleep. Run now catches up."
                 >
                   <div className="flex flex-col gap-1.5">
                     {missed.map((run) => (
@@ -453,12 +451,12 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
 /**
  * Seven days of spend as seven rectangles.
  *
- * Not a chart component, on purpose. This was recharts, and at 40px tall it
- * drew only the days that had spend — a week with three busy days rendered as
- * three blocks floating in an empty box with nothing to read them against,
- * which is the thing this strip exists to answer. Seven divs always draw seven
- * days, and the track behind each one is what makes a quiet day legible as a
- * quiet day rather than as a gap.
+ * Not a chart component, on purpose. A charting library at 40px tall draws only
+ * the days that had spend — a week with three busy days renders as three blocks
+ * floating in an empty box with nothing to read them against, which is the thing
+ * this strip exists to answer. Seven divs always draw seven days, and the track
+ * behind each one is what makes a quiet day legible as a quiet day rather than
+ * as a gap.
  *
  * Capped rather than stretched. The tile is a third of a 1280px pane, and
  * seven bars spread across 420px of it are 55px wide each — a row of buttons,

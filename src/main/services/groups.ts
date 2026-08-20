@@ -5,11 +5,12 @@ import { toGroup } from '../db/mappers'
 import { groups } from '../db/schema'
 import type { AppDatabase } from '../db'
 import type { Group } from '../../shared/domain'
+import { notFound } from './not-found'
 
 /**
- * Groups (blueprint §4, §8). One per repo, created implicitly the first time a
- * Contact binds to that repo — never by the user directly, which is why there
- * is no create procedure on the IPC contract.
+ * Groups. One per repo, created implicitly the first time a Contact binds to
+ * that repo — never by the user directly, which is why there is no create
+ * procedure on the IPC contract.
  *
  * A Group has no backend session of its own; it's a merged view and a router.
  */
@@ -36,7 +37,7 @@ export function ensureGroupForRepo(repoPath: string, db: AppDatabase = initDb())
     .run()
 
   const row = db.select().from(groups).where(eq(groups.repoPath, repoPath)).get()
-  if (!row) throw new Error(`Failed to create group for repo: ${repoPath}`)
+  if (!row) throw new Error('Could not open the shared thread for this repository.')
   return toGroup(row)
 }
 
@@ -46,7 +47,7 @@ export function ensureGroupForRepo(repoPath: string, db: AppDatabase = initDb())
  */
 export function markGroupRead(id: string, at = Date.now()): Group {
   const row = initDb().select().from(groups).where(eq(groups.id, id)).get()
-  if (!row) throw new Error(`No such group: ${id}`)
+  if (!row) throw notFound('group', id)
 
   const current = toGroup(row)
   if (current.lastReadAt !== null && at <= current.lastReadAt) return current
@@ -60,13 +61,13 @@ export function markGroupRead(id: string, at = Date.now()): Group {
 }
 
 /**
- * Rename a group, or clear the override with null (review §G5).
+ * Rename a group, or clear the override with null.
  *
- * A group's name has always been derived from its repository path, and this
- * makes that a default rather than a fact — see the `name` column comment.
- * Passing null is a real operation, not a missing argument: it is how a rename
- * is undone, which is why there is no separate "reset" procedure beside this
- * one.
+ * The name is derived from the repository path by default; a rename stores an
+ * override on top of that derivation rather than replacing it — see the `name`
+ * column comment. So passing null is a real operation, not a missing argument:
+ * clearing the override *is* the reset, which is why there is no separate
+ * "reset" procedure beside this one.
  *
  * Trimming happens at the Zod boundary (`groups.rename` uses the same
  * `.trim().min(1)` shape `contacts.update` does), so an empty string cannot
@@ -74,7 +75,7 @@ export function markGroupRead(id: string, at = Date.now()): Group {
  */
 export function renameGroup(id: string, name: string | null): Group {
   const row = initDb().select().from(groups).where(eq(groups.id, id)).get()
-  if (!row) throw new Error(`No such group: ${id}`)
+  if (!row) throw notFound('group', id)
 
   initDb().update(groups).set({ name }).where(eq(groups.id, id)).run()
   return { ...toGroup(row), name }
@@ -91,7 +92,7 @@ export function renameGroup(id: string, name: string | null): Group {
  */
 export function setGroupHidden(id: string, hidden: boolean): Group {
   const row = initDb().select().from(groups).where(eq(groups.id, id)).get()
-  if (!row) throw new Error(`No such group: ${id}`)
+  if (!row) throw notFound('group', id)
 
   initDb().update(groups).set({ hidden }).where(eq(groups.id, id)).run()
   return { ...toGroup(row), hidden }

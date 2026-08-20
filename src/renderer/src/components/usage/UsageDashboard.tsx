@@ -44,7 +44,7 @@ import { useUiStore } from '@/store/useUiStore'
 import type { UsageSource } from '@/types'
 
 /**
- * Spend over time (blueprint §10), on real `usage_events` rows.
+ * Spend over time, on real `usage_events` rows.
  *
  * The arithmetic all lives in lib/usage-report.ts — this file picks filters,
  * calls those functions and renders. That split is not tidiness: the renderer
@@ -65,10 +65,10 @@ const METRICS = [
 ] as const
 
 /**
- * All four sources, not just message vs routine. `routine` is the one blueprint
- * §7 singles out — the only spend nobody asked for directly — and `summary` is
- * what coordination costs, which Phase 7 kept as its own value specifically so
- * this screen could show it on its own.
+ * All four sources, not just message vs routine. `routine` is the one worth
+ * singling out — the only spend nobody asked for directly — and `summary` is
+ * what coordination costs, kept as its own source value specifically so this
+ * screen can show it on its own.
  */
 const SOURCES = [
   { value: 'all', label: 'All' },
@@ -110,9 +110,10 @@ function BreakdownRows({
 
   return (
     <div className="flex flex-col gap-2.5">
-      {/* The name shares the flexible width with the bar (1:2) instead of the
-          old fixed 112px, which truncated names at any pane width. The numeric
-          columns stay fixed — tabular figures want a constant column. */}
+      {/* The name shares the flexible width with the bar (1:2) rather than
+          taking a fixed width, which truncates names at any pane width. The
+          numeric columns stay fixed — tabular figures want a constant
+          column. */}
       <div className="text-muted-foreground flex items-center gap-2.5 text-micro font-medium tracking-wide uppercase">
         <span className="size-5 shrink-0" aria-hidden />
         <span className="min-w-24 flex-[1_1_6rem]">Name</span>
@@ -163,8 +164,7 @@ export function UsageDashboard(): React.JSX.Element {
   const { data: personas = [] } = usePersonas()
 
   // Read once per mount rather than per render, so the buckets cannot shift
-  // underneath an interaction. This replaces a module-level constant derived
-  // from the newest fixture, which made every range meaningless on real rows.
+  // underneath an interaction.
   const [now] = useState(() => Date.now())
 
   const shown = useMemo(() => {
@@ -178,7 +178,7 @@ export function UsageDashboard(): React.JSX.Element {
   const totals = useMemo(() => aggregateUsage(shown), [shown])
 
   /**
-   * The honest cost data's exit door (review §G2).
+   * The honest cost data's exit door.
    *
    * `shown` rather than `events`: what leaves is what the screen is showing,
    * filters and all. The alternative — always exporting everything — makes the
@@ -186,8 +186,8 @@ export function UsageDashboard(): React.JSX.Element {
    *
    * Names are resolved here rather than in the serializer because this is where
    * the contact and persona lists already are. A contact that has been deleted
-   * resolves to nothing, and the empty cell is accurate: Phase 10's rule keeps
-   * the spend and drops the name.
+   * resolves to nothing, and the empty cell is accurate: deleting a contact
+   * keeps its spend and drops its name.
    */
   const { save, isPending: saving } = useSaveExport()
   const exportCsv = (): void => {
@@ -261,9 +261,11 @@ export function UsageDashboard(): React.JSX.Element {
         ? (personas.find((p) => p.id === scope.id)?.name ?? 'Persona')
         : repoName(scope.repoPath)
 
-  const unpricedNote =
+  // One home for the caveat, on the figure that carries the mark. The `+` on
+  // the total is the signal; this explains it, once, on demand.
+  const unpricedHint =
     totals.unpricedEvents > 0
-      ? `${totals.unpricedEvents} ${totals.unpricedEvents === 1 ? 'turn' : 'turns'} on a model with no published price`
+      ? `${totals.unpricedEvents} of these ${totals.unpricedEvents === 1 ? 'turn has' : 'turns have'} no published price, so the real total is a little higher.`
       : undefined
 
   const paletteColor = (_row: UsageGroup, index: number): string =>
@@ -276,10 +278,10 @@ export function UsageDashboard(): React.JSX.Element {
     <div className="bg-background flex h-full min-h-0 flex-col">
       <PaneHeader
         title={scopeName}
-        // Range and the table toggle only. Measure moved down into the filter
-        // row below: three controls plus a title in a 48px strip left the range
-        // options touching the table button at 1100px wide, and a header that
-        // has to be read at two speeds is not a header.
+        // Range and the table toggle only. Measure lives in the filter row
+        // below instead: three controls plus a title in a 48px strip leave the
+        // range options touching the table button at 1100px wide, and a header
+        // that has to be read at two speeds is not a header.
         actions={
           <>
             <SegmentedControl
@@ -298,8 +300,8 @@ export function UsageDashboard(): React.JSX.Element {
               {showTable ? 'Charts' : 'Table'}
             </Button>
             {/*
-              Review §G2. Exports exactly what is on screen — the scope, the
-              range and the source filter all apply — because a button on a
+              Exports exactly what is on screen — the scope, the range and the
+              source filter all apply — because a button on a
               filtered view that quietly saved everything would be the one kind
               of export nobody could check.
             */}
@@ -347,7 +349,7 @@ export function UsageDashboard(): React.JSX.Element {
         </div>
 
         <div className="grid grid-cols-2 gap-3 @3xl/pane:grid-cols-4">
-          <StatTile label="Reported spend" value={formatCostSummary(totals)} note={unpricedNote} />
+          <StatTile label="Spend" value={formatCostSummary(totals)} hint={unpricedHint} />
           <StatTile
             label="Tokens"
             value={formatTokens(totals.totalInputTokens + totals.totalOutputTokens)}
@@ -355,13 +357,13 @@ export function UsageDashboard(): React.JSX.Element {
           <StatTile
             label="Cached input"
             value={formatTokens(totals.totalCachedInputTokens ?? 0)}
-            note="Billed at a reduced rate"
+            note="Charged at a lower rate"
           />
           <StatTile label="From routines" value={`${routineShare}%`} note="Unattended work" />
         </div>
 
         {isPending && events.length === 0 ? (
-          <EmptyState loading title="Reading usage" />
+          <EmptyState loading title="Loading usage" />
         ) : shown.length === 0 ? (
           <EmptyState
             icon={BarChart3}
@@ -371,9 +373,7 @@ export function UsageDashboard(): React.JSX.Element {
         ) : showTable ? (
           <table className="w-full text-sm">
             <caption className="text-muted-foreground pb-2 text-left text-xs">
-              Totals per {breakdown} over the selected range. A spend ending in{' '}
-              <span className="font-mono">+</span> leaves out turns run on a model with no published
-              price.
+              Totals per {breakdown} over the selected range.
             </caption>
             <thead>
               <tr className="text-muted-foreground border-border border-b text-left text-xs">
@@ -416,11 +416,7 @@ export function UsageDashboard(): React.JSX.Element {
           <>
             <Section
               title={metric === 'cost' ? 'Spend per day' : 'Tokens per day'}
-              description={
-                metric === 'cost'
-                  ? 'A turn on an unpriced model adds no height to its bar — that spend is missing, not zero.'
-                  : 'Tokens are exact for every turn, priced or not.'
-              }
+              description={metric === 'cost' ? 'What each day cost.' : 'What each day sent.'}
               action={
                 <SegmentedControl
                   options={BREAKDOWNS}
@@ -488,15 +484,12 @@ export function UsageDashboard(): React.JSX.Element {
 
             <Section
               title="Totals by model"
-              description="Attributed to the model that served each turn, not to what its persona is set to now. Turns recorded before the model was tracked read as unknown."
+              description="The model that served each turn, not what its persona is set to now."
             >
               <BreakdownRows rows={modelRows} metric={metric} colorOf={paletteColor} />
             </Section>
 
-            <Section
-              title="Totals by source"
-              description="Routines run unattended; summaries are what coordination costs."
-            >
+            <Section title="Totals by source" description="What asked for the work.">
               <BreakdownRows rows={sourceRows} metric={metric} colorOf={paletteColor} />
             </Section>
           </>

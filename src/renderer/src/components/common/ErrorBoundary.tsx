@@ -97,12 +97,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
         <div className="flex flex-col gap-1">
           <p className="text-title font-medium">
-            {pane ? 'This section could not be drawn' : 'Something broke while drawing this screen'}
+            {pane ? 'This section could not be shown' : 'Something went wrong on this screen'}
           </p>
           <p className="text-muted-foreground mx-auto max-w-md text-sm text-pretty">
             {pane
-              ? 'The rest of the app is still working — you can switch to another section. Your data is on disk and is unaffected.'
-              : 'Your personas, skills and conversations are stored on disk and are unaffected. Reloading starts the window again from the same data.'}
+              ? 'The rest of the app is still working — you can switch to another section. Nothing has been lost.'
+              : 'Your personas, skills and conversations are safe. Reloading picks up exactly where this left off.'}
           </p>
         </div>
 

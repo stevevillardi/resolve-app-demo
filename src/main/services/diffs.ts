@@ -15,9 +15,10 @@ import {
 } from './git'
 import { workingPathFor } from './run-lock'
 import { PERSONA_BRANCH_PREFIX } from './worktrees'
+import { notFound } from './not-found'
 
 /**
- * The content behind the diff viewer (Phase 19, review A1/A6).
+ * The content behind the diff viewer.
  *
  * Serves whole file pairs with stated budgets rather than paging: a turn or a
  * branch usually touches a handful of readable files, and the rare monster is
@@ -82,10 +83,10 @@ export async function branchDiff(
 
 export async function workDiff(contactId: string, messageId: string): Promise<DiffResult> {
   const contact = getContact(contactId)
-  if (!contact) throw new Error(`No such contact: ${contactId}`)
+  if (!contact) throw notFound('contact', contactId)
 
   const row = initDb().select().from(messages).where(eq(messages.id, messageId)).get()
-  if (!row || row.contactId !== contactId) throw new Error('No such message in this conversation.')
+  if (!row || row.contactId !== contactId) throw notFound('message', messageId)
 
   const work = toMessage(row).work
   if (!work) return { files: [], filesOmitted: 0 }

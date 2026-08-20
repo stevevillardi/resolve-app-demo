@@ -18,10 +18,10 @@ interface JournalNoticeProps {
  * PR arrow): a milestone marks a decision the fleet will keep, scales weigh
  * a tradeoff, a scroll is the routine session record.
  *
- * One glyph, not two: durability used to add a trailing pin, but decisions
- * and tradeoffs are durable by construction (compaction.ts), so every such
- * banner wore both marks. The category icon now carries the durable tooltip
- * itself instead.
+ * One glyph, not two: decisions and tradeoffs are durable by construction
+ * (compaction.ts), so a separate durability mark would sit on every such
+ * banner beside the category icon and say nothing the icon did not. The
+ * category icon carries the durable tooltip itself instead.
  */
 const CATEGORY: Record<SystemSummaryCategory, { label: string; icon: LucideIcon }> = {
   decision: { label: 'Decision', icon: Milestone },
@@ -31,7 +31,7 @@ const CATEGORY: Record<SystemSummaryCategory, { label: string; icon: LucideIcon 
 
 /**
  * A structured end-of-session record, not a chat turn — nobody typed this and
- * nobody was watching when it was written (blueprint §10).
+ * nobody was watching when it was written.
  *
  * So it is shaped like a record: centred, full width, a hairline rule carrying
  * a small-caps label, body text below. No fill, no border box, no accent
@@ -65,7 +65,7 @@ export function JournalNotice({
                   }
                 />
                 <TooltipContent>
-                  Durable — re-injected into every future session on this repo.
+                  Kept indefinitely, and read at the start of every later session on this repo.
                 </TooltipContent>
               </Tooltip>
             )

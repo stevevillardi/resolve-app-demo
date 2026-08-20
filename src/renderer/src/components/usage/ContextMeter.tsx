@@ -7,14 +7,13 @@ import {
   formatTokens,
   type ContextTokens
 } from '@/lib/usage'
-import { CONTEXT_WINDOWS_LAST_VERIFIED } from '../../../../shared/context-windows'
 
 /**
- * How full the session is, in the thread header (Phase 22).
+ * How full the session is, in the thread header.
  *
  * The forever-thread's quiet problem: a conversation you can scroll through
  * forever sits on a session that both fills up and re-bills its whole history
- * every turn, and until now nothing on screen said so. UsageBadge beside this
+ * every turn, and nothing else on screen says so. UsageBadge beside this
  * answers "what has this cost" — a lifetime total. This answers "how much room
  * is left", which is the question whose answer changes what you do next.
  *
@@ -27,9 +26,9 @@ export function ContextMeter({ tokens }: { tokens: ContextTokens | null }): Reac
 
   const fill = contextFill(tokens)
 
-  // No window for this model, so no fraction — the bare figure, which is what
-  // this app showed everywhere before there was a table to divide by. The
-  // fallback is what makes showing a percentage elsewhere defensible.
+  // No window for this model, so no fraction — the bare token figure instead.
+  // Having this fallback is what makes showing a percentage elsewhere
+  // defensible.
   if (!fill) {
     return (
       <Tooltip>
@@ -38,10 +37,6 @@ export function ContextMeter({ tokens }: { tokens: ContextTokens | null }): Reac
         </TooltipTrigger>
         <TooltipContent>
           <MeterDetail tokens={tokens} />
-          <p className="text-muted-foreground mt-1 max-w-64 text-xs">
-            No percentage: this app has no context-window figure for {tokens.model ?? 'this model'},
-            and a guess would look like a measurement.
-          </p>
         </TooltipContent>
       </Tooltip>
     )
@@ -96,9 +91,7 @@ export function ContextMeter({ tokens }: { tokens: ContextTokens | null }): Reac
       <TooltipContent>
         <MeterDetail tokens={tokens} />
         <p className="text-muted-foreground mt-1 max-w-64 text-xs">
-          Window {formatTokens(fill.window)},{' '}
-          {fill.windowSource === 'published' ? 'as published' : 'inferred from the model family'} on{' '}
-          {CONTEXT_WINDOWS_LAST_VERIFIED}.
+          Of about {formatTokens(fill.window)} this model can hold at once.
         </p>
         {step !== 'safe' && (
           <p className="mt-1 max-w-64 text-xs">
@@ -115,10 +108,9 @@ export function ContextMeter({ tokens }: { tokens: ContextTokens | null }): Reac
  *
  * `≈` on the fraction is not decoration: a turn reports one usage total
  * covering every model request it made, so a turn that ran ten tools reports
- * their prompts added together. It reads high, and the tooltip says so —
- * because the remedy this meter invites costs the model's memory of the thread,
- * and nobody should spend that on a number the app knows is approximate without
- * being told.
+ * their prompts added together, and the figure reads high. The remedy this
+ * meter invites costs the model's memory of the thread, so the approximation is
+ * marked rather than presented as a measurement.
  */
 function MeterDetail({ tokens }: { tokens: ContextTokens }): React.JSX.Element {
   return (
@@ -129,11 +121,7 @@ function MeterDetail({ tokens }: { tokens: ContextTokens }): React.JSX.Element {
       </span>
       <span>
         <span className="font-mono tabular-nums">{formatTokens(tokens.billedInputTokens)}</span>{' '}
-        input tokens billed over {tokens.turns} {tokens.turns === 1 ? 'turn' : 'turns'}
-      </span>
-      <span className="text-muted-foreground max-w-64">
-        Approximate — one turn reports a single figure covering every request it made, so a turn
-        that ran several tools reads high.
+        sent in total across {tokens.turns} {tokens.turns === 1 ? 'turn' : 'turns'}
       </span>
     </div>
   )

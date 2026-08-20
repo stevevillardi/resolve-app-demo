@@ -117,8 +117,9 @@ function BranchDetailBody({
         this needs no `titleMono` prop.
 
         The contact name is not repeated here: it already contains the repo
-        (`Refactor Buddy · checkout-service`), so the old header read
-        "checkout-service · Refactor Buddy · checkout-service · 88c574d".
+        (`Refactor Buddy · checkout-service`), so including it would make the
+        header read "checkout-service · Refactor Buddy · checkout-service ·
+        88c574d".
       */}
       <PaneHeader
         leading={<GitBranch className="text-muted-foreground size-4 shrink-0" />}
@@ -228,7 +229,7 @@ function BranchDetailBody({
                 ? '1 file not committed yet'
                 : `${branch.dirtyFiles.length} files not committed yet`
             }
-            description="Sitting in the checkout, invisible to the diff below and to a pull request until committed."
+            description="Not committed yet, so they will not appear in the diff below or in a pull request."
           >
             <ul className="grid gap-x-6 gap-y-0.5 @2xl/pane:grid-cols-2 @5xl/pane:grid-cols-3">
               {branch.dirtyFiles.map((file) => (
@@ -246,7 +247,7 @@ function BranchDetailBody({
           }
           description={
             branch.files.length > 0
-              ? 'Committed on this branch, measured from where it left your checkout.'
+              ? 'Committed on this branch, compared with your own checkout.'
               : undefined
           }
         >
@@ -337,9 +338,9 @@ function BranchDetailBody({
       />
 
       {/* The same dialog every other destructive action in the app goes
-          through. This used to be a pair of buttons that appeared in place,
-          which made discarding a branch — the one irreversible action here —
-          the most casual-looking of the three. */}
+          through. Discarding a branch is the one irreversible action here, so
+          it must not be the most casual-looking of the three — which is what a
+          pair of buttons appearing in place would make it. */}
       <ConfirmDeleteDialog
         open={confirmingDiscard}
         onOpenChange={setConfirmingDiscard}
@@ -375,7 +376,7 @@ function BranchDetailBody({
 }
 
 /**
- * The one place the app authors a commit, and it is this click (Phase 19).
+ * The one place the app authors a commit, and it is this click.
  *
  * The persona is the author, so history attributes the work truthfully; the
  * user is the committer, because the click was theirs. The message is the

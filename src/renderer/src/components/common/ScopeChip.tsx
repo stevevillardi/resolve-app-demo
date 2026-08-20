@@ -9,10 +9,11 @@ import type { GithubScope, SandboxLevel } from '@/types'
  * The app's signature element.
  *
  * A persona is defined as much by what it *cannot* do as by its prompt — the
- * filesystem sandbox and the GitHub scope are independent permission axes
- * (blueprint §9), and the governance story is the whole point of §16's third
- * journey. Surfacing them as a compact, always-visible capsule is what makes
- * this read as a console for scoped workers rather than a chat window.
+ * filesystem sandbox and the GitHub scope are independent permission axes, and
+ * being able to see what a persona is allowed to do, without opening anything,
+ * is the governance story this app is built around. Surfacing them as a
+ * compact, always-visible capsule is what makes this read as a console for
+ * scoped workers rather than a chat window.
  *
  * Three severity levels, ordered by blast radius, shared across both axes.
  * Always icon + label, never colour alone.
@@ -66,13 +67,13 @@ const GITHUB: Record<GithubScope, Descriptor> = {
     label: 'read_only',
     icon: Eye,
     severity: 'safe',
-    hint: 'Can read issues and code on GitHub. Cannot push or comment — unless its sandbox is full_access, which lifts every restriction including this one.'
+    hint: 'Can read issues and code on GitHub. Cannot push or comment — unless it also has full access to your files, which lifts every restriction including this one.'
   },
   open_pr: {
     label: 'open_pr',
     icon: GitPullRequest,
     severity: 'elevated',
-    hint: 'Can push a branch and open a pull request. Cannot merge — unless its sandbox is full_access.'
+    hint: 'Can push a branch and open a pull request. Cannot merge — unless it also has full access to your files.'
   },
   full_access: {
     label: 'full_access',
@@ -96,7 +97,7 @@ const MCP: Record<McpReach, Descriptor> = {
     label: 'none',
     icon: Unplug,
     severity: 'safe',
-    hint: 'No MCP servers. This session can only touch its own files.'
+    hint: 'No connected tools. It can only touch files in its own checkout.'
   },
   github: {
     label: 'github',
@@ -104,7 +105,7 @@ const MCP: Record<McpReach, Descriptor> = {
     severity: 'elevated',
     // Says what it does *not* add, deliberately: holding the server grants
     // nothing the GitHub scope beside it does not already allow.
-    hint: 'Can reach GitHub through its MCP server, never beyond its GitHub scope.'
+    hint: 'Can reach GitHub, never beyond what its GitHub permission allows.'
   }
 }
 

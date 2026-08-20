@@ -13,9 +13,9 @@ import { useUiStore } from '@/store/useUiStore'
 /**
  * Master list for the usage section: all spend, one persona's, or one repo's.
  *
- * Persona and repo are the two axes blueprint §10 names, and a Contact sits at
- * the intersection of them — so scoping lives here and the dashboard is left to
- * the range, source and metric controls.
+ * Persona and repo are the two axes spend is reported along, and a Contact sits
+ * at the intersection of them — so scoping lives here and the dashboard is left
+ * to the range, source and metric controls.
  */
 export function UsageScopeList(): React.JSX.Element {
   const scope = useUiStore((state) => state.usageScope)
@@ -72,7 +72,7 @@ export function UsageScopeList(): React.JSX.Element {
         <EmptyState
           compact
           title="No spend yet"
-          description="Usage appears here once a Contact takes its first turn."
+          description="Usage appears here after a contact's first reply."
         />
       )}
 

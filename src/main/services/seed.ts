@@ -19,9 +19,9 @@ const SEED_VERSION = '1'
 
 /**
  * Inserts the first-run skills and persona templates, once ever — the
- * RECOMMENDED tier only, which is exactly the pre-Phase-17 content. The wider
- * catalog is opt-in through the onboarding picker and the starter library
- * (applyStarterSelection below); startup never installs it uninvited.
+ * RECOMMENDED tier only. The wider catalog is opt-in through the onboarding
+ * picker and the starter library (applyStarterSelection below); startup never
+ * installs it uninvited.
  *
  * Guarded on the `seed_version` marker rather than on the tables being empty.
  * That distinction is the whole point: a user who deletes every seeded skill
@@ -100,7 +100,7 @@ export function starterCatalog(): StarterCatalog {
 }
 
 /**
- * Aligns the installed starter content with a selection (Phase 17).
+ * Aligns the installed starter content with a selection.
  *
  * Only catalog ids are ever touched — user-created personas and skills are
  * outside this function's vocabulary entirely, and an id it does not recognise
@@ -130,7 +130,7 @@ export function applyStarterSelection(
     ...selectedSkillIds.filter((id) => !skillById.has(id))
   ]
   if (unknown.length > 0) {
-    throw new Error(`Not in the starter catalog: ${unknown.join(', ')}`)
+    throw new Error(`Not in the starter library: ${unknown.join(', ')}`)
   }
 
   const wantPersonas = new Set(selectedPersonaIds)

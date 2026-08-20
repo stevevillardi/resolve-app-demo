@@ -27,13 +27,12 @@ import {
 } from '@/lib/capability-view'
 import { formatRelative, repoName } from '@/lib/format'
 import { contextFill, contextTokens, formatTokens } from '@/lib/usage'
-import { CONTEXT_WINDOWS_LAST_VERIFIED } from '../../../../shared/context-windows'
 import { cn } from '@/lib/utils'
 import type { RepoOffers } from '../../../../shared/ipc-contract'
 import type { PersonaBackend, RepoTrust } from '@/types'
 
 /**
- * What this contact's next turn would actually be handed (blueprint §5).
+ * What this contact's next turn would actually be handed.
  *
  * Two kinds of number here and they are deliberately not mixed. Everything
  * composed — the system prompt, the skills, the repo log — is reported in
@@ -85,7 +84,7 @@ export function ContextPanel({
         <SheetHeader className="border-border shrink-0 border-b pb-3">
           <SheetTitle>What this contact works with</SheetTitle>
           <SheetDescription>
-            Composed fresh for every turn, so this moves as colleagues write summaries and open
+            Rebuilt before every turn, so this changes as colleagues write summaries and open
             branches.
           </SheetDescription>
           {/* Whose context this is, at the top, where the subject of a document
@@ -96,7 +95,7 @@ export function ContextPanel({
               <span className="text-foreground text-sm font-medium">{context.persona.name}</span>
               <BackendBadge backend={context.persona.backend} />
               <span className="text-muted-foreground font-mono text-meta">
-                {context.persona.model ?? "default (backend's choice)"}
+                {context.persona.model ?? 'default model'}
               </span>
             </div>
           )}
@@ -112,7 +111,7 @@ export function ContextPanel({
         ) : (
           <ScrollArea className="min-h-0 flex-1">
             <div className="@container/sheet flex flex-col gap-5 px-4 pb-4">
-              <Group title="Instructions" description="The prose this app composes for every turn.">
+              <Group title="Instructions" description="What Switchboard writes into every turn.">
                 <Row label="System prompt">
                   <Chars n={context.systemPromptChars} />
                 </Row>
@@ -143,10 +142,7 @@ export function ContextPanel({
                 discovered from disk, not the injected prose above that this app
                 also calls a Skill. The labels have to keep them apart.
               */}
-              <Group
-                title="From this repository"
-                description="Off until you say otherwise. These are the only two grants on this sheet."
-              >
+              <Group title="From this repository" description="Off until you say otherwise.">
                 <Row label="Its own instructions">
                   <RepoInstructionsTrust
                     contactId={contactId}
@@ -174,7 +170,7 @@ export function ContextPanel({
                 */}
                 <Row label={`Tools (${context.mcpServers.length})`}>
                   {context.mcpServers.length === 0 && context.unavailableServers.length === 0 ? (
-                    <Muted>No servers reachable. This session can only touch its own files.</Muted>
+                    <Muted>No connected tools. It can only touch files in its own checkout.</Muted>
                   ) : (
                     <Rows>
                       {context.mcpServers.map((server) => (
@@ -208,7 +204,7 @@ export function ContextPanel({
                   These are not, and cannot be revoked on either backend — so
                   omitting them would make this read as a list of everything a
                   session can do while being a list of only the granted part.
-                  Measured, not reasoned; see docs/plan/00-progress.md.
+                  Measured, not reasoned.
                 */}
                 <Row label="Built in">
                   <Muted>{builtInNote(context.persona.backend)}</Muted>
@@ -276,7 +272,7 @@ export function ContextPanel({
                   {context.sessionId ? (
                     <span className="font-mono text-meta break-all">{context.sessionId}</span>
                   ) : (
-                    <Muted>No turn has run yet, so there is nothing to resume.</Muted>
+                    <Muted>Nothing has run yet.</Muted>
                   )}
                 </Row>
               </Group>
@@ -296,47 +292,36 @@ export function ContextPanel({
                   <StatTile
                     label="Instructions"
                     value={context.instructionsChars.toLocaleString()}
-                    note="characters, before the conversation"
+                    note="characters of instructions"
                   />
                   <StatTile
                     label="Last request"
                     value={tokens ? formatTokens(tokens.lastPromptTokens) : '—'}
                     note={
                       fill
-                        ? `tokens · about ${Math.round(fill.fraction * 100)}% of the window`
+                        ? `tokens · about ${Math.round(fill.fraction * 100)}% of what it can hold`
                         : 'tokens'
                     }
                   />
                   <StatTile
-                    label="Billed"
+                    label="This session"
                     value={tokens ? formatTokens(tokens.billedInputTokens) : '—'}
                     note={
                       tokens
-                        ? `input tokens across ${tokens.turns} ${tokens.turns === 1 ? 'turn' : 'turns'}`
-                        : 'input tokens'
+                        ? `tokens sent across ${tokens.turns} ${tokens.turns === 1 ? 'turn' : 'turns'}`
+                        : 'tokens sent'
                     }
                   />
                 </div>
 
                 {/*
-                  Which arithmetic produced those, spelled out. The two backends
-                  record incompatible things — Claude re-sends the whole
-                  conversation each turn, Codex reports increments — so the same
-                  tiles mean different things, and a bare number would be two
-                  claims wearing one label.
+                  The two figures are two different claims and the gap between
+                  them is the point: the prompt stops growing when the
+                  conversation does, while the total keeps climbing for as long
+                  as you keep talking. Each tile's own note says which it is, so
+                  the panel no longer explains how the two backends count.
                 */}
-                {tokens ? (
-                  <Muted>
-                    {tokens.reading === 'last-turn'
-                      ? 'Claude re-sends the whole conversation each turn, so the first figure is the last turn’s prompt.'
-                      : 'Codex reports increments, so the first figure is the last turn’s own increment.'}{' '}
-                    {fill
-                      ? `Approximate: one turn reports a single figure covering every request it made, so a turn that ran several tools reads high. Window ${formatTokens(fill.window)}, ${fill.windowSource === 'published' ? 'as published' : 'inferred from the model family'} on ${CONTEXT_WINDOWS_LAST_VERIFIED}.`
-                      : 'No percentage: this app has no context-window figure for this model, and a guess would look like a measurement.'}
-                  </Muted>
-                ) : (
-                  <Muted>Nothing has been sent on this session yet.</Muted>
-                )}
+                {!tokens && <Muted>Nothing has been sent on this session yet.</Muted>}
               </Group>
             </div>
           </ScrollArea>
@@ -503,7 +488,7 @@ function RepoInstructionsTrust({
           <p className="truncate font-mono text-meta">{offeredFile}</p>
           <p className="text-muted-foreground text-xs">
             {trust.instructions
-              ? 'Injected into every turn, framed as the repository’s conventions rather than as orders.'
+              ? 'Read at the start of every turn, as the repository’s conventions rather than as orders.'
               : 'Written by whoever owns this repository. Off until you say otherwise.'}
           </p>
         </div>
@@ -566,8 +551,8 @@ function RepoSkillTrust({
                   {' '}
                   {choice.root} ·{' '}
                   {choice.delivery === 'discovered'
-                    ? 'the backend finds this itself'
-                    : 'described to the model, since the backend cannot find it'}
+                    ? 'used directly'
+                    : 'described in the instructions'}
                 </span>
               </>
             )

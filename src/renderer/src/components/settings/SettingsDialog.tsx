@@ -59,11 +59,10 @@ const THEME_OPTIONS = [
 ] as const
 
 /**
- * The settings surface (Phase 17). Before this, everything here was either
- * reachable only during onboarding (Claude/Codex auth — keys could never be
- * changed or removed afterwards), set implicitly with no way to see it
- * (workspace root, written on first clone), or scattered (theme in the rail
- * footer, GitHub in its own dialog).
+ * The settings surface, and the one place every durable choice is both visible
+ * and changeable: Claude/Codex auth (so keys can be replaced or removed, not
+ * only set once during onboarding), the workspace root (written implicitly on
+ * the first clone, and otherwise invisible), the theme, and GitHub.
  *
  * A dialog rather than a nav section on purpose: settings are cross-cutting
  * and small, and a Section would pay the master-detail and PANEL-record tax
@@ -340,8 +339,7 @@ function SettingsContent(): React.JSX.Element {
             <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border p-4">
               <FlaskConical className="text-muted-foreground size-5 shrink-0" />
               <p className="text-muted-foreground min-w-0 flex-1 text-sm text-pretty">
-                Wipe everything and relaunch as a fresh install — for testing onboarding and
-                seeding.
+                Erase every persona, contact, conversation and connection, and start over.
               </p>
               <Button variant="outline" size="sm" onClick={() => setConfirmingReset(true)}>
                 Reset app…

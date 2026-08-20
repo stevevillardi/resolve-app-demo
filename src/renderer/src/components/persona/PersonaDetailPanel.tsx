@@ -123,7 +123,7 @@ function PersonaForm({
   // real and common answer rather than an unset field. A sentinel value is
   // needed because Select can't carry null.
   const modelItems = [
-    { label: "Default (backend's choice)", value: DEFAULT_MODEL },
+    { label: 'Default model', value: DEFAULT_MODEL },
     ...availableModels.map((name) => ({ label: name, value: name }))
   ]
   const [systemPrompt, setSystemPrompt] = useState(persona.systemPrompt)
@@ -178,10 +178,10 @@ function PersonaForm({
         actions={
           <>
             <BackendBadge backend={backend} />
-            {/* Still no UsageBadge here, though real events exist as of Phase 6.
-                Spend is per Contact, and a persona can be bound to several — a
-                single figure here would be summing unlike things. The dashboard
-                (Phase 10) is where cross-contact totals belong. */}
+            {/* No UsageBadge here. Spend is per Contact, and a persona can be
+                bound to several — a single figure here would be summing unlike
+                things. The usage dashboard is where cross-contact totals
+                belong. */}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -310,7 +310,10 @@ function PersonaForm({
           </div>
 
           <FieldGrid>
-            <Field label="Backend" hint="Codex streams live tool progress; Claude cannot.">
+            <Field
+              label="Backend"
+              hint="Codex shows each step as it runs; Claude reports when it finishes."
+            >
               <SegmentedControl
                 options={BACKEND_OPTIONS}
                 value={backend}
@@ -326,7 +329,7 @@ function PersonaForm({
               />
             </Field>
 
-            <Field label="Model" hint="Availability depends on your account, not just the backend.">
+            <Field label="Model" hint="Which models you can pick depends on your account.">
               <Select
                 value={model ?? DEFAULT_MODEL}
                 onValueChange={(value) => setModel(value === DEFAULT_MODEL ? null : String(value))}
@@ -348,7 +351,7 @@ function PersonaForm({
 
           {/* Spans, and caps itself: this is the one control in the pane that
               is long-form prose, and a full-width textarea on a wide window is
-              a worse place to write than the narrow column it replaced. */}
+              a worse place to write than a narrow column. */}
           <FieldGridSpan>
             <Field label="System prompt" htmlFor="persona-prompt">
               <Textarea
@@ -364,7 +367,7 @@ function PersonaForm({
 
         <Section
           title="Permissions"
-          description="Three independent axes: what this persona can touch on disk, what it can do on GitHub, and whether it can reach anything off this machine at all."
+          description="What this persona can touch on your files, what it can do on GitHub, and whether it can reach anything off this machine. Each is set on its own."
         >
           <FieldGrid>
             <Field label="Sandbox">
@@ -444,7 +447,7 @@ function PersonaForm({
 
         <Section
           title="Skills"
-          description="Reusable instructions injected into every session this persona starts."
+          description="Reusable instructions read at the start of every session this persona begins."
         >
           {/* Three across on a wide pane. Each entry is a name and one line of
               description, so a single column left this list running down the
@@ -469,11 +472,11 @@ function PersonaForm({
             </p>
           ) : (
             /*
-              Was a full absolute repo path against a raw `backendSessionId` —
-              a 36-character opaque id that answers no question anyone has, next
-              to 80 characters of path saying what its last segment says. Now:
-              where it works, how it is isolated, and a way to actually go
-              there, which is what you wanted when you read the list.
+              Where it works, how it is isolated, and a way to actually go
+              there — which is what you wanted when you read the list. Not the
+              full absolute repo path against a raw `backendSessionId`: a
+              36-character opaque id answers no question anyone has, and 80
+              characters of path say what their last segment says.
             */
             <FieldGrid columns={3} className="gap-1.5">
               {boundContacts.map((contact) => (
@@ -517,8 +520,8 @@ function PersonaForm({
         }
         {...(boundContacts.length > 0
           ? {
-              // The doc-16 side-by-side read: the skill dialog names what a
-              // delete touches, so this one names what blocks it.
+              // Read side by side with the skill dialog, which names what a
+              // delete touches: this one names what blocks it.
               consequence: (
                 <ul className="flex flex-col gap-0.5">
                   {boundContacts.map((contact) => (
@@ -553,9 +556,9 @@ export function PersonaDetailPanel(): React.JSX.Element {
     )
   }
 
-  // Keyed on the persona id so switching selection remounts the form. The
-  // previous revision initialised state from props once and never re-synced,
-  // so editing one persona then opening another showed the first one's values.
+  // Keyed on the persona id so switching selection remounts the form. Without
+  // the key, state initialised from props on mount never re-syncs, so editing
+  // one persona then opening another shows the first one's values.
   return (
     <PersonaForm
       key={persona.id}
