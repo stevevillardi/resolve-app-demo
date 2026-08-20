@@ -77,26 +77,68 @@ export interface MergeTarget {
   dirty: boolean
 }
 
+/**
+ * How many repositories are read at once.
+ *
+ * The repo loop used to be `for … await`, so a profile with twenty repositories
+ * paid twenty round trips of `git for-each-ref` + `git worktree list` before the
+ * panel could paint anything — invisible at the two repos this app was built
+ * against, and the first thing anyone with a real fleet would notice.
+ *
+ * Bounded rather than a bare `Promise.all` over every repo, because `branchesIn`
+ * is *already* unbounded within a repo: it fans out three git calls per ref. An
+ * uncapped outer loop multiplies the two, so twenty repos of five branches would
+ * ask the OS for three hundred concurrent subprocesses at once and spend more
+ * time on process setup than on git. Four is a floor that keeps the slowest repo
+ * off the critical path without turning a read into a fork bomb.
+ */
+const REPO_READ_CONCURRENCY = 4
+
+/**
+ * `items.map(fn)` with at most `limit` in flight, results in input order.
+ *
+ * A local helper rather than a dependency: this is the only place in the app
+ * that fans out over an unbounded list of subprocess calls, and p-limit's
+ * feature set past "run at most n" is all things nothing here wants.
+ */
+export async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await fn(items[index]!)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
+
 export async function listPersonaBranches(): Promise<BranchSummary[]> {
   const contacts = allContacts()
 
-  const summaries: BranchSummary[] = []
   // Iterated over Groups rather than Contacts, because a Group is created per
   // repo and never removed with its members. Deriving the repo list from
   // contacts would drop every branch whose owner had been deleted — which is
   // the exact case this function exists to keep visible.
-  for (const { repoPath } of listGroups()) {
-    summaries.push(
-      ...(await branchesIn(
-        repoPath,
-        contacts.filter((contact) => contact.repoPath === repoPath)
-      ))
+  const perRepo = await mapLimit(listGroups(), REPO_READ_CONCURRENCY, ({ repoPath }) =>
+    branchesIn(
+      repoPath,
+      contacts.filter((contact) => contact.repoPath === repoPath)
     )
-  }
+  )
 
   // Most recent first: the panel is a worklist, and the branch somebody just
-  // asked about is the one they came here for.
-  return summaries.sort((a, b) => b.committedAt - a.committedAt)
+  // asked about is the one they came here for. This is also what makes the
+  // concurrency above safe to change — the order of the answer does not depend
+  // on the order the repos happened to finish in.
+  return perRepo.flat().sort((a, b) => b.committedAt - a.committedAt)
 }
 
 async function branchesIn(

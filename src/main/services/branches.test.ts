@@ -142,6 +142,45 @@ describe('listPersonaBranches', () => {
 
     expect((await listPersonaBranches())[0].hasWorktree).toBe(false)
   })
+
+  /**
+   * The repositories are read concurrently (Phase 25 §B3), so nothing about the
+   * answer may depend on which repo git finished first.
+   *
+   * Two repos, and the *second* one holds the newer commit — so a version that
+   * concatenated in repo order rather than sorting by commit time would put them
+   * the wrong way round, and a version that dropped everything past the first
+   * repo would return one row instead of two.
+   */
+  it('gathers branches from every repo, newest first regardless of repo order', async () => {
+    const second = join(scratch, 'other-app')
+    execFileSync('git', ['init', '-q', '-b', 'main', second])
+    run(['config', 'user.email', 'test@example.com'], second)
+    run(['config', 'user.name', 'Test'], second)
+    commitIn(second, 'src/a.ts', 'export const a = 1\n', 'init')
+
+    const older = await workingWriter()
+    // git commit timestamps are whole seconds, so two commits in the same tick
+    // are a tie and the sort has nothing to order them by.
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+
+    const newer = createContact({
+      personaTemplateId: PERSONA_WRITER,
+      repoPath: second,
+      displayName: 'Refactor Buddy · other-app'
+    })
+    await ensureWorktree(newer)
+    commitIn(newer.worktreePath as string, 'src/c.ts', 'export const c = 3\n', 'later work')
+
+    const summaries = await listPersonaBranches()
+
+    expect(summaries).toHaveLength(2)
+    expect(summaries.map((s) => s.repoPath)).toEqual([second, repo])
+    expect(summaries.map((s) => s.branch)).toEqual([newer.branch, older.branch])
+    // Each row keeps its own repo's contact, which is the thing a shared
+    // accumulator across concurrent repos would get wrong.
+    expect(summaries.map((s) => s.contactId)).toEqual([newer.id, older.id])
+  })
 })
 
 describe('mergeTargetsFor', () => {
