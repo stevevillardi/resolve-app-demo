@@ -89,7 +89,7 @@ function BranchRowMenu({ branch }: { branch: BranchSummary }): React.JSX.Element
  * "what is outstanding on this project" is the question the panel answers.
  */
 export function BranchList({ filter }: BranchListProps): React.JSX.Element {
-  const { data: branches = [], isLoading } = useBranches()
+  const { data: branches = [], isLoading, isError } = useBranches()
   const selected = useUiStore((state) => state.selectedBranch)
   const setSelected = useUiStore((state) => state.setSelectedBranch)
 
@@ -120,6 +120,21 @@ export function BranchList({ filter }: BranchListProps): React.JSX.Element {
     // centred paragraph, which is the one loading state in the app that did not
     // look like the others.
     return <EmptyState compact loading title="Reading branches…" />
+  }
+
+  // Worded for what actually fails here. This read shells out to git rather
+  // than to the database, and `branchesIn` already swallows one unreachable
+  // repository — so reaching this means the call itself failed, not that a
+  // checkout moved.
+  if (isError) {
+    return (
+      <EmptyState
+        compact
+        error
+        title="Couldn’t read branches"
+        description="Git did not answer. Check that the repositories are still where the contacts point."
+      />
+    )
   }
 
   if (matching.length === 0) {

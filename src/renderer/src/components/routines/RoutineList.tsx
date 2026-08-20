@@ -108,7 +108,7 @@ export function RoutineList({ filter }: { filter: ListFilter }): React.JSX.Eleme
   const setSelectedId = useUiStore((state) => state.setSelectedRoutineId)
   const filtering = isFiltering(filter)
 
-  const { data: routines = [], isPending } = useRoutines()
+  const { data: routines = [], isPending, isError } = useRoutines()
   const contacts = useContacts().data ?? []
   const personaTemplates = usePersonas().data ?? []
   // Live state: a routine mid-fire must not read "Last run 3 days ago", which
@@ -157,6 +157,20 @@ export function RoutineList({ filter }: { filter: ListFilter }): React.JSX.Eleme
   // showing "No routines yet" during the first fetch tells the user something
   // that is not true.
   if (isPending) return <EmptyState compact loading title="Loading routines…" />
+
+  // Ahead of both nothings below, because a failed read is a third state and
+  // the other two would lie about it: "no routines yet" is advice to create
+  // something, offered in answer to a question the app could not ask.
+  if (isError) {
+    return (
+      <EmptyState
+        compact
+        error
+        title="Couldn’t load routines"
+        description="The app could not read from its own database. Reopening the window usually clears it."
+      />
+    )
+  }
 
   if (visible.length === 0) {
     // Two different nothings: a filter that matched nothing, and a section

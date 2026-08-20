@@ -98,7 +98,7 @@ function PersonaRowMenu({
 export function PersonaList({ filter }: { filter: ListFilter }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedPersonaId)
   const setSelectedId = useUiStore((state) => state.setSelectedPersonaId)
-  const { data: personaTemplates = [], isPending } = usePersonas()
+  const { data: personaTemplates = [], isPending, isError } = usePersonas()
   const { data: contacts = [] } = useContacts()
   const filtering = isFiltering(filter)
 
@@ -124,6 +124,20 @@ export function PersonaList({ filter }: { filter: ListFilter }): React.JSX.Eleme
 
   if (isPending) {
     return <EmptyState compact loading title="Loading personas…" />
+  }
+
+  // Ahead of both nothings below, because a failed read is a third state and
+  // the other two would lie about it: "no personas yet" is advice to create
+  // something, offered in answer to a question the app could not ask.
+  if (isError) {
+    return (
+      <EmptyState
+        compact
+        error
+        title="Couldn’t load personas"
+        description="The app could not read from its own database. Reopening the window usually clears it."
+      />
+    )
   }
 
   if (visible.length === 0) {

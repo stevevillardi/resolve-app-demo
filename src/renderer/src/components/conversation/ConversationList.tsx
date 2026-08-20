@@ -182,7 +182,7 @@ export function ConversationList({ filter }: { filter: ListFilter }): React.JSX.
   const selected = useUiStore((state) => state.selectedConversation)
   const setSelected = useUiStore((state) => state.setSelectedConversation)
   const setDialog = useUiStore((state) => state.setDialog)
-  const { data: contacts = [], isPending } = useContacts()
+  const { data: contacts = [], isPending, isError } = useContacts()
   const { data: groups = [] } = useGroups()
   const { data: personaTemplates = [] } = usePersonas()
   const { data: previews = [] } = useMessagePreviews()
@@ -350,6 +350,20 @@ export function ConversationList({ filter }: { filter: ListFilter }): React.JSX.
 
   if (isPending) {
     return <EmptyState compact loading title="Loading conversations…" />
+  }
+
+  // Ahead of both nothings below, because a failed read is a third state and
+  // the other two would lie about it: "no conversations yet" is advice to create
+  // something, offered in answer to a question the app could not ask.
+  if (isError) {
+    return (
+      <EmptyState
+        compact
+        error
+        title="Couldn’t load conversations"
+        description="The app could not read from its own database. Reopening the window usually clears it."
+      />
+    )
   }
 
   if (visibleContacts.length === 0 && visibleGroups.length === 0) {

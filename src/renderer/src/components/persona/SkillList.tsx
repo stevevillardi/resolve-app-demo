@@ -73,7 +73,7 @@ function SkillRowMenu({
 export function SkillList({ filter }: { filter: ListFilter }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedSkillId)
   const setSelectedId = useUiStore((state) => state.setSelectedSkillId)
-  const { data: skills = [], isPending } = useSkills()
+  const { data: skills = [], isPending, isError } = useSkills()
   const { data: personaTemplates = [] } = usePersonas()
   const filtering = isFiltering(filter)
 
@@ -92,6 +92,20 @@ export function SkillList({ filter }: { filter: ListFilter }): React.JSX.Element
 
   if (isPending) {
     return <EmptyState compact loading title="Loading skills…" />
+  }
+
+  // Ahead of both nothings below, because a failed read is a third state and
+  // the other two would lie about it: "no skills yet" is advice to create
+  // something, offered in answer to a question the app could not ask.
+  if (isError) {
+    return (
+      <EmptyState
+        compact
+        error
+        title="Couldn’t load skills"
+        description="The app could not read from its own database. Reopening the window usually clears it."
+      />
+    )
   }
 
   if (visible.length === 0) {
