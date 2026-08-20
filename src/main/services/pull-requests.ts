@@ -1,6 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { initDb } from '../db'
 import { groupMessages } from '../db/schema'
+import { recordAuditEvent, type AuditActor } from './audit-events'
 import { getContact } from './contacts'
 import {
   commitSubjects,
@@ -95,7 +96,7 @@ export async function pullRequestState(contactId: string): Promise<PrState> {
  * would be worse. Commenting says what changed, on the thread where the
  * conversation already is.
  */
-export async function openPullRequest(contactId: string): Promise<PrResult> {
+export async function openPullRequest(contactId: string, actor?: AuditActor): Promise<PrResult> {
   const context = await resolve(contactId)
   const { contact, workingPath, branch, owner, repo, token } = context
   const client = gitHubClient(token)
@@ -141,9 +142,25 @@ export async function openPullRequest(contactId: string): Promise<PrResult> {
   const summary = latestSummary(contact.id, branch)
   const existing = await client.findOpenPr(owner, repo, branch)
 
+  const auditPr = (result: PrResult): PrResult => {
+    recordAuditEvent({
+      action: 'pull_request_opened',
+      actor,
+      contactId: contact.id,
+      repoPath: contact.repoPath,
+      personaTemplateId: contact.personaTemplateId,
+      summary:
+        result.action === 'created'
+          ? `Opened pull request #${result.number} from ${contact.displayName}`
+          : `Commented on pull request #${result.number} from ${contact.displayName}`,
+      metadata: { prNumber: result.number, prUrl: result.url, prAction: result.action }
+    })
+    return result
+  }
+
   if (existing) {
     await client.comment(owner, repo, existing.number, updateBody(context, commits, summary))
-    return { ...existing, action: 'commented' }
+    return auditPr({ ...existing, action: 'commented' })
   }
 
   const created = await client.createPr({
@@ -155,7 +172,7 @@ export async function openPullRequest(contactId: string): Promise<PrResult> {
     body: openingBody(context, commits, summary)
   })
 
-  return { ...created, action: 'created' }
+  return auditPr({ ...created, action: 'created' })
 }
 
 /**

@@ -22,6 +22,9 @@ vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({
   app: { getPath: () => '/Users/dev/Library/Application Support/persona-router' }
 }))
+// agent-events imports electron's BrowserWindow, which the mock above has no
+// reason to provide.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
 // Reaches the OS keychain otherwise. Left disconnected so no MCP server is
 // offered — the capability assertions below are about repo content.
 vi.mock('./github-auth', () => ({

@@ -56,7 +56,9 @@ const BLURBS: Record<GuideSection, string> = {
   skills: 'Reusable instructions any persona can attach. Write the wording once and share it.',
   routines:
     'A schedule and a prompt. The contact wakes on its own, does the work while you are elsewhere, and reports back here.',
-  usage: 'What every turn cost, broken down by persona, repo and model.'
+  usage: 'What every turn cost, broken down by persona, repo and model.',
+  activity:
+    'A record of what changed and who did it — contacts bound or renamed, repo trust granted, branches merged.'
 }
 
 /**

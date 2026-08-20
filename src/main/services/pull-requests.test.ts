@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { groupMessages, groups, personaTemplates } from '../db/schema'
+import { auditEvents, groupMessages, groups, personaTemplates } from '../db/schema'
 import { setGitHubClientFactory, type CreatePrInput, type GitHubClient } from './github-client'
 import type { AppDatabase } from '../db/create'
 import type { Contact, GithubScope } from '../../shared/domain'
@@ -30,6 +30,9 @@ let token: string | null = 'gho_test'
 
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
+// agent-events imports electron's BrowserWindow, which this file's minimal
+// electron mock has no reason to provide.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
 vi.mock('./github-auth', () => ({
   getGitHubToken: () => token,
   missingTokenError: (action: string) => new Error(`Connect GitHub first to ${action}.`)
@@ -166,6 +169,11 @@ describe('openPullRequest', () => {
       // this exact change.
       title: 'extract the parser'
     })
+
+    const rows = db.select().from(auditEvents).all()
+    const audit = rows.find((row) => row.action === 'pull_request_opened')
+    expect(audit?.contactId).toBe(contact.id)
+    expect(audit?.metadata).toMatchObject({ prNumber: 7, prAction: 'created' })
   })
 
   /**

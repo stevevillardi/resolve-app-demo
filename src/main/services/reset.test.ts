@@ -21,6 +21,11 @@ vi.mock('electron', () => ({
   app: { getPath: () => userData }
 }))
 
+// agent-events imports electron's BrowserWindow, which the mock above has no
+// reason to provide. clearAppData deletes contacts through the real
+// deleteContact path, which now announces an audit event per contact.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
+
 vi.mock('../db', () => ({
   initDb: () => db,
   closeDb: () => {

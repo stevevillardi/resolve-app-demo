@@ -214,7 +214,13 @@ export const agentStreamMessageSchema = z.discriminatedUnion('kind', [
    * no renderer subscribed to its runId, so previews and unread counts had no
    * signal at all for exactly the messages that arrive while nobody watches.
    */
-  z.object({ kind: z.literal('messages-changed') })
+  z.object({ kind: z.literal('messages-changed') }),
+  /**
+   * An `audit_events` row was written, so `audit.list` is stale. No payload,
+   * for the same reason as `usage-changed` — emitted from recordAuditEvent
+   * itself so every one of its 16 call sites announces by one path.
+   */
+  z.object({ kind: z.literal('audit-changed') })
 ])
 
 // --- Capabilities -----------------------------------------------------------

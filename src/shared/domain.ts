@@ -39,6 +39,39 @@ export const usageSourceSchema = z.enum(['message', 'routine', 'mention', 'summa
  */
 export const costSourceSchema = z.enum(['sdk', 'computed'])
 
+/**
+ * What a repo/contact governance mutation actually was. Repo/contact lifecycle only — credentials, settings, skills and
+ * routine CRUD are a different, larger surface this table does not cover.
+ */
+export const auditActionSchema = z.enum([
+  'contact_created',
+  'contact_renamed',
+  'contact_deleted',
+  'contact_model_changed',
+  'contact_isolation_changed',
+  'contact_repo_trust_changed',
+  'contact_persona_rebound',
+  'contact_recreated',
+  'contact_session_reset',
+  'repo_cloned',
+  'pull_request_opened',
+  'branch_merged',
+  'branch_committed',
+  'branch_discarded',
+  'worktree_created',
+  'worktree_reconciled'
+])
+
+/**
+ * What triggered an audit event. Not TurnOrigin: none of the actions above
+ * are triggered by an inbound chat message or mention, and this app has no
+ * user table to point `user` at — it means "a human at the keyboard", which
+ * is every renderer-initiated call. `routine` carries the routine's id as
+ * plain text, no FK, for the same reason usage_events.routineId isn't one: a
+ * routine deleted next week must not take its audit trail with it.
+ */
+export const auditActorKindSchema = z.enum(['user', 'routine', 'system'])
+
 // --- Entities ---------------------------------------------------------------
 
 export const skillSchema = z.object({
@@ -375,6 +408,29 @@ export const usageEventSchema = z.object({
   messageId: z.string().optional()
 })
 
+/**
+ * One repo/contact governance action. Mirrors usage_events'
+ * posture: `contactId` is null once the Contact it describes is deleted, and
+ * `repoPath`/`personaTemplateId` are copied text that may outlive what they
+ * name, so "what happened, and to what" stays answerable either way.
+ */
+export const auditEventSchema = z.object({
+  id: z.string(),
+  createdAt: z.number(),
+  action: auditActionSchema,
+  actorKind: auditActorKindSchema,
+  /** Only set when actorKind is 'routine'. Not a FK — see the schema comment. */
+  actorRoutineId: z.string().optional(),
+  /** Null once the Contact this describes has been deleted. */
+  contactId: z.string().nullable(),
+  repoPath: z.string(),
+  personaTemplateId: z.string().optional(),
+  /** A precomputed human-readable line, written where the actor had full context. */
+  summary: z.string(),
+  /** Action-specific old/new values, e.g. old/new RepoTrust. */
+  metadata: z.record(z.string(), z.unknown()).optional()
+})
+
 // --- Write shapes -----------------------------------------------------------
 // Ids are minted in main with crypto.randomUUID(), never accepted from the
 // renderer, so every create input omits `id`. Updates take a full entity
@@ -478,6 +534,8 @@ export type UsageSource = z.infer<typeof usageSourceSchema>
 export type CostSource = z.infer<typeof costSourceSchema>
 export type Isolation = z.infer<typeof isolationSchema>
 export type RepoTrust = z.infer<typeof repoTrustSchema>
+export type AuditAction = z.infer<typeof auditActionSchema>
+export type AuditActorKind = z.infer<typeof auditActorKindSchema>
 
 export type Skill = z.infer<typeof skillSchema>
 export type PersonaTemplate = z.infer<typeof personaTemplateSchema>
@@ -488,6 +546,7 @@ export type PersistedMessage = z.infer<typeof messageSchema>
 export type TurnWork = z.infer<typeof turnWorkSchema>
 export type Routine = z.infer<typeof routineSchema>
 export type UsageEvent = z.infer<typeof usageEventSchema>
+export type AuditEvent = z.infer<typeof auditEventSchema>
 
 export type SkillDraft = z.infer<typeof skillDraftSchema>
 export type PersonaTemplateDraft = z.infer<typeof personaTemplateDraftSchema>

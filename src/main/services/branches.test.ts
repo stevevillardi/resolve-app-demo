@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { groupMessages, groups, personaTemplates } from '../db/schema'
+import { auditEvents, groupMessages, groups, personaTemplates } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
@@ -24,6 +24,9 @@ let userData: string
 
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
+// agent-events imports electron's BrowserWindow, which this file's minimal
+// electron mock has no reason to provide.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
 
 const {
   commitBranchWork,
@@ -204,6 +207,9 @@ describe('mergeIntoWorkingPath', () => {
 
     expect(existsSync(join(reviewer.worktreePath as string, 'src/b.ts'))).toBe(true)
     expect(existsSync(join(repo, 'src/b.ts'))).toBe(false)
+
+    const rows = db.select().from(auditEvents).all()
+    expect(rows.find((row) => row.action === 'branch_merged')).toBeDefined()
   })
 
   // "These commits merge cleanly" and "this merge will succeed now" are
@@ -230,6 +236,9 @@ describe('discardBranch', () => {
 
     await discardBranch(repo, contact.branch as string, true)
     expect(await branchExists(repo, contact.branch as string)).toBe(false)
+
+    const rows = db.select().from(auditEvents).all()
+    expect(rows.find((row) => row.action === 'branch_discarded')).toBeDefined()
   })
 })
 
@@ -278,6 +287,10 @@ describe('commitBranchWork', () => {
     )
     // The click was the user's, and git's own config names them as committer.
     expect(run(['log', '-1', '--format=%cn', contact.branch as string])).toBe('Test')
+
+    const rows = db.select().from(auditEvents).all()
+    const audit = rows.find((row) => row.action === 'branch_committed')
+    expect(audit?.contactId).toBe(contact.id)
   })
 
   it('refuses a clean checkout', async () => {

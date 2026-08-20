@@ -494,3 +494,66 @@ export const usageEvents = sqliteTable(
   },
   (table) => [index('usage_events_contact_timestamp_idx').on(table.contactId, table.timestamp)]
 )
+
+/**
+ * A durable record of repo/contact governance actions — who granted repo
+ * trust, who bound or removed a Contact, who merged a branch — none of which
+ * left a trace before this table existed.
+ *
+ * Same survivability rule as usage_events, for the same reason: an audit
+ * record that could be erased by deleting the thing it describes is not an
+ * audit record. `contactId` is a real FK, `set null` on delete; `repoPath`
+ * and `personaTemplateId` are plain copied text with no FK, since there is no
+ * `repos` table and a persona template can be deleted or a Contact rebound
+ * independently of its history.
+ */
+export const auditEvents = sqliteTable(
+  'audit_events',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    action: text('action', {
+      enum: [
+        'contact_created',
+        'contact_renamed',
+        'contact_deleted',
+        'contact_model_changed',
+        'contact_isolation_changed',
+        'contact_repo_trust_changed',
+        'contact_persona_rebound',
+        'contact_recreated',
+        'contact_session_reset',
+        'repo_cloned',
+        'pull_request_opened',
+        'branch_merged',
+        'branch_committed',
+        'branch_discarded',
+        'worktree_created',
+        'worktree_reconciled'
+      ]
+    }).notNull(),
+    // A Drizzle/Zod assertion rather than a DB CHECK, matching isolation and
+    // source above — a fourth actor kind needs no migration.
+    actorKind: text('actor_kind', { enum: ['user', 'routine', 'system'] }).notNull(),
+    // Plain text, no FK — same rule as usage_events.routineId: a routine
+    // deleted next week must not take its audit trail with it.
+    actorRoutineId: text('actor_routine_id'),
+    contactId: text('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    repoPath: text('repo_path').notNull(),
+    personaTemplateId: text('persona_template_id'),
+    /**
+     * Precomputed human-readable line, written where the actor has full
+     * context — cheaper and more testable than reconstructing 16 different
+     * shapes from `metadata` at read time.
+     */
+    summary: text('summary').notNull(),
+    /** Action-specific old/new values. Same JSON-column treatment as repoTrust. */
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>()
+  },
+  (table) => [
+    // The two list groupings the UI actually needs: a repo's activity, and a
+    // contact's activity.
+    index('audit_events_repo_path_created_idx').on(table.repoPath, table.createdAt),
+    index('audit_events_contact_created_idx').on(table.contactId, table.createdAt)
+  ]
+)

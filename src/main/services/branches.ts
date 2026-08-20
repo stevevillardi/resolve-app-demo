@@ -4,6 +4,7 @@ import { toContact } from '../db/mappers'
 import { contacts, personaTemplates } from '../db/schema'
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { recordAuditEvent, type AuditActor } from './audit-events'
 import {
   changedFiles,
   commitAll,
@@ -188,7 +189,8 @@ export async function previewMerge(
 export async function mergeIntoWorkingPath(
   repoPath: string,
   targetPath: string,
-  branch: string
+  branch: string,
+  actor?: AuditActor
 ): Promise<{ merged: boolean }> {
   if (await isDirty(targetPath)) {
     throw new Error(
@@ -200,6 +202,20 @@ export async function mergeIntoWorkingPath(
   // The click that answers the ask: any open branch_request about this branch
   // stops reading as a standing one.
   resolveBranchRequests(repoPath, branch)
+
+  const owner = allContacts().find(
+    (contact) => contact.repoPath === repoPath && contact.branch === branch
+  )
+  recordAuditEvent({
+    action: 'branch_merged',
+    actor,
+    contactId: owner?.id ?? null,
+    repoPath,
+    personaTemplateId: owner?.personaTemplateId ?? null,
+    summary: `Merged ${branch} into ${targetPath}`,
+    metadata: { targetPath }
+  })
+
   return { merged: true }
 }
 
@@ -215,7 +231,8 @@ export async function mergeIntoWorkingPath(
 export async function commitBranchWork(
   repoPath: string,
   branch: string,
-  message: string
+  message: string,
+  actor?: AuditActor
 ): Promise<{ committedSha: string; files: string[] }> {
   const owner = allContacts().find(
     (contact) => contact.repoPath === repoPath && contact.branch === branch
@@ -245,6 +262,16 @@ export async function commitBranchWork(
     email: `${emailSlug(author)}@personas.switchboard.local`
   })
 
+  recordAuditEvent({
+    action: 'branch_committed',
+    actor,
+    contactId: owner.id,
+    repoPath,
+    personaTemplateId: owner.personaTemplateId,
+    summary: `Committed ${files.length} file${files.length === 1 ? '' : 's'} on ${branch}`,
+    metadata: { committedSha, files }
+  })
+
   return { committedSha, files }
 }
 
@@ -265,12 +292,26 @@ function emailSlug(name: string): string {
 export async function discardBranch(
   repoPath: string,
   branch: string,
-  force = false
+  force = false,
+  actor?: AuditActor
 ): Promise<{ deleted: boolean }> {
   await deleteBranch(repoPath, branch, force)
   // Discarding answers the ask too — "no" is an answer, and the group thread
   // should stop showing the request as standing either way.
   resolveBranchRequests(repoPath, branch)
+
+  const owner = allContacts().find(
+    (contact) => contact.repoPath === repoPath && contact.branch === branch
+  )
+  recordAuditEvent({
+    action: 'branch_discarded',
+    actor,
+    contactId: owner?.id ?? null,
+    repoPath,
+    personaTemplateId: owner?.personaTemplateId ?? null,
+    summary: `Discarded branch ${branch}`
+  })
+
   return { deleted: true }
 }
 

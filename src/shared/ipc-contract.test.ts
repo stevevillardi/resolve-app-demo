@@ -71,7 +71,9 @@ describe('contract shape', () => {
         'branches.discard',
         // Repo trust
         'contacts.setRepoTrust',
-        'contacts.repoOffers'
+        'contacts.repoOffers',
+        // Audit trail
+        'audit.list'
       ])
     )
   })
@@ -242,5 +244,48 @@ describe('shell.openExternal input', () => {
     expect(() =>
       ipcContract['shell.openExternal'].input.parse({ url: 'https://github.com/login/device' })
     ).not.toThrow()
+  })
+})
+
+describe('audit.list', () => {
+  it('accepts no input at all', () => {
+    expect(() => ipcContract['audit.list'].input.parse(undefined)).not.toThrow()
+  })
+
+  it('accepts each optional filter individually', () => {
+    expect(() => ipcContract['audit.list'].input.parse({ contactId: 'c1' })).not.toThrow()
+    expect(() => ipcContract['audit.list'].input.parse({ repoPath: '~/code/app' })).not.toThrow()
+  })
+
+  it('validates a real audit event row', () => {
+    expect(() =>
+      ipcContract['audit.list'].output.parse([
+        {
+          id: 'a1',
+          createdAt: 1_700_000_000_000,
+          action: 'contact_repo_trust_changed',
+          actorKind: 'user',
+          contactId: 'c1',
+          repoPath: '~/code/app',
+          summary: 'Changed repo trust for Reviewer'
+        }
+      ])
+    ).not.toThrow()
+  })
+
+  it('rejects an unknown action', () => {
+    expect(() =>
+      ipcContract['audit.list'].output.parse([
+        {
+          id: 'a1',
+          createdAt: 1_700_000_000_000,
+          action: 'contact_teleported',
+          actorKind: 'user',
+          contactId: null,
+          repoPath: '~/code/app',
+          summary: 'nonsense'
+        }
+      ])
+    ).toThrow()
   })
 })

@@ -13,6 +13,7 @@ import './procedures/settings'
 import './procedures/dev'
 import './procedures/branches'
 import './procedures/search'
+import './procedures/audit'
 
 /** Import every procedure module for its registration side effect, then wire the channel. */
 export function setupIpc(): void {

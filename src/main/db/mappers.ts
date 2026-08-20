@@ -1,5 +1,6 @@
 import type { InferSelectModel } from 'drizzle-orm'
 import type {
+  AuditEvent,
   Contact,
   Group,
   GroupMessage,
@@ -10,6 +11,7 @@ import type {
   UsageEvent
 } from '../../shared/domain'
 import type {
+  auditEvents,
   contacts,
   groupMessages,
   groups,
@@ -42,6 +44,7 @@ type GroupMessageRow = InferSelectModel<typeof groupMessages>
 type MessageRow = InferSelectModel<typeof messages>
 type RoutineRow = InferSelectModel<typeof routines>
 type UsageEventRow = InferSelectModel<typeof usageEvents>
+type AuditEventRow = InferSelectModel<typeof auditEvents>
 
 /** Spreads to `{ key: value }` when set, or to nothing at all when null. */
 function optional<K extends string, V>(key: K, value: V | null): { [P in K]?: V } {
@@ -174,5 +177,20 @@ export function toUsageEvent(row: UsageEventRow): UsageEvent {
     ...optional('costSource', row.costSource),
     ...optional('sessionId', row.sessionId),
     ...optional('messageId', row.messageId)
+  }
+}
+
+export function toAuditEvent(row: AuditEventRow): AuditEvent {
+  return {
+    id: row.id,
+    createdAt: row.createdAt.getTime(),
+    action: row.action,
+    actorKind: row.actorKind,
+    ...optional('actorRoutineId', row.actorRoutineId),
+    contactId: row.contactId,
+    repoPath: row.repoPath,
+    ...optional('personaTemplateId', row.personaTemplateId),
+    summary: row.summary,
+    ...optional('metadata', row.metadata)
   }
 }

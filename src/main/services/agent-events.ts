@@ -105,3 +105,14 @@ export function emitMessagesChanged(): void {
   send({ kind: 'messages-changed' })
   for (const listener of messagesChangedListeners) listener()
 }
+
+/**
+ * Signals that an audit_events row was written, so `audit.list` is stale.
+ *
+ * Emitted from recordAuditEvent itself, the same way emitUsageChanged is
+ * emitted from recordUsage — the one insert chokepoint, so none of its
+ * call sites can forget to announce.
+ */
+export function emitAuditChanged(): void {
+  send({ kind: 'audit-changed' })
+}
