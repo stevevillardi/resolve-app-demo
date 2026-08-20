@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { initDb } from '../db'
 import { toContact } from '../db/mappers'
 import { contacts, messages, personaTemplates, routines, toolCalls } from '../db/schema'
+import { recordAuditEvent, type AuditActor } from './audit-events'
 import { worktreeRemove } from './git'
 import { ensureGroupForRepo } from './groups'
 import { assertNoActiveRun } from './run-lock'
@@ -45,10 +46,10 @@ export function getContact(id: string): Contact | null {
  * prevent. They name a directory that does not exist yet; it is created on the
  * first writing turn (Phase 12).
  */
-export function createContact(draft: ContactDraft): Contact {
+export function createContact(draft: ContactDraft, actor?: AuditActor): Contact {
   const id = randomUUID()
 
-  return initDb().transaction((tx) => {
+  const contact = initDb().transaction((tx) => {
     const persona = tx
       .select()
       .from(personaTemplates)
@@ -89,6 +90,19 @@ export function createContact(draft: ContactDraft): Contact {
 
     return contact
   })
+
+  // Outside the transaction: better-sqlite3's transaction() is synchronous,
+  // so the insert above has already committed by the time this runs.
+  recordAuditEvent({
+    action: 'contact_created',
+    actor,
+    contactId: contact.id,
+    repoPath: contact.repoPath,
+    personaTemplateId: contact.personaTemplateId,
+    summary: `Created contact "${contact.displayName}"`
+  })
+
+  return contact
 }
 
 /**
@@ -110,7 +124,11 @@ export function createContact(draft: ContactDraft): Contact {
  * inserts a reply against it — a foreign-key failure raised inside a `finally`,
  * which is about the worst place in the turn loop to raise anything.
  */
-export async function deleteContact(id: string, discardUncommitted = false): Promise<boolean> {
+export async function deleteContact(
+  id: string,
+  discardUncommitted = false,
+  actor?: AuditActor
+): Promise<boolean> {
   const contact = getContact(id)
   if (!contact) return false
 
@@ -119,6 +137,18 @@ export async function deleteContact(id: string, discardUncommitted = false): Pro
   if (contact.worktreePath && existsSync(contact.worktreePath)) {
     await worktreeRemove(contact.repoPath, contact.worktreePath, discardUncommitted)
   }
+
+  // Recorded before the delete, while contactId is still a valid FK target —
+  // ON DELETE SET NULL then takes it to null the moment the row below is
+  // gone, which is exactly audit_events' own survivability rule firing.
+  recordAuditEvent({
+    action: 'contact_deleted',
+    actor,
+    contactId: contact.id,
+    repoPath: contact.repoPath,
+    personaTemplateId: contact.personaTemplateId,
+    summary: `Deleted contact "${contact.displayName}"`
+  })
 
   // The FK cascades take this contact's thread and routines with it. Two
   // tables deliberately survive it: group_messages.contact_id is `set null`, so
@@ -152,9 +182,12 @@ export async function deleteContact(id: string, discardUncommitted = false): Pro
  * Keeping this input at `{ id, displayName }` puts the remaining constraints at
  * the Zod boundary rather than in a service check somebody can forget to write.
  */
-export function renameContact(id: string, displayName: string): Contact {
+export function renameContact(id: string, displayName: string, actor?: AuditActor): Contact {
   const trimmed = displayName.trim()
   if (trimmed.length === 0) throw new Error('A contact needs a name.')
+
+  const before = getContact(id)
+  if (!before) throw new Error(`No such contact: ${id}`)
 
   const result = initDb()
     .update(contacts)
@@ -163,6 +196,16 @@ export function renameContact(id: string, displayName: string): Contact {
     .run()
 
   if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+
+  recordAuditEvent({
+    action: 'contact_renamed',
+    actor,
+    contactId: id,
+    repoPath: before.repoPath,
+    personaTemplateId: before.personaTemplateId,
+    summary: `Renamed "${before.displayName}" to "${trimmed}"`,
+    metadata: { before: before.displayName, after: trimmed }
+  })
 
   // Re-read rather than patching the caller's copy: listContacts orders by
   // display_name, so the row's place in the list has just moved and the caller
@@ -189,9 +232,22 @@ export function renameContact(id: string, displayName: string): Contact {
  * depends on the account; an unusable model surfaces as a normal error in the
  * thread, which is more legible than a refusal here pretending to know better.
  */
-export function setContactModel(id: string, model: string | null): Contact {
+export function setContactModel(id: string, model: string | null, actor?: AuditActor): Contact {
+  const before = getContact(id)
+  if (!before) throw new Error(`No such contact: ${id}`)
+
   const result = initDb().update(contacts).set({ model }).where(eq(contacts.id, id)).run()
   if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+
+  recordAuditEvent({
+    action: 'contact_model_changed',
+    actor,
+    contactId: id,
+    repoPath: before.repoPath,
+    personaTemplateId: before.personaTemplateId,
+    summary: `Changed ${before.displayName}'s model to ${model ?? 'the persona default'}`,
+    metadata: { before: before.model, after: model }
+  })
 
   return getContact(id) as Contact
 }
@@ -235,7 +291,8 @@ export async function recreateContact(
   fromId: string,
   draft: ContactDraft,
   bringHistory: boolean,
-  discardUncommitted = false
+  discardUncommitted = false,
+  actor?: AuditActor
 ): Promise<Contact> {
   const original = getContact(fromId)
   if (!original) throw new Error(`No such contact: ${fromId}`)
@@ -248,7 +305,7 @@ export async function recreateContact(
     await worktreeRemove(original.repoPath, original.worktreePath, discardUncommitted)
   }
 
-  const replacement = createContact(draft)
+  const replacement = createContact(draft, actor)
 
   initDb().transaction((tx) => {
     if (bringHistory) {
@@ -268,6 +325,16 @@ export async function recreateContact(
         .run()
     }
     tx.delete(contacts).where(eq(contacts.id, fromId)).run()
+  })
+
+  recordAuditEvent({
+    action: 'contact_recreated',
+    actor,
+    contactId: replacement.id,
+    repoPath: replacement.repoPath,
+    personaTemplateId: replacement.personaTemplateId,
+    summary: `Recreated "${original.displayName}" as "${replacement.displayName}"`,
+    metadata: { fromContactId: fromId, bringHistory }
   })
 
   return replacement
@@ -309,16 +376,30 @@ export async function recreateContact(
 export async function setContactIsolation(
   id: string,
   isolation: Isolation,
-  discardUncommitted = false
+  discardUncommitted = false,
+  actor?: AuditActor
 ): Promise<Contact> {
   const contact = getContact(id)
   if (!contact) throw new Error(`No such contact: ${id}`)
-  if (isolationOf(contact.isolation) === isolation) return contact
+  const before = isolationOf(contact.isolation)
+  if (before === isolation) return contact
 
   // Load-bearing rather than defensive: the run lock is keyed on
   // workingPathFor(contact), so moving it under a holder would leave that
   // holder's release looking for a slot that no longer exists.
   assertNoActiveRun([id], 'changing where it works')
+
+  const auditIsolationChange = (): void => {
+    recordAuditEvent({
+      action: 'contact_isolation_changed',
+      actor,
+      contactId: id,
+      repoPath: contact.repoPath,
+      personaTemplateId: contact.personaTemplateId,
+      summary: `Moved ${contact.displayName} from ${before} to ${isolation}`,
+      metadata: { before, after: isolation }
+    })
+  }
 
   if (isolation === 'worktree') {
     const persona = initDb()
@@ -340,6 +421,7 @@ export async function setContactIsolation(
       .where(eq(contacts.id, id))
       .run()
 
+    auditIsolationChange()
     return getContact(id) as Contact
   }
 
@@ -354,6 +436,7 @@ export async function setContactIsolation(
     .where(eq(contacts.id, id))
     .run()
 
+  auditIsolationChange()
   return getContact(id) as Contact
 }
 
@@ -398,7 +481,10 @@ export function markContactRead(id: string, at = Date.now()): Contact {
   return { ...contact, lastReadAt: at }
 }
 
-export function setRepoTrust(id: string, trust: RepoTrust): Contact {
+export function setRepoTrust(id: string, trust: RepoTrust, actor?: AuditActor): Contact {
+  const before = getContact(id)
+  if (!before) throw new Error(`No such contact: ${id}`)
+
   const result = initDb()
     .update(contacts)
     .set({ repoTrust: trust })
@@ -406,6 +492,16 @@ export function setRepoTrust(id: string, trust: RepoTrust): Contact {
     .run()
 
   if (result.changes === 0) throw new Error(`No such contact: ${id}`)
+
+  recordAuditEvent({
+    action: 'contact_repo_trust_changed',
+    actor,
+    contactId: id,
+    repoPath: before.repoPath,
+    personaTemplateId: before.personaTemplateId,
+    summary: `Changed repo trust for ${before.displayName}`,
+    metadata: { before: before.repoTrust, after: trust }
+  })
 
   return getContact(id) as Contact
 }
@@ -442,7 +538,11 @@ export function setBackendSessionId(id: string, backendSessionId: string): void 
  * who is speaking mid-sentence, and the finishing turn would then write its
  * session id onto a contact that no longer means the same thing.
  */
-export function rebindContactPersona(id: string, personaTemplateId: string): Contact {
+export function rebindContactPersona(
+  id: string,
+  personaTemplateId: string,
+  actor?: AuditActor
+): Contact {
   const db = initDb()
   const contact = getContact(id)
   if (!contact) throw new Error(`No such contact: ${id}`)
@@ -461,6 +561,16 @@ export function rebindContactPersona(id: string, personaTemplateId: string): Con
       .set({ personaTemplateId, backendSessionId: null })
       .where(eq(contacts.id, id))
       .run()
+  })
+
+  recordAuditEvent({
+    action: 'contact_persona_rebound',
+    actor,
+    contactId: id,
+    repoPath: contact.repoPath,
+    personaTemplateId,
+    summary: `Rebound ${contact.displayName} to persona "${persona.name}"`,
+    metadata: { before: contact.personaTemplateId, after: personaTemplateId }
   })
 
   return getContact(id) as Contact
@@ -498,13 +608,22 @@ export function clearBackendSessionId(id: string): void {
  * a moment later writes its own session id back over the clear, so the request
  * would appear to succeed and silently not happen.
  */
-export function startFreshSession(id: string): Contact {
+export function startFreshSession(id: string, actor?: AuditActor): Contact {
   const contact = getContact(id)
   if (!contact) throw new Error(`No such contact: ${id}`)
   if (!contact.backendSessionId) return contact
 
   assertNoActiveRun([id], 'starting a fresh session')
   clearBackendSessionId(id)
+
+  recordAuditEvent({
+    action: 'contact_session_reset',
+    actor,
+    contactId: id,
+    repoPath: contact.repoPath,
+    personaTemplateId: contact.personaTemplateId,
+    summary: `Started a fresh session for ${contact.displayName}`
+  })
 
   return getContact(id) as Contact
 }

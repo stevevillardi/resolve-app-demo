@@ -30,6 +30,9 @@ let token: string | null = 'gho_test'
 
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
+// agent-events imports electron's BrowserWindow, which this file's minimal
+// electron mock has no reason to provide.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
 vi.mock('./github-auth', () => ({
   getGitHubToken: () => token,
   missingTokenError: (action: string) => new Error(`Connect GitHub first to ${action}.`)

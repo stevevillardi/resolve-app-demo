@@ -1,7 +1,7 @@
 import { existsSync } from 'fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { groups, messages, personaTemplates, routines, usageEvents } from '../db/schema'
+import { auditEvents, groups, messages, personaTemplates, routines, usageEvents } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
@@ -19,6 +19,11 @@ vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({
   app: { getPath: () => '/Users/dev/Library/Application Support/persona-router' }
 }))
+// agent-events imports `electron`'s BrowserWindow, which this test's minimal
+// electron mock has no reason to provide. The audit rows themselves are
+// asserted directly against the database below; agent-events' own push
+// behaviour is audit-events.test.ts's business, not this file's.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
 
 const {
   createContact,
@@ -31,6 +36,7 @@ const {
   markContactRead,
   setBackendSessionId,
   setContactIsolation,
+  setContactModel,
   setRepoTrust,
   startFreshSession
 } = await import('./contacts')
@@ -841,5 +847,111 @@ describe('deleteContact under a running turn', () => {
     })
 
     await expect(deleteContact(contact.id)).rejects.toThrow(/Reviewer · app is working/)
+  })
+})
+
+describe('audit trail', () => {
+  function auditActions(): string[] {
+    return db.select().from(auditEvents).all().map((row) => row.action)
+  }
+
+  it('records contact_created', () => {
+    createContact(draft('~/code/app', 'Reviewer · app'))
+    expect(auditActions()).toEqual(['contact_created'])
+  })
+
+  it('records contact_renamed', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    renameContact(contact.id, 'Senior Reviewer')
+    expect(auditActions()).toEqual(['contact_created', 'contact_renamed'])
+  })
+
+  it('records contact_deleted, with the contact still resolvable at insert time', async () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    await deleteContact(contact.id)
+
+    const rows = db.select().from(auditEvents).all()
+    const deleted = rows.find((row) => row.action === 'contact_deleted')
+    expect(deleted?.contactId).toBeNull() // set null once the row it named is gone
+    expect(deleted?.repoPath).toBe('~/code/app')
+  })
+
+  it('records contact_model_changed', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setContactModel(contact.id, 'claude-opus-4')
+    expect(auditActions()).toEqual(['contact_created', 'contact_model_changed'])
+  })
+
+  it('records contact_repo_trust_changed', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setRepoTrust(contact.id, { instructions: true, skills: [] })
+    expect(auditActions()).toEqual(['contact_created', 'contact_repo_trust_changed'])
+  })
+
+  it('records contact_persona_rebound', () => {
+    db.insert(personaTemplates)
+      .values({
+        id: 'persona-2',
+        name: 'Second Persona',
+        avatarColor: '#000000',
+        backend: 'claude',
+        systemPrompt: '',
+        skillIds: [],
+        sandbox: 'read_only',
+        githubScope: 'read_only'
+      })
+      .run()
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    rebindContactPersona(contact.id, 'persona-2')
+    expect(auditActions()).toEqual(['contact_created', 'contact_persona_rebound'])
+  })
+
+  it('records contact_recreated', async () => {
+    const original = createContact(draft('~/code/app', 'Reviewer · app'))
+    await recreateContact(original.id, draft('~/code/app', 'Reviewer · app v2'), false)
+    // createContact fires once for the original and once for the replacement.
+    expect(auditActions()).toEqual(['contact_created', 'contact_created', 'contact_recreated'])
+  })
+
+  it('records contact_session_reset', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'))
+    setBackendSessionId(contact.id, 'session-1')
+    startFreshSession(contact.id)
+    expect(auditActions()).toEqual(['contact_created', 'contact_session_reset'])
+  })
+
+  it('records contact_isolation_changed only when the isolation actually changes', async () => {
+    db.insert(personaTemplates)
+      .values({
+        id: 'persona-writer',
+        name: 'Writer',
+        avatarColor: '#000000',
+        backend: 'claude',
+        systemPrompt: '',
+        skillIds: [],
+        sandbox: 'workspace_write',
+        githubScope: 'read_only'
+      })
+      .run()
+    const contact = createContact({
+      personaTemplateId: 'persona-writer',
+      repoPath: '~/code/app',
+      displayName: 'Writer · app'
+    })
+
+    // A no-op call — already 'worktree' — must not add a row.
+    await setContactIsolation(contact.id, 'worktree')
+    expect(auditActions()).toEqual(['contact_created'])
+
+    await setContactIsolation(contact.id, 'shared')
+    expect(auditActions()).toEqual(['contact_created', 'contact_isolation_changed'])
+  })
+
+  it('stamps a routine actor when one is passed through', () => {
+    const contact = createContact(draft('~/code/app', 'Reviewer · app'), { kind: 'routine', routineId: 'routine-1' })
+    const [row] = db.select().from(auditEvents).all()
+    expect(row.actorKind).toBe('routine')
+    expect(row.actorRoutineId).toBe('routine-1')
+    expect(contact.displayName).toBe('Reviewer · app')
   })
 })

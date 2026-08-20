@@ -25,6 +25,9 @@ let userData: string
 
 vi.mock('../db', () => ({ initDb: () => db }))
 vi.mock('electron', () => ({ app: { getPath: () => userData } }))
+// agent-events imports electron's BrowserWindow, which the mock above has no
+// reason to provide.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
 
 const { ensureWorktree, pruneOrphanedWorktrees, recordOfWork, siblingBranchesFor } =
   await import('./worktrees')
