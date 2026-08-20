@@ -4,6 +4,7 @@ import { resolveClaudeBinary } from './claude-auth'
 import { resolveCodexBinary } from './codex-auth'
 import { getGitHubToken } from './github-auth'
 import { getSecret, secretsPathForDenyList } from './secrets'
+import type { ApprovalOutcome, ApprovalRequest } from '../adapters/types'
 import type { PersonaBackend } from '../../shared/domain'
 
 /**
@@ -84,9 +85,20 @@ function backendEnv(backend: PersonaBackend, needsGithubToken: boolean): NodeJS.
  * binary path missing from this object survives the entire suite and shows up
  * only in a build.
  */
+export interface AdapterHostOptions {
+  needsGithubToken?: boolean
+  /**
+   * The turn's route into the pending-approval registry. Carried
+   * per adapter construction rather than resolved here because an approval
+   * belongs to a *run* — the registry needs the runId and contactId, and only
+   * the caller starting the turn has them.
+   */
+  onApprovalRequest?: (request: ApprovalRequest) => Promise<ApprovalOutcome>
+}
+
 export function adapterConfig(
   backend: PersonaBackend,
-  options: { needsGithubToken?: boolean } = {}
+  options: AdapterHostOptions = {}
 ): AdapterConfig {
   return {
     codexBinaryPath: resolveCodexBinary(),
@@ -98,7 +110,8 @@ export function adapterConfig(
     // this line is its only producer: without it the one directory its own doc
     // comment names is reachable by every persona, because a declared guard
     // that nobody fills still reads as a guard.
-    denyReadPaths: [secretsPathForDenyList()]
+    denyReadPaths: [secretsPathForDenyList()],
+    ...(options.onApprovalRequest ? { onApprovalRequest: options.onApprovalRequest } : {})
   }
 }
 
@@ -109,7 +122,7 @@ export function adapterConfig(
  */
 export function adapterForBackend(
   backend: PersonaBackend,
-  options: { needsGithubToken?: boolean } = {}
+  options: AdapterHostOptions = {}
 ): AgentAdapter {
   return adapterFor(backend, adapterConfig(backend, options))
 }

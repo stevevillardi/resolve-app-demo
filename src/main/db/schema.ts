@@ -73,7 +73,9 @@ export const personaTemplates = sqliteTable('persona_templates', {
    * before this column meant and what a persona should default to anyway.
    */
   mcpServerIds: text('mcp_server_ids', { mode: 'json' }).$type<string[]>(),
-  sandbox: text('sandbox', { enum: ['read_only', 'workspace_write', 'full_access'] }).notNull(),
+  sandbox: text('sandbox', {
+    enum: ['read_only', 'ask_writes', 'workspace_write', 'full_access']
+  }).notNull(),
   githubScope: text('github_scope', {
     enum: ['read_only', 'open_pr', 'full_access']
   }).notNull()

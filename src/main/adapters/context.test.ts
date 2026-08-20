@@ -85,6 +85,28 @@ describe('composeInstructions', () => {
   })
 })
 
+describe('the ask_writes preamble', () => {
+  it('tells an ask_writes session that writes pause for approval, in the stable prefix', () => {
+    const askPersona = { ...persona([]), sandbox: 'ask_writes' as const }
+    const { prefix, suffix } = composeInstructionBlocks(spec(askPersona, []))
+
+    const block = prefix.find((section) => section.includes('## Writes need approval'))
+    expect(block).toBeDefined()
+    // The two behaviours the block exists to change: batch, and don't hammer
+    // a refusal.
+    expect(block).toContain('pauses until the user approves it')
+    expect(block).toContain('refused')
+    expect(suffix.join('')).not.toContain('## Writes need approval')
+  })
+
+  it('says nothing about approval at the other levels', () => {
+    for (const sandbox of ['read_only', 'workspace_write', 'full_access'] as const) {
+      const other = { ...persona([]), sandbox }
+      expect(composeInstructions(spec(other, [])), sandbox).not.toContain('## Writes need approval')
+    }
+  })
+})
+
 describe('group context injection', () => {
   function entry(overrides: Partial<GroupMessage> = {}): GroupMessage {
     return {

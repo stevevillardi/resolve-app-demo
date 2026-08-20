@@ -170,7 +170,7 @@ describe('usageSummariesByContact', () => {
 
     const summaries = usageSummariesByContact()
 
-    // Phase 10's rule is that spend outlives what spent it, so the row is still
+    // Spend outlives what spent it, so the row is still
     // in the table — but it has no contact to attribute to, and grouping it
     // under a null key would render it as one mystery conversation. The
     // dashboard's unscoped totals are where it stays visible.

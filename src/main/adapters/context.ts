@@ -14,6 +14,20 @@ import type { InjectedSkill, RepoInstructionsBlock, SessionSpec, SiblingBranch }
 
 const SKILLS_HEADING = '## Skills'
 
+const APPROVAL_HEADING = '## Writes need approval'
+
+/**
+ * Told plainly so the model can work with the mechanism instead of against
+ * it: batching related edits means one ask instead of five, and a refusal is
+ * a decision the user already made rather than a flaky tool to hammer.
+ */
+const APPROVAL_PREAMBLE =
+  'You may read this repository freely, but every command or edit that would change ' +
+  'a file pauses until the user approves it, and an unanswered request is refused ' +
+  'after a few minutes. Prefer fewer, well-described write actions over many small ' +
+  'ones. If a write is refused, the user chose that — explain what you would have ' +
+  'done instead of retrying it.'
+
 /**
  * Skills are rendered in the order persona.skillIds lists them, not the order
  * the caller happened to load them in, so the composed prompt is stable across
@@ -68,6 +82,14 @@ export function composeInstructionBlocks(spec: SessionSpec): {
   // path is not the same as saying what may be done with it.
   if (spec.workingContext) {
     sections.push(renderWorkingContext(spec.workingContext))
+  }
+
+  // An ask_writes session finds out about the holds the hard way —
+  // its first write pauses for minutes with no explanation — unless the rule
+  // is stated up front. In the stable prefix because it is a property of the
+  // persona, not of any turn.
+  if (persona.sandbox === 'ask_writes') {
+    sections.push([APPROVAL_HEADING, APPROVAL_PREAMBLE].join('\n\n'))
   }
 
   if (ordered.length > 0) {

@@ -33,10 +33,24 @@ export function getPersonaTemplate(id: string): PersonaTemplate | null {
  * narrower githubScope there is a promise nothing can keep. Existing rows were
  * normalized by migration 0010.
  */
-function assertScopePairing(persona: { sandbox: string; githubScope: string }): void {
+function assertScopePairing(persona: {
+  backend: string
+  sandbox: string
+  githubScope: string
+}): void {
   if (persona.sandbox === 'full_access' && persona.githubScope !== 'full_access') {
     throw new Error(
       'A persona with full sandbox access cannot carry a narrower GitHub scope — full access bypasses the tools that would enforce it.'
+    )
+  }
+  // ask_writes pauses a turn until a human answers, which needs a
+  // backend whose SDK will hold the call open — Claude's canUseTool does,
+  // Codex's exec channel cannot deliver an answer at all (see
+  // askBeforeWritesSupported in shared/domain.ts). Refused here so no row can
+  // exist that codexSandboxMode() would have to guess about.
+  if (persona.sandbox === 'ask_writes' && persona.backend !== 'claude') {
+    throw new Error(
+      'Ask-before-writes needs a backend that can pause mid-turn for an answer, and Codex cannot — its exec channel has no way to deliver one.'
     )
   }
 }

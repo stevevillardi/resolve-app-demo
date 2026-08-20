@@ -13,6 +13,7 @@ function run(overrides: Partial<ActiveRun> = {}): ActiveRun {
     origin: 'message',
     routineId: null,
     groupId: null,
+    approval: null,
     ...overrides
   }
 }

@@ -1,4 +1,5 @@
 import { registerProcedure } from '../registerProcedure'
+import { resolveApproval } from '../../services/approvals'
 import { workDiff } from '../../services/diffs'
 import { modelsForBackend } from '../../adapters/models'
 import {
@@ -34,6 +35,9 @@ registerProcedure('groups.mention', ({ groupId, contactId, content }) =>
 )
 
 registerProcedure('runs.list', () => listActiveRuns())
+registerProcedure('runs.resolveApproval', ({ runId, approvalId, approved }) => ({
+  resolved: resolveApproval(runId, approvalId, approved)
+}))
 registerProcedure('usage.list', ({ contactId }) => listUsageEvents(contactId))
 registerProcedure('usage.summaries', () => usageSummariesByContact())
 registerProcedure('models.listForBackend', ({ backend }) => modelsForBackend(backend))

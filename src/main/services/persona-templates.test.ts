@@ -362,3 +362,24 @@ describe('the full_access scope rule', () => {
     expect(getPersonaTemplate(persona.id)?.sandbox).toBe('read_only')
   })
 })
+
+describe('the ask_writes backend rule', () => {
+  it('refuses ask_writes on Codex, which cannot pause a turn for an answer', () => {
+    expect(() =>
+      createPersonaTemplate({ ...DRAFT, backend: 'codex', sandbox: 'ask_writes' })
+    ).toThrow(/ask-before-writes/i)
+  })
+
+  it('accepts ask_writes on Claude', () => {
+    expect(createPersonaTemplate({ ...DRAFT, sandbox: 'ask_writes' }).sandbox).toBe('ask_writes')
+  })
+
+  it('refuses the pairing on update too — including arriving at it backend-first', () => {
+    const persona = createPersonaTemplate({ ...DRAFT, sandbox: 'ask_writes' })
+    // The editor coerces this pairing away; the service is the second doorway.
+    expect(() => updatePersonaTemplate({ ...persona, backend: 'codex' })).toThrow(
+      /ask-before-writes/i
+    )
+    expect(getPersonaTemplate(persona.id)?.backend).toBe('claude')
+  })
+})

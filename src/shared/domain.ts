@@ -14,7 +14,28 @@ import { z } from 'zod'
 // --- Enumerations -----------------------------------------------------------
 
 export const personaBackendSchema = z.enum(['claude', 'codex'])
-export const sandboxLevelSchema = z.enum(['read_only', 'workspace_write', 'full_access'])
+/**
+ * What a persona may do on disk, in four postures.
+ *
+ * `ask_writes` sits between reading and writing: it reads as freely as
+ * `read_only`, and every write is held for a human's approve or deny in the
+ * thread rather than refused outright.
+ *
+ * That posture is the one deliberate exception to this app's rule that the
+ * level, set once when the persona is made, *is* the approval — a rule that
+ * exists because pausing a conversation for a permission dialog defeats the
+ * point of setting a level at all. It earns the exception because the
+ * all-or-nothing choice forces over-granting: somebody who wants read-only
+ * except for the occasional approved write had nowhere to sit. Approval widens
+ * *when* a write may happen, never *where* — anything `workspace_write` denies
+ * is still denied.
+ */
+export const sandboxLevelSchema = z.enum([
+  'read_only',
+  'ask_writes',
+  'workspace_write',
+  'full_access'
+])
 export const githubScopeSchema = z.enum(['read_only', 'open_pr', 'full_access'])
 export const messageRoleSchema = z.enum(['user', 'assistant'])
 export const groupMessageTypeSchema = z.enum([
@@ -156,6 +177,21 @@ export const isolationSchema = z.enum(['shared', 'worktree', 'exclusive'])
  */
 export function defaultIsolation(sandbox: SandboxLevel): Isolation {
   return sandbox === 'read_only' ? 'shared' : 'worktree'
+}
+
+/**
+ * Whether a backend can hold a turn open while a human answers an approval.
+ *
+ * Claude can: `canUseTool` is an async callback the SDK awaits, so the ask is
+ * just a promise that resolves when the user clicks. Codex cannot: `codex
+ * exec` is one-shot — its JSONL stream has no approval-request event and no
+ * channel to answer one, and `approval_policy` only reaches the CLI as
+ * `--config`, which in exec mode has nobody to ask. Shared between the persona
+ * editor (which hides the posture) and the service (which refuses it), so the
+ * two cannot disagree about which backends get the option.
+ */
+export function askBeforeWritesSupported(backend: PersonaBackend): boolean {
+  return backend === 'claude'
 }
 
 /** Null reads as `shared` — that is what every pre-0007 row means. */
@@ -525,7 +561,7 @@ export const routineUpdateSchema = routineSchema.omit({
 /**
  * A rollup of UsageEvents for display.
  *
- * Derived, never stored — blueprint §4 logs events per turn precisely so that
+ * Derived, never stored — events are logged per turn precisely so that
  * totals stay computed rather than maintained, and nothing here changes that.
  *
  * It lives in `shared` rather than in the renderer because the
@@ -579,7 +615,7 @@ export const usageSummarySchema = z.object({
  *
  * Spend whose Contact has been deleted has no id to group under and is absent,
  * which is what `usageForContacts` did with it too — the dashboard's unscoped
- * totals are where orphaned spend stays visible (Phase 10's rule that spend
+ * totals are where orphaned spend stays visible (spend
  * outlives what spent it).
  */
 export const contactUsageSummarySchema = usageSummarySchema.extend({

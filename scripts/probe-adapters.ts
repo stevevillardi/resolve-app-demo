@@ -12,6 +12,7 @@
  *   npm run probe:adapters -- --backend codex --sandbox read_only --raw
  *   npm run probe:adapters -- --backend codex --resume <threadId>
  *   npm run probe:adapters -- --backend claude --abort-after 3000
+ *   npm run probe:adapters -- --backend claude --sandbox ask_writes --approve-writes
  *
  * It deliberately does NOT touch the app database: personas are built from
  * flags, so a probe run can never mutate real data.
@@ -33,6 +34,12 @@ interface Flags {
   system: string
   skillFiles: string[]
   raw: boolean
+  /**
+   * Auto-approves every ask_writes hold, with a log line per ask. Without it
+   * a probe at that level exercises the deny path — the adapter fails closed
+   * when no handler is injected, which is itself worth seeing once.
+   */
+  approveWrites: boolean
   /**
    * Aborts the run this many ms in. The Stop button's only honest test: unit
    * tests can assert that we stopped forwarding events, but not that the
@@ -61,8 +68,10 @@ function parseFlags(argv: string[]): Flags {
   }
 
   const sandbox = (get('sandbox') ?? 'read_only') as SandboxLevel
-  if (!['read_only', 'workspace_write', 'full_access'].includes(sandbox)) {
-    throw new Error(`--sandbox must be read_only, workspace_write or full_access, got ${sandbox}`)
+  if (!['read_only', 'ask_writes', 'workspace_write', 'full_access'].includes(sandbox)) {
+    throw new Error(
+      `--sandbox must be read_only, ask_writes, workspace_write or full_access, got ${sandbox}`
+    )
   }
 
   return {
@@ -75,6 +84,7 @@ function parseFlags(argv: string[]): Flags {
     system: get('system') ?? 'You are a probe. Answer briefly and do not modify anything.',
     skillFiles: all('skill'),
     raw: argv.includes('--raw'),
+    approveWrites: argv.includes('--approve-writes'),
     ...(get('abort-after') ? { abortAfter: Number(get('abort-after')) } : {})
   }
 }
@@ -134,7 +144,15 @@ async function main(): Promise<void> {
   // injected here. That difference is exactly why AdapterConfig takes a path
   // instead of resolving one itself.
   const adapter = adapterFor(flags.backend, {
-    ...(flags.raw ? { onRawEvent: (event) => console.log('RAW', JSON.stringify(event)) } : {})
+    ...(flags.raw ? { onRawEvent: (event) => console.log('RAW', JSON.stringify(event)) } : {}),
+    ...(flags.approveWrites
+      ? {
+          onApprovalRequest: (request: { toolName: string; detail: string }) => {
+            console.log('APPROVED', request.toolName, request.detail)
+            return Promise.resolve({ approved: true, reason: '' })
+          }
+        }
+      : {})
   })
 
   const spec = {

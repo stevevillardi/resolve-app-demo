@@ -34,6 +34,7 @@ import { useModels } from '@/hooks/useModels'
 import { useSkills } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
 import { cn } from '@/lib/utils'
+import { askBeforeWritesSupported } from '../../../../shared/domain'
 import type {
   Contact,
   GithubScope,
@@ -86,6 +87,7 @@ const BACKEND_OPTIONS = [
 
 const SANDBOX_OPTIONS: { value: SandboxLevel; label: string }[] = [
   { value: 'read_only', label: 'Read only' },
+  { value: 'ask_writes', label: 'Ask to write' },
   { value: 'workspace_write', label: 'Write' },
   { value: 'full_access', label: 'Full' }
 ]
@@ -324,6 +326,14 @@ function PersonaForm({
                   // default fails at edit time instead, which is a much
                   // better place to find out.
                   setModel(null)
+                  // Codex cannot pause a turn for an approval, so the ask
+                  // posture leaves with the backend that supports it —
+                  // falling back to read_only, which keeps the promise the
+                  // user was making ("nothing writes without me") rather
+                  // than widening it.
+                  if (!askBeforeWritesSupported(next) && sandbox === 'ask_writes') {
+                    setSandbox('read_only')
+                  }
                 }}
                 aria-label="Backend"
               />
@@ -372,7 +382,14 @@ function PersonaForm({
           <FieldGrid>
             <Field label="Sandbox">
               <SegmentedControl
-                options={SANDBOX_OPTIONS}
+                options={
+                  // Not a disabled segment: on Codex there is no choice being
+                  // withheld, the backend has no channel an answer could
+                  // arrive on (askBeforeWritesSupported).
+                  askBeforeWritesSupported(backend)
+                    ? SANDBOX_OPTIONS
+                    : SANDBOX_OPTIONS.filter((option) => option.value !== 'ask_writes')
+                }
                 value={sandbox}
                 onChange={(value) => {
                   setSandbox(value)

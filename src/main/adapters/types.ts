@@ -243,6 +243,28 @@ export interface AgentSession {
 }
 
 /**
+ * One held write, described to whoever can approve it.
+ *
+ * `detail` is the command line or the file path — the same string toolDetail()
+ * shows on a tool_start — because "may I?" is only answerable when it says
+ * exactly what is being asked.
+ */
+export interface ApprovalRequest {
+  toolName: string
+  detail: string
+}
+
+/**
+ * How an ask was answered. `reason` is what the model reads on a refusal —
+ * composed by the host, which knows *why* (declined, timed out, turn over),
+ * where the adapter only knows *that*.
+ */
+export interface ApprovalOutcome {
+  approved: boolean
+  reason: string
+}
+
+/**
  * Host-supplied wiring. Kept separate from SessionSpec because it describes
  * the machine, not the persona.
  */
@@ -287,6 +309,16 @@ export interface AdapterConfig {
    * the numbers the SDK actually returned, not our reading of them.
    */
   onRawEvent?: (event: unknown) => void
+  /**
+   * Answers an `ask_writes` hold: the promise resolves when a human decides,
+   * or when the host's own timeout decides for them. Injected for the same
+   * reason everything else here is — the pending-approval registry lives with
+   * the services, and nothing under src/main/adapters/ may import one.
+   *
+   * Absent means there is no one to ask, and the adapter must fail closed:
+   * a probe run without a handler gets the deny, never a hang.
+   */
+  onApprovalRequest?: (request: ApprovalRequest) => Promise<ApprovalOutcome>
 }
 
 /**

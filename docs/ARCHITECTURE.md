@@ -29,9 +29,9 @@ Model ──┘         (what it is)   (+ a repo)   (a real agent run)
                                      └──────┘  summaries · @mentions · routine runs
 ```
 
-- A **Skill** is reusable instruction text. In this app a Skill is *injected
-  prose* — never something the model executes. (Claude Code and Codex also have
-  a thing called a skill, which *is* executable and is discovered from disk.
+- A **Skill** is reusable instruction text. In this app a Skill is _injected
+  prose_ — never something the model executes. (Claude Code and Codex also have
+  a thing called a skill, which _is_ executable and is discovered from disk.
   Two words that mean two things; the interface keeps them apart, and so should
   you.)
 - A **PersonaTemplate** is a backend, a model, a system prompt, a set of Skills,
@@ -142,7 +142,7 @@ This is the part where the documentation is most misleading.
   input `12122 → 25610 → 39114`. Every Codex usage row after the first
   over-reported by a margin that grew with the conversation. Fixed by
   `usage_events.session_id` plus `baselineFor()`, which sums the deltas already
-  recorded for that session — every stored row *is* a delta, so their sum is
+  recorded for that session — every stored row _is_ a delta, so their sum is
   exactly the backend's next cumulative reading, with no separate cursor to keep
   in step.
 - **The first turn of every Claude session was attributed to the wrong model.**
@@ -180,7 +180,21 @@ deny layer, not the policy.
 
 Claude uses `Options.sandbox` with `failIfUnavailable: true` — no writable path
 at `read_only`, the repo only at `workspace_write`. Codex uses its own presets.
-Two things about that are worth knowing before changing any of it:
+
+**`ask_writes` is the fourth posture**, and the one exception to the rule below.
+It reads as freely as `read_only` and holds every write for a human's approve or
+deny _in the thread_, rather than refusing it. On Claude that is the write grants
+of `workspace_write` under the permission mode of `read_only`, so `canUseTool`
+stays in the path for every write and the OS sandbox already permits the write a
+human says yes to. It is **Claude-only**: `codex exec` has no approval-request
+event and no way to deliver an answer mid-turn, so the persona editors filter the
+option out on Codex, validation refuses the pairing at both doorways, and an
+impossible stored row maps to `read-only` — failing toward the posture's promise
+rather than past it. Pending asks ride on the run row and auto-deny after five
+minutes, deliberately under the ten-minute silence watchdog, so a held write can
+never read as a hung backend or wedge the write lock.
+
+Two more things are worth knowing before changing any of this:
 
 - **`canUseTool` is not a complete mediator.** The SDK's classifier decides first
   and only consults us about tool uses it would otherwise prompt for. `echo hello`
@@ -202,7 +216,7 @@ rather than claiming a guarantee it cannot make.
 A hand-rolled shell parser is the wrong instrument, and this codebase proved it:
 `find . -delete`, `find . -exec rm {} +`, `sed -ni`, `sed --in-place`,
 `git branch -D` and `git -c diff.external=…` all walked through the first
-allowlist. Every one was found by *executing* the guard over adversarial input,
+allowlist. Every one was found by _executing_ the guard over adversarial input,
 not by reading it.
 
 ---
@@ -234,7 +248,7 @@ degrades instructions rather than breaking the persona.
 
 **`messages` has no status or error column, deliberately.** Those describe a turn
 in flight; a message loaded from disk is by definition finished. A failed turn is
-*computed* by the renderer — the last row is the user's, no run is in the store,
+_computed_ by the renderer — the last row is the user's, no run is in the store,
 none is in main's active set — never stored. Persisting it would require a policy
 for a deliberate Stop, which would durably label the user's own interruptions as
 failures.
@@ -277,8 +291,8 @@ rather than by the SDK.
 **A session running outside its repository gets a "Where you are working"
 block** naming its directory, its repo and its branch, and saying not to write
 into `.git` or into the repository itself. This exists because a model asked to
-create a file with a bare relative name resolved it against the *git admin
-directory* — right basename, wrong parent. It was found only live, and no unit
+create a file with a bare relative name resolved it against the _git admin
+directory_ — right basename, wrong parent. It was found only live, and no unit
 test could have caught it: every one mocks the adapter, and a mocked adapter
 never resolves a path.
 
@@ -288,8 +302,8 @@ read-only allowlist — `worktree` cannot be permitted for listing alone, becaus
 add, remove and prune share the token.
 
 **Repo skills are native on Codex and injected on Claude.** The Claude SDK's
-`skills` option is a *filter over what was discovered, not a discovery
-mechanism*, and making them discoverable requires `settingSources: ['project']` —
+`skills` option is a _filter over what was discovered, not a discovery
+mechanism_, and making them discoverable requires `settingSources: ['project']` —
 one switch for six things, including `.claude/settings.json`'s Bash permission
 grants. So Claude keeps `settingSources: []` and receives an app-composed
 catalogue instead; Codex uses its own machinery.
@@ -308,21 +322,21 @@ At the end of every turn a summariser classifies what happened into
 indefinitely; routine ones age out. **The category descriptions in
 `src/shared/summary.ts` are load-bearing prose, not documentation** — they are
 the only instruction the model gets about where the line falls, and durability is
-derived from the answer. They judge what the turn *left behind*: if the
+derived from the answer. They judge what the turn _left behind_: if the
 repository changed, it is not routine. An earlier wording asked in effect how
 much the agent had deliberated, and a real edit to an auth file came back
 `routine`, which would have dropped it out of every colleague's context.
 
 **Compaction is a separate adapter capability, not a flag on `run()`,** because
-the SDKs are shaped differently. Claude's structured output is *session-level*,
+the SDKs are shaped differently. Claude's structured output is _session-level_,
 so it cannot be switched on for a live conversation's final turn; Codex's is
-*per-turn*. Codex also runs its schema through OpenAI's **strict** mode, where
+_per-turn_. Codex also runs its schema through OpenAI's **strict** mode, where
 `required` must list every key — an optional field is a hard 400. Optionality is
 therefore expressed as a nullable type, which Claude accepts too, so one schema
 serves both.
 
 **The summariser is a throwaway session on a cheap model.** It takes no lock and
-emits no events. It runs after *every* turn, so pinning it to the persona's model
+emits no events. It runs after _every_ turn, so pinning it to the persona's model
 would roughly double an Opus-class persona's cost for what is classification.
 Every failure is swallowed and logged: the turn was already committed, so a
 missing Group entry is the correct degradation.
@@ -345,7 +359,7 @@ half-full prompt as full — inviting the user to throw away the model's memory 
 fix a problem they did not have.
 
 Four of the wrong rows were marked `published`. **The transferable lesson is
-about `source`, not the numbers:** it records how a figure was *obtained* and
+about `source`, not the numbers:** it records how a figure was _obtained_ and
 says nothing about whether it is still true. `CONTEXT_WINDOWS_LAST_VERIFIED` is
 the field that carries currency, and it is the one to read first.
 
@@ -356,7 +370,7 @@ different model's window is the exact failure the table exists to avoid.
 
 The numerator is the last request's prompt, never the session's billed input. One
 number named `promptTokens` was, on Codex, the sum of the session's deltas — the
-*bill*, 3× high by turn three and unbounded. Both figures are shown, because the
+_bill_, 3× high by turn three and unbounded. Both figures are shown, because the
 gap between them is the forever-thread problem stated as a number.
 
 ---
@@ -386,7 +400,7 @@ resolves".
 
 **A routine's bookkeeping is recorded before any network call, never after.** A
 hung request must not leave a fire that plainly happened looking like it never
-did. The last-run stamp is written on every *attempt*, including a lock refusal.
+did. The last-run stamp is written on every _attempt_, including a lock refusal.
 
 **Run history is omitted from both write shapes**, so an editor left open across
 a fire cannot save its stale copy over what the fire recorded.
@@ -480,7 +494,7 @@ measured false at `workspace_write`.
 
 **Cloning never leaves a token on disk.** git writes the URL it is handed
 verbatim into the repository config, so the remote is scrubbed as part of the
-clone. Recorded as *not* fixed: the token is still visible in the process
+clone. Recorded as _not_ fixed: the token is still visible in the process
 argument list while git runs. Relatedly, git's stderr is never passed through,
 because a remote URL can carry a live token.
 
@@ -521,7 +535,7 @@ loses. It was hand-rolled in four places, which is why the first fix leaked onto
 the empty-profile screen that every fresh install sees first.
 
 **Errors render as a distinct bubble in the same thread as everything else** —
-never silently, never console-only. A *refused* send is different: it renders as
+never silently, never console-only. A _refused_ send is different: it renders as
 an inline notice under the composer, because no turn ran.
 
 **The composer does not clear itself.** Whether a send was accepted is the
@@ -539,7 +553,7 @@ Codex". The alternatives fail concretely: AND everywhere makes selecting a secon
 repository empty the list, and OR everywhere makes each new chip widen it, so
 narrowing becomes impossible. Options are derived from live data, and a facet with
 nothing to choose between is not rendered — a Repo chip on a one-repository
-profile offers a choice every row already satisfies. A *state* facet is the
+profile offers a choice every row already satisfies. A _state_ facet is the
 exception and is worth rendering at one option, because "Unread" alone still
 splits the list in two.
 
@@ -555,7 +569,7 @@ defaults to "Code Reviewer · checkout-service", is editable at creation and by
 rename, and is already what the delete dialog and the Markdown export read. The
 lists disagreeing with those was the bug: three contacts on three repositories
 rendered as three identical rows. The accepted consequence is that renaming a
-*persona* no longer retitles its contacts — the name is a stored string, not a
+_persona_ no longer retitles its contacts — the name is a stored string, not a
 nullable override — and persona identity stays live on the row through the avatar.
 Three callers deliberately keep the persona name, because mention parsing resolves
 `@` tokens against it.
@@ -574,7 +588,7 @@ belong in SQL — see Storage.
 
 **A failed read is a third state, distinct from an empty install.** Defaulting a
 failed query to an empty array renders "No personas yet" — advice to create
-something, in answer to a question the app could not ask. A *background* refetch
+something, in answer to a question the app could not ask. A _background_ refetch
 that fails keeps the last good data, so this state is only ever the first load.
 
 Icons in `build/` and `resources/` are **generated** from the SVG beside them
@@ -589,19 +603,19 @@ running turn is signalled by shape rather than by a green dot.
 
 ## 11. Stack
 
-| Layer | Choice |
-| --- | --- |
-| Shell | Electron + electron-vite, packaged by electron-builder |
-| Renderer | React, Tailwind v4 (CSS-first), shadcn on Base UI, oklch palette |
-| Bridge | Hand-rolled typed IPC, Zod-validated (§2) |
-| Data | TanStack Query for reads across the boundary; Zustand for ephemeral UI state |
-| Storage | SQLite via better-sqlite3 + Drizzle, checked-in migrations |
-| Scheduler | node-cron, main process only |
-| Backends | `@anthropic-ai/claude-agent-sdk`, `@openai/codex-sdk` — main process only |
-| GitHub | Octokit, device flow, token in the OS keychain |
-| Diff viewer | Monaco |
-| Charts | recharts |
-| Tests | Vitest (two projects) + Playwright for Electron E2E |
+| Layer       | Choice                                                                       |
+| ----------- | ---------------------------------------------------------------------------- |
+| Shell       | Electron + electron-vite, packaged by electron-builder                       |
+| Renderer    | React, Tailwind v4 (CSS-first), shadcn on Base UI, oklch palette             |
+| Bridge      | Hand-rolled typed IPC, Zod-validated (§2)                                    |
+| Data        | TanStack Query for reads across the boundary; Zustand for ephemeral UI state |
+| Storage     | SQLite via better-sqlite3 + Drizzle, checked-in migrations                   |
+| Scheduler   | node-cron, main process only                                                 |
+| Backends    | `@anthropic-ai/claude-agent-sdk`, `@openai/codex-sdk` — main process only    |
+| GitHub      | Octokit, device flow, token in the OS keychain                               |
+| Diff viewer | Monaco                                                                       |
+| Charts      | recharts                                                                     |
+| Tests       | Vitest (two projects) + Playwright for Electron E2E                          |
 
 `postinstall` runs `electron-builder install-app-deps`, rebuilding better-sqlite3
 against Electron's ABI — which is why `node_modules` is never shared between
@@ -639,7 +653,7 @@ Four things about SQLite that this schema had to learn the hard way:
   pinned by three tests — without it, deleting any contact that had ever run a
   turn fails outright, taking the reset-everything path with it.
 - **SQLite cannot alter a foreign key, so any change is a table rebuild** — and
-  drizzle wraps migrations in one transaction, inside which SQLite *ignores* the
+  drizzle wraps migrations in one transaction, inside which SQLite _ignores_ the
   foreign-key pragma. The generated pragmas are no-ops and the rebuild runs with
   enforcement live. A generated rebuild also selects new columns from the old
   table; a hand-edited join is what turns a broken copy into a backfill.
@@ -654,7 +668,7 @@ once per row drawn, and the preview line under each conversation read every
 `messages` row to keep the newest per contact. Both grew with the whole history of
 the fleet in order to produce one figure per conversation. The spend rollup is now
 a `GROUP BY`, and the preview queries are driven by their parent table, so the
-cost is one index seek per conversation. Note what this does *not* license:
+cost is one index seek per conversation. Note what this does _not_ license:
 filtering stays in the renderer — see Interface.
 
 **An aggregate written twice is written to disagree.** The spend rollup exists in
@@ -674,9 +688,9 @@ inside a range — the pair satisfies the filter and the grouping together, wher
 single-column indexes leave a temp b-tree behind.
 
 Additive nullable columns need no backfill; pre-existing rows read back absent
-rather than guessed. The upgrade test builds the "old" database from a *prefix*
+rather than guessed. The upgrade test builds the "old" database from a _prefix_
 of the migration folder rather than a checked-in binary fixture, so it cannot go
-stale — and it is the only test that proves what a migration *copies* rather than
+stale — and it is the only test that proves what a migration _copies_ rather than
 merely that it applies.
 
 ---
@@ -694,7 +708,7 @@ subagents and `.mcp.json` reach a session **only when a human has opted that
 Contact in**.
 
 That seal was, for a long time, a property of one adapter. `settingSources: []`
-sealed Claude early, and every document afterwards called *the app* sealed —
+sealed Claude early, and every document afterwards called _the app_ sealed —
 while Codex read the bound repository's `AGENTS.md` and obeyed it, discovered and
 offered its skills, and ran a hooks engine. Measured, not reasoned: a scratch
 repository whose `AGENTS.md` said to begin every reply with a nonsense token
@@ -702,9 +716,15 @@ produced exactly that. Both probes are checked in as live tests.
 
 The rest of the deliberate no:
 
-- **No per-action approval prompts.** The sandbox level, set once at persona
-  creation, *is* the approval. Pausing a chat mid-response for a permission
-  dialog defeats the point of setting a level.
+- **No per-action approval prompts, except where a persona asks for them.** The
+  sandbox level, set once at persona creation, _is_ the approval — pausing a
+  chat mid-response for a permission dialog defeats the point of setting a
+  level. `ask_writes` is the deliberate exception, taken because the
+  all-or-nothing choice was forcing over-granting: somebody who wanted read-only
+  except for the occasional approved write had nowhere to sit. Approval widens
+  _when_ a write may happen, never _where_. There are no remembered allowlists —
+  every ask is per action, so "always allow this" cannot quietly become a
+  standing grant nobody reviews.
 - **No automatic merging of any kind.** The merge layer is a human click with a
   conflict dry run, and merges target a specific working path rather than
   defaulting into the user's tree. The dry run is `git merge-tree --write-tree`,
@@ -725,7 +745,7 @@ The rest of the deliberate no:
 Two more, narrower but load-bearing:
 
 - **The `.git` write grant excludes hooks and config.** A writable hooks
-  directory is a sandbox *escape*: a hook written during a turn runs unsandboxed
+  directory is a sandbox _escape_: a hook written during a turn runs unsandboxed
   on the user's next git command.
 - **Deleting a Contact is refused by default when its checkout holds uncommitted
   work.** Committed work is safe either way; uncommitted work exists nowhere
@@ -743,12 +763,12 @@ each carries a marker saying when it was last checked. **`source` tells you how 
 number was obtained and nothing about whether it is still true** — read the date
 first.
 
-| Fact | Where | Marker |
-| --- | --- | --- |
-| Per-model prices | `src/main/adapters/pricing.ts` | `LAST_VERIFIED` |
-| Model menus per backend | `src/main/adapters/models.ts` | `MODELS_LAST_VERIFIED` |
-| Context windows | `src/shared/context-windows.ts` | `CONTEXT_WINDOWS_LAST_VERIFIED` |
-| GitHub tool inventory | `src/main/adapters/github-mcp-tools.ts` | `npm run probe:mcp` |
+| Fact                    | Where                                   | Marker                          |
+| ----------------------- | --------------------------------------- | ------------------------------- |
+| Per-model prices        | `src/main/adapters/pricing.ts`          | `LAST_VERIFIED`                 |
+| Model menus per backend | `src/main/adapters/models.ts`           | `MODELS_LAST_VERIFIED`          |
+| Context windows         | `src/shared/context-windows.ts`         | `CONTEXT_WINDOWS_LAST_VERIFIED` |
+| GitHub tool inventory   | `src/main/adapters/github-mcp-tools.ts` | `npm run probe:mcp`             |
 
 Measured behaviour worth keeping alongside them:
 
@@ -766,7 +786,7 @@ Measured behaviour worth keeping alongside them:
   fully visible. Only disabling by name works.
 - **git worktree lifecycle, verified against real git:** two worktrees cannot
   share a branch; pruning a hand-deleted worktree keeps the branch; removing a
-  dirty tree is refused without force and the branch survives; a *failed* add
+  dirty tree is refused without force and the branch survives; a _failed_ add
   still creates its branch and must be cleaned up; and the administrative
   directory name is deduplicated from the path basename, so it must be **read
   from git, never derived**.
@@ -780,7 +800,7 @@ Measured behaviour worth keeping alongside them:
 - **A phase is not done until its testable logic has tests.** `npm test` gates
   `npm run build`, so packaging cannot ship a red suite. One consequence worth
   knowing: a deliberate mutation to check that a test has teeth fails the gate,
-  the bundle is never rewritten, and Playwright then drives the *previous* build.
+  the bundle is never rewritten, and Playwright then drives the _previous_ build.
   Rebuild directly when doing that.
 - **Write tests from the claim, not from the code.** A green suite proves the
   tests agree with the implementation and nothing more. One case named "rejects
@@ -808,8 +828,8 @@ Measured behaviour worth keeping alongside them:
 - **The encryption boundary is one module**, the sole permitted caller of the
   keychain API, enforced by a lint rule, and writing to files rather than to the
   database so that "no credential is in the database" holds by construction. That
-  directory is fenced out of every persona's sandbox: *not reachable* is a
-  stronger guarantee than *encrypted at rest*.
+  directory is fenced out of every persona's sandbox: _not reachable_ is a
+  stronger guarantee than _encrypted at rest_.
 - **When a fact gains a new source of truth, every reader has to move together.**
   Attribution stamped on a usage event fixed one breakdown while the dashboard's
   scope filter still worked the old way — two totals on one screen disagreeing

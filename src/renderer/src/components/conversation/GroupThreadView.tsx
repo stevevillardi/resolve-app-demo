@@ -35,6 +35,7 @@ import { firstUnreadIndex } from '@/lib/unread'
 import { useRunStore } from '@/store/useRunStore'
 import { draftKey, useDraftStore } from '@/store/useDraftStore'
 import { useUiStore } from '@/store/useUiStore'
+import { ApprovalPrompt } from './ApprovalPrompt'
 import type { Contact, GroupMessage, PersonaTemplate } from '@/types'
 
 interface GroupThreadViewProps {
@@ -183,6 +184,11 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
         .find((entry) => entry.turn && !entry.turn.stream.finished),
     [memberIds, runsByContact]
   )
+
+  // A held write on any member's turn. The group thread is the
+  // surface most likely to be open while a routine or mention runs, so the
+  // ask shows here too — same data, same card, the member named.
+  const approvalRun = activeRuns.find((run) => memberIds.includes(run.contactId) && run.approval)
 
   const contentRef = useRef<HTMLDivElement>(null)
   const streamed = live?.turn ? streamText(live.turn.stream) : ''
@@ -392,6 +398,14 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
                 resetRetry()
                 retry(live.contactId, groupId)
               }}
+            />
+          )}
+
+          {approvalRun?.approval && (
+            <ApprovalPrompt
+              runId={approvalRun.runId}
+              approval={approvalRun.approval}
+              personaName={personaFor(approvalRun.contactId)?.name}
             />
           )}
 

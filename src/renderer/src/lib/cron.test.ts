@@ -161,7 +161,7 @@ describe('describeSchedule', () => {
 describe('shortSchedule', () => {
   it('says every four hours in words, not in cron', () => {
     // The rail used to render the expression verbatim while the
-    // editor beside it had been rendering English since Phase 16.
+    // editor beside it renders English.
     expect(shortSchedule(buildCron({ ...schedule(), frequency: 'hourly', minute: 0 }))).toBe(
       'Hourly'
     )

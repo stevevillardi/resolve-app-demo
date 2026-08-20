@@ -223,7 +223,20 @@ const activeRunSchema = z.object({
   /** Set when origin is `routine`. */
   routineId: z.string().nullable(),
   /** Set when origin is `mention` — the group thread it was sent from. */
-  groupId: z.string().nullable()
+  groupId: z.string().nullable(),
+  /**
+   * The write an `ask_writes` turn is paused on, or null. Rides on the run row
+   * so the approval card needs no channel of its own: pending asks emit
+   * `runs-changed`, and this list is what that push refetches.
+   */
+  approval: z
+    .object({
+      id: z.string(),
+      toolName: z.string(),
+      detail: z.string(),
+      requestedAt: z.number()
+    })
+    .nullable()
 })
 
 /**
@@ -309,7 +322,7 @@ export type PrResult = z.infer<typeof prResultSchema>
  * Zod boundary someone routes around is a lock on a door with two doorways.
  */
 function requireScopePairing(
-  persona: { sandbox: string; githubScope: string },
+  persona: { backend: string; sandbox: string; githubScope: string },
   ctx: z.RefinementCtx
 ): void {
   if (persona.sandbox === 'full_access' && persona.githubScope !== 'full_access') {
@@ -318,6 +331,18 @@ function requireScopePairing(
       path: ['githubScope'],
       message:
         'A persona with full sandbox access cannot carry a narrower GitHub scope — full access bypasses the tools that would enforce it.'
+    })
+  }
+  // The ask posture needs a backend that can hold a turn open while
+  // a human answers, and Codex's exec channel cannot (see
+  // askBeforeWritesSupported). Checked again in persona-templates.ts, for the
+  // same two-doorways reason as the rule above.
+  if (persona.sandbox === 'ask_writes' && persona.backend !== 'claude') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['sandbox'],
+      message:
+        'Ask-before-writes needs a backend that can pause mid-turn for an answer, and Codex cannot — its exec channel has no way to deliver one.'
     })
   }
 }
@@ -1121,6 +1146,16 @@ export const ipcContract = {
   'runs.list': {
     input: z.void(),
     output: z.array(activeRunSchema)
+  },
+  /**
+   * Answers a pending ask. `resolved: false` is a stale click —
+   * the ask already timed out, was answered elsewhere, or its turn ended —
+   * which the card absorbs by refetching rather than surfacing an error the
+   * user cannot act on.
+   */
+  'runs.resolveApproval': {
+    input: z.object({ runId: z.string(), approvalId: z.string(), approved: z.boolean() }),
+    output: z.object({ resolved: z.boolean() })
   },
 
   'usage.list': {
