@@ -17,7 +17,7 @@ import { useUsageSummaries } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
 import { stepConversation, type ConversationRef } from '@/lib/conversation-nav'
 import { byRecency } from '@/lib/conversation-sort'
-import { groupName, previewLine } from '@/lib/format'
+import { contactName, groupName, previewLine } from '@/lib/format'
 import { byContactId, summariesFor } from '@/lib/usage'
 import { cn } from '@/lib/utils'
 import type { Contact, Group, PersonaBackend, PersonaTemplate } from '@/types'
@@ -352,7 +352,10 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
             key={contact.id}
             contact={contact}
             backend={persona?.backend ?? 'claude'}
-            name={persona?.name ?? contact.displayName}
+            // The Contact's own name, not the persona's (Phase 26 §A1) — three
+            // contacts on three repos were three rows all called "Code
+            // Reviewer". The avatar below still carries the persona.
+            name={contactName(contact, persona)}
             // previewLine strips the markdown an assistant reply is full of —
             // a row showing "## Findings" reads as a bug rather than a preview.
             preview={latest ? previewLine(latest.content) : 'No messages yet'}

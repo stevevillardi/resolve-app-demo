@@ -76,6 +76,47 @@ export function groupName(group: { name: string | null; repoPath: string }): str
   return named ? named : repoName(group.repoPath)
 }
 
+/**
+ * What to call a Contact on screen (Phase 26 §A1).
+ *
+ * Every list rendered `persona?.name ?? contact.displayName`, so the *persona*
+ * name won and the Contact's own name appeared nowhere outside dialogs. On a
+ * profile with three repositories that is three sidebar rows all reading "Code
+ * Reviewer", three routines all reading "Code Reviewer", and a command palette
+ * that cannot tell them apart — which is the app's headline screen failing at
+ * exactly the scale it is for.
+ *
+ * `displayName` is the right answer and always has been. It is NOT NULL, it
+ * defaults to `derivedName()` — "Code Reviewer · checkout-service", already
+ * distinguishing — a person can type their own at creation (§G4), and
+ * `contacts.rename` can change it. The delete dialog and the Markdown export
+ * were already reading it; the lists disagreeing with them was the bug.
+ *
+ * One function rather than the fallback written out at each site, for the same
+ * reason `groupName` is one: every reader that keeps writing it inline is a
+ * place a rename silently has no effect, and nothing on screen would show it.
+ *
+ * **Known limit, recorded rather than fixed.** `display_name` is a stored
+ * string, not a nullable override like `groups.name`, so renaming a *persona*
+ * no longer retitles the contacts bound to it — they keep the name derived from
+ * what the persona used to be called. Before this the row tracked the persona
+ * and could not show a typed name at all; now it shows the typed name and does
+ * not track. That is the correct trade — "rename" has to mean something — and
+ * persona identity stays live on the row anyway, through the avatar, which is
+ * seeded from the persona id and changes face and colour with it.
+ *
+ * The persona is still the fallback, for the same defensive reason `groupName`
+ * trims: a row written before `contacts.update` refused an empty name would
+ * otherwise render as a blank sidebar entry.
+ */
+export function contactName(
+  contact: { displayName: string },
+  persona: { name: string } | undefined
+): string {
+  const named = contact.displayName.trim()
+  return named ? named : (persona?.name ?? 'Contact')
+}
+
 /** Strips markdown syntax down to a single readable preview line. */
 export function previewLine(content: string): string {
   const firstMeaningful =
