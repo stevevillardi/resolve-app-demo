@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  contactName,
   formatDaySeparator,
   formatListTimestamp,
   formatRelative,
   formatTime,
-  isSameDay,
   groupName,
+  isSameDay,
   previewLine,
   repoName
 } from './format'
@@ -214,5 +215,49 @@ describe('groupName', () => {
     expect(groupName({ name: 'my-app', repoPath: '/Users/dev/my-app' })).toBe(
       groupName({ name: null, repoPath: '/Users/dev/my-app' })
     )
+  })
+})
+
+describe('contactName', () => {
+  const persona = { name: 'Code Reviewer' }
+
+  it("uses the Contact's own name, not the persona's", () => {
+    // The whole point. Every list used to render the persona, so
+    // three contacts on three repositories were three identical rows.
+    expect(contactName({ displayName: 'Code Reviewer · billing-api' }, persona)).toBe(
+      'Code Reviewer · billing-api'
+    )
+  })
+
+  it('distinguishes two contacts sharing one persona', () => {
+    const a = contactName({ displayName: 'Code Reviewer · checkout-service' }, persona)
+    const b = contactName({ displayName: 'Code Reviewer · billing-api' }, persona)
+
+    // The assertion the old behaviour fails: it returned 'Code Reviewer' twice.
+    expect(a).not.toBe(b)
+  })
+
+  it('honours a name someone typed over the derived default', () => {
+    expect(contactName({ displayName: 'Invoice totals' }, persona)).toBe('Invoice totals')
+  })
+
+  it('trims', () => {
+    expect(contactName({ displayName: '  Invoice totals  ' }, persona)).toBe('Invoice totals')
+  })
+
+  /**
+   * `contacts.update` refuses an empty name and `contacts.create` has since
+   * both refuse an empty name, so this can only reach the screen on a row
+   * written before either did — and a
+   * blank sidebar row is a worse failure than an unhelpful one, because there
+   * is nothing left to click. Same reasoning as `groupName`.
+   */
+  it('falls back to the persona when the name is blank', () => {
+    expect(contactName({ displayName: '   ' }, persona)).toBe('Code Reviewer')
+    expect(contactName({ displayName: '' }, persona)).toBe('Code Reviewer')
+  })
+
+  it('still renders something when the persona is gone too', () => {
+    expect(contactName({ displayName: '' }, undefined)).toBe('Contact')
   })
 })

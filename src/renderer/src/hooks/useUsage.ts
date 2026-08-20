@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { callProcedure, onUsageChanged } from '@/lib/ipc-client'
 import { usageKey, usageRootKey } from './useMessages'
-import type { UsageEvent } from '@/types'
+import type { ContactUsageSummary, UsageEvent } from '@/types'
 
 /**
  * Per-turn spend.
@@ -30,5 +30,33 @@ export function useUsageEvents(contactId?: string): UseQueryResult<UsageEvent[]>
   return useQuery({
     queryKey: usageKey(contactId),
     queryFn: () => callProcedure('usage.list', contactId ? { contactId } : {})
+  })
+}
+
+/**
+ * What each Contact has spent, rolled up by SQL.
+ *
+ * What the two rails read instead of `useUsageEvents()`. They needed one figure
+ * per conversation and were fetching the entire `usage_events` table to derive
+ * it, then rescanning that table once per row — so the sidebar's cost of drawing
+ * grew with every turn anyone had ever taken, on both axes at once.
+ *
+ * Keyed under the same `['usage']` root as the raw list, so the existing
+ * `usage-changed` push and the prefix invalidation in `useAgentStream` refresh
+ * both without a second subscription. The effect below is the same one
+ * `useUsageEvents` carries and for the same reason: covering every consumer by
+ * construction rather than by remembering.
+ */
+export function useUsageSummaries(): UseQueryResult<ContactUsageSummary[]> {
+  const queryClient = useQueryClient()
+
+  useEffect(
+    () => onUsageChanged(() => void queryClient.invalidateQueries({ queryKey: usageRootKey })),
+    [queryClient]
+  )
+
+  return useQuery({
+    queryKey: [...usageRootKey, 'summaries'],
+    queryFn: () => callProcedure('usage.summaries', undefined)
   })
 }

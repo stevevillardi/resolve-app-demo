@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { buildCron, DEFAULT_SCHEDULE, describeSchedule, parseCron, type Schedule } from './cron'
+import {
+  buildCron,
+  DEFAULT_SCHEDULE,
+  describeSchedule,
+  parseCron,
+  shortSchedule,
+  type Schedule
+} from './cron'
 
 /**
  * Two claims, and the second one is the one that keeps the picker honest.
  *
  * 1. Anything the picker can produce, it can read back. A round trip that loses
- *    information would mean reopening a saved routine showed a different
- *    schedule from the one that fires.
+ * information would mean reopening a saved routine showed a different
+ * schedule from the one that fires.
  * 2. Anything it *cannot* express returns null rather than an approximation.
- *    Silently rewriting `0 9 * * 1#2` into something the picker can draw would
- *    change when someone's routine runs, without saying so.
+ * Silently rewriting `0 9 * * 1#2` into something the picker can draw would
+ * change when someone's routine runs, without saying so.
  *
  * node-cron is deliberately not imported here — it lives in main, and this file
  * exists precisely so the renderer never needs it. That means these tests check
@@ -148,5 +155,113 @@ describe('describeSchedule', () => {
     expect(describeSchedule(schedule({ frequency: 'daily', hour: 9, minute: 5 }))).toContain(
       '09:05'
     )
+  })
+})
+
+describe('shortSchedule', () => {
+  it('says every four hours in words, not in cron', () => {
+    // The rail used to render the expression verbatim while the
+    // editor beside it had been rendering English since Phase 16.
+    expect(shortSchedule(buildCron({ ...schedule(), frequency: 'hourly', minute: 0 }))).toBe(
+      'Hourly'
+    )
+  })
+
+  it('names the minute when an hourly run is not on the hour', () => {
+    expect(shortSchedule(buildCron({ ...schedule(), frequency: 'hourly', minute: 5 }))).toBe(
+      'Hourly :05'
+    )
+  })
+
+  it('gives a daily run its time', () => {
+    expect(
+      shortSchedule(buildCron({ ...schedule(), frequency: 'daily', hour: 9, minute: 0 }))
+    ).toBe('Daily 09:00')
+  })
+
+  it('collapses all seven weekdays to daily', () => {
+    const weekly = buildCron({
+      ...schedule(),
+      frequency: 'weekly',
+      weekdays: [0, 1, 2, 3, 4, 5, 6],
+      hour: 9,
+      minute: 0
+    })
+    expect(shortSchedule(weekly)).toBe('Daily 09:00')
+  })
+
+  it('collapses Monday to Friday to weekdays', () => {
+    const weekly = buildCron({
+      ...schedule(),
+      frequency: 'weekly',
+      weekdays: [1, 2, 3, 4, 5],
+      hour: 9,
+      minute: 0
+    })
+    expect(shortSchedule(weekly)).toBe('Weekdays 09:00')
+  })
+
+  it('lists the days when it is neither', () => {
+    const weekly = buildCron({
+      ...schedule(),
+      frequency: 'weekly',
+      weekdays: [1, 3],
+      hour: 17,
+      minute: 30
+    })
+    expect(shortSchedule(weekly)).toBe('Mon, Wed 17:30')
+  })
+
+  it('gives a monthly run its day', () => {
+    const monthly = buildCron({
+      ...schedule(),
+      frequency: 'monthly',
+      dayOfMonth: 5,
+      hour: 9,
+      minute: 0
+    })
+    expect(shortSchedule(monthly)).toBe('Day 5, 09:00')
+  })
+
+  /**
+   * The contract this file's header states: `parseCron` returning null *is*
+   * Custom mode. An expression the picker cannot build is one somebody typed
+   * on purpose, and inventing prose for it would print a guess as a fact.
+   */
+  it('hands back an expression it cannot parse, verbatim', () => {
+    expect(shortSchedule('15 2,14 * * 1-5')).toBe('15 2,14 * * 1-5')
+    expect(shortSchedule('not a cron')).toBe('not a cron')
+  })
+})
+
+describe('shortSchedule, step-hour expressions', () => {
+  /**
+   * The literal string this was written for: the seeded demo's
+   * own routine, rendered as cron in the rail while the editor said it in
+   * English. `parseCron` cannot represent step syntax and must not learn to —
+   * null returning *is* Custom mode — so this lives in the display path only.
+   */
+  it('reads every-N-hours in English', () => {
+    expect(shortSchedule('0 */4 * * *')).toBe('Every 4h')
+    expect(shortSchedule('0 */2 * * *')).toBe('Every 2h')
+  })
+
+  it('keeps the minute when it is not on the hour', () => {
+    expect(shortSchedule('30 */6 * * *')).toBe('Every 6h :30')
+  })
+
+  it('leaves parseCron alone — this is display only', () => {
+    // If this ever returns non-null the picker gains a frequency it has no
+    // control for, and Custom mode stops meaning what SchedulePicker needs.
+    expect(parseCron('0 */4 * * *')).toBeNull()
+  })
+
+  it('still hands back anything else verbatim', () => {
+    // Guessing at a general cron translator is how a display starts asserting
+    // a schedule the app does not actually run.
+    expect(shortSchedule('15 2,14 * * 1-5')).toBe('15 2,14 * * 1-5')
+    expect(shortSchedule('0 */1 * * *')).toBe('0 */1 * * *')
+    expect(shortSchedule('0 */99 * * *')).toBe('0 */99 * * *')
+    expect(shortSchedule('99 */4 * * *')).toBe('99 */4 * * *')
   })
 })

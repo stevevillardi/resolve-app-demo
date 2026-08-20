@@ -17,7 +17,7 @@ import type { RepoTrust, TurnWork } from '../../shared/domain'
  *
  * Non-secret metadata ONLY. Tokens and API keys live in the OS keychain via
  * src/main/services/secrets.ts and must never be written here, so that
- * inspecting the .db file is a sufficient check that nothing leaked.
+ * inspecting the.db file is a sufficient check that nothing leaked.
  *
  * Known keys are enumerated in services/app-state.ts.
  */
@@ -174,7 +174,18 @@ export const contacts = sqliteTable(
      */
     lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' })
   },
-  (table) => [index('contacts_repo_path_idx').on(table.repoPath)]
+  (table) => [
+    index('contacts_repo_path_idx').on(table.repoPath),
+    /**
+     * "Which contacts use this persona".
+     *
+     * Read by the persona detail panel's bound-contacts list, by the usage
+     * rail's per-persona rollup, and — the one that matters — by the RESTRICT
+     * gate that refuses to delete a persona still in use. All three were full
+     * table scans on a column that is a foreign key.
+     */
+    index('contacts_persona_template_idx').on(table.personaTemplateId)
+  ]
 )
 
 export const groups = sqliteTable(
@@ -492,7 +503,21 @@ export const usageEvents = sqliteTable(
      */
     messageId: text('message_id').references(() => messages.id, { onDelete: 'set null' })
   },
-  (table) => [index('usage_events_contact_timestamp_idx').on(table.contactId, table.timestamp)]
+  (table) => [
+    index('usage_events_contact_timestamp_idx').on(table.contactId, table.timestamp),
+    /**
+     * The two columns migration 0008 denormalised, finally indexed.
+     *
+     * `repo_path` and `persona_template_id` were copied onto this table for one
+     * stated purpose — so spend could still be grouped by them after the Contact
+     * that spent it was deleted — and then every grouping read scanned the whole
+     * table to do it. Paired with `timestamp` because no caller wants one of
+     * these without a range: the dashboard always asks within 7 days, 30 days or
+     * all, and a covering pair lets SQLite answer without visiting the row.
+     */
+    index('usage_events_repo_timestamp_idx').on(table.repoPath, table.timestamp),
+    index('usage_events_persona_timestamp_idx').on(table.personaTemplateId, table.timestamp)
+  ]
 )
 
 /**

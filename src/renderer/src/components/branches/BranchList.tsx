@@ -6,11 +6,19 @@ import { ListRow } from '@/components/common/ListRow'
 import { ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
 import { useBranches, useDiscardBranch } from '@/hooks/useBranches'
 import { repoName } from '@/lib/format'
+import { filterList, isFiltering, noMatchDescription, type ListFilter } from '@/lib/list-filter'
+import {
+  FACET_REPO,
+  FACET_STATE,
+  STATE_ORPHANED,
+  STATE_UNCOMMITTED,
+  STATE_UNMERGED
+} from '@/lib/section-facets'
 import { useUiStore } from '@/store/useUiStore'
 import type { BranchSummary } from '../../../../shared/ipc-contract'
 
 interface BranchListProps {
-  query: string
+  filter: ListFilter
 }
 
 /**
@@ -80,20 +88,32 @@ function BranchRowMenu({ branch }: { branch: BranchSummary }): React.JSX.Element
  * Grouped by repo because a branch name is only unique within one, and because
  * "what is outstanding on this project" is the question the panel answers.
  */
-export function BranchList({ query }: BranchListProps): React.JSX.Element {
-  const { data: branches = [], isLoading } = useBranches()
+export function BranchList({ filter }: BranchListProps): React.JSX.Element {
+  const { data: branches = [], isLoading, isError } = useBranches()
   const selected = useUiStore((state) => state.selectedBranch)
   const setSelected = useUiStore((state) => state.setSelectedBranch)
 
-  const needle = query.trim().toLowerCase()
-  const matching = needle
-    ? branches.filter(
-        (branch) =>
-          branch.branch.toLowerCase().includes(needle) ||
-          (branch.contactName ?? '').toLowerCase().includes(needle) ||
-          branch.repoPath.toLowerCase().includes(needle)
-      )
-    : branches
+  const filtering = isFiltering(filter)
+  const matching = filterList(
+    branches,
+    filter,
+    {
+      [FACET_REPO]: (branch) => [branch.repoPath],
+      [FACET_STATE]: (branch) => [
+        ...(branch.merged ? [] : [STATE_UNMERGED]),
+        ...(branch.dirtyFiles.length > 0 ? [STATE_UNCOMMITTED] : []),
+        // An orphan has no persona left to authorise anything and can only be
+        // merged or discarded — the branches most at risk of being forgotten,
+        // and the reason `listPersonaBranches` reads git rather than the table.
+        ...(branch.contactId === null ? [STATE_ORPHANED] : [])
+      ]
+    },
+    (branch) => ({
+      label: branch.branch,
+      detail: branch.repoPath,
+      keywords: [branch.contactName ?? '']
+    })
+  )
 
   if (isLoading) {
     // The same shape every other list uses while it waits. This was a bare
@@ -102,15 +122,30 @@ export function BranchList({ query }: BranchListProps): React.JSX.Element {
     return <EmptyState compact loading title="Reading branches…" />
   }
 
+  // Worded for what actually fails here. This read shells out to git rather
+  // than to the database, and `branchesIn` already swallows one unreachable
+  // repository — so reaching this means the call itself failed, not that a
+  // checkout moved.
+  if (isError) {
+    return (
+      <EmptyState
+        compact
+        error
+        title="Couldn’t read branches"
+        description="Git did not answer. Check that the repositories are still where the contacts point."
+      />
+    )
+  }
+
   if (matching.length === 0) {
     return (
       <EmptyState
         compact
         icon={GitBranch}
-        title={needle ? 'No matching branches' : 'No open branches'}
+        title={filtering ? 'No matching branches' : 'No open branches'}
         description={
-          needle
-            ? 'Nothing here matches that search.'
+          filtering
+            ? noMatchDescription(filter)
             : 'Personas working in their own checkouts will show their branches here.'
         }
       />

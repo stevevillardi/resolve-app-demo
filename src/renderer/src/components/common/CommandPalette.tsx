@@ -20,7 +20,7 @@ import { useContacts, useGroups } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useSkills } from '@/hooks/useSkills'
 import { buildCommandSections, type CommandItem as Command_ } from '@/lib/command-palette'
-import { repoName } from '@/lib/format'
+import { contactName, repoName } from '@/lib/format'
 import { parseSnippet } from '@/lib/search-view'
 import { useRoutines } from '@/hooks/useRoutines'
 import { useSearchMessages } from '@/hooks/useSearch'
@@ -76,7 +76,10 @@ export function CommandPalette(): React.JSX.Element {
       items.push({
         id,
         group: 'Conversations',
-        label: persona?.name ?? contact.displayName,
+        // The Contact's own name. The palette is the surface
+        // where identical labels hurt most: three rows reading "Code
+        // Reviewer" are three rows you have to open to tell apart.
+        label: contactName(contact, persona),
         detail: contact.repoPath
       })
       run.set(id, () => {
@@ -92,7 +95,7 @@ export function CommandPalette(): React.JSX.Element {
             seed={persona?.avatarSeed}
             size="xs"
           />
-          <span className="truncate">{persona?.name ?? contact.displayName}</span>
+          <span className="truncate">{contactName(contact, persona)}</span>
           <CommandShortcut className="truncate font-mono text-meta tracking-normal">
             {repoName(contact.repoPath)}
           </CommandShortcut>
@@ -299,7 +302,7 @@ export function CommandPalette(): React.JSX.Element {
     if (result.kind === 'message') {
       const contact = contacts.find((candidate) => candidate.id === result.contactId)
       const persona = personas.find((candidate) => candidate.id === contact?.personaTemplateId)
-      return persona?.name ?? contact?.displayName ?? 'Conversation'
+      return contact ? contactName(contact, persona) : 'Conversation'
     }
     const group = groups.find((candidate) => candidate.id === result.groupId)
     return group ? repoName(group.repoPath) : 'Repo group'

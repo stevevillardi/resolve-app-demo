@@ -19,7 +19,8 @@ import {
   skillSchema,
   systemSummaryCategorySchema,
   themePreferenceSchema,
-  usageEventSchema
+  usageEventSchema,
+  contactUsageSummarySchema
 } from './domain'
 
 /**
@@ -552,7 +553,7 @@ export const ipcContract = {
   },
 
   // --- Data layer ---------------------------------------------------------
-  // Entity shapes come from ./domain.ts so main's tables, these procedures,
+  // Entity shapes come from./domain.ts so main's tables, these procedures,
   // and the renderer's types can't drift apart. Ids are minted in main, hence
   // the `Draft` (id-less) inputs on every create.
   'skills.list': {
@@ -640,7 +641,7 @@ export const ipcContract = {
    *
    * The renderer could not do this without shipping a scheduler runtime into
    * its own bundle, and a second hand-rolled validator is the drift this repo
-   * has been bitten by twice. `nextRuns` feeds the editor's "Next: ..." hint,
+   * has been bitten by twice. `nextRuns` feeds the editor's "Next:..." hint,
    * which is more use than restating the expression back at the user.
    */
   'routines.validateSchedule': {
@@ -1138,6 +1139,26 @@ export const ipcContract = {
       .object({ contactId: z.string().optional(), repoPath: z.string().optional() })
       .optional(),
     output: z.array(auditEventSchema)
+  },
+
+  /**
+   * What each Contact has spent, rolled up in SQL.
+   *
+   * Distinct from `usage.list` rather than replacing it, because the two answer
+   * different questions and only one of them scales. A rail wants one figure per
+   * conversation; the dashboard charts per-day buckets and genuinely needs the
+   * rows. Handing the rail the rows meant it loaded the entire table to compute
+   * a number per contact, which is the cost this exists to remove.
+   *
+   * No input: the rail draws every row it has, so narrowing here would only mean
+   * a second query key for the same answer. Contacts with no spend are simply
+   * absent — a missing entry is "has not run a turn", which the rail renders as
+   * no badge at all rather than as `$0.00`, and that distinction is the same one
+   * `formatCostSummary` protects.
+   */
+  'usage.summaries': {
+    input: z.void(),
+    output: z.array(contactUsageSummarySchema)
   },
 
   /**

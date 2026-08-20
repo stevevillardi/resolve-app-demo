@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface EmptyStateProps {
@@ -8,6 +8,15 @@ interface EmptyStateProps {
   description?: string
   action?: React.ReactNode
   loading?: boolean
+  /**
+   * The read failed — a third state, distinct from "nothing here yet".
+   *
+   * Every list hook but `useRepos` defaulted a failed query to `[]`, so a
+   * broken IPC call rendered as "No personas yet" and invited the user to
+   * create something they may already have. Advice offered in response to a
+   * question the app could not answer.
+   */
+  error?: boolean
   /** Tighter spacing for empty states inside a list panel rather than a pane. */
   compact?: boolean
   className?: string
@@ -19,6 +28,7 @@ export function EmptyState({
   description,
   action,
   loading = false,
+  error = false,
   compact = false,
   className
 }: EmptyStateProps): React.JSX.Element {
@@ -35,15 +45,22 @@ export function EmptyState({
         className
       )}
     >
-      {(loading || Icon) && (
+      {(loading || error || Icon) && (
         <span
           className={cn(
-            'text-muted-foreground border-border flex items-center justify-center rounded-xl border border-dashed',
+            'flex items-center justify-center rounded-xl border border-dashed',
+            // The warning register, not the destructive one: nothing was
+            // damaged and nothing needs undoing — a read did not come back.
+            error
+              ? 'text-scope-elevated border-scope-elevated/40'
+              : 'text-muted-foreground border-border',
             compact ? 'size-9' : 'size-12'
           )}
         >
           {loading ? (
             <Loader2 className={cn('animate-spin', compact ? 'size-4' : 'size-5')} />
+          ) : error ? (
+            <TriangleAlert className={cn(compact ? 'size-4' : 'size-5')} />
           ) : (
             Icon && <Icon className={cn(compact ? 'size-4' : 'size-5')} />
           )}

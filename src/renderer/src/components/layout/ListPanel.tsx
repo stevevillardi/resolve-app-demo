@@ -23,6 +23,9 @@ import { useCreateSkill } from '@/hooks/useSkills'
 import { useContacts } from '@/hooks/useConversations'
 import { BranchList } from '@/components/branches/BranchList'
 import { useCreateRoutine } from '@/hooks/useRoutines'
+import { FacetBar } from '@/components/common/FacetBar'
+import { useSectionFacets } from '@/hooks/useSectionFacets'
+import { EMPTY_LIST_FILTER, type ListFilter } from '@/lib/list-filter'
 import { useUiStore, type Section } from '@/store/useUiStore'
 import type { PersonaTemplateDraft, SkillDraft } from '@/types'
 
@@ -40,7 +43,10 @@ const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLab
   personas: { title: 'Personas', searchPlaceholder: 'Search personas', newLabel: 'New persona' },
   skills: { title: 'Skills', searchPlaceholder: 'Search skills', newLabel: 'New skill' },
   routines: { title: 'Routines', searchPlaceholder: 'Search routines', newLabel: 'New routine' },
-  usage: { title: 'Usage' },
+  // the one rail whose length grows on *both* axes at once — every
+  // persona and every repo — and the only one that had no way to narrow at all.
+  // No facets: the dashboard beside it already owns range, measure and source.
+  usage: { title: 'Usage', searchPlaceholder: 'Search personas and repos' },
   // No "+": a branch is produced by a persona doing work, never made here.
   branches: { title: 'Branches', searchPlaceholder: 'Search branches' },
   // No "+": an audit row is produced by a governance action, never made here.
@@ -88,9 +94,24 @@ export function ListPanel(): React.JSX.Element {
   const setSelectedPersonaId = useUiStore((state) => state.setSelectedPersonaId)
   const setSelectedSkillId = useUiStore((state) => state.setSelectedSkillId)
   const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
-  const [query, setQuery] = useState('')
+  /**
+   * The filter now lives in the store, keyed by section.
+   *
+   * It was `useState` here, cleared on every section change — the right fix
+   * while one string was shared by all sections, and unnecessary once each has
+   * its own. What forced the move is `showIn`: a link that narrows a section
+   * the user is not currently on cannot be served by state that unmounts with
+   * that section.
+   */
+  const filter = useUiStore((state) => state.listFilters[state.section]) ?? EMPTY_LIST_FILTER
+  const setListFilter = useUiStore((state) => state.setListFilter)
+  const setFilter = (next: ListFilter | ((current: ListFilter) => ListFilter)): void =>
+    setListFilter(section, typeof next === 'function' ? next(filter) : next)
+  const query = filter.query
+  const setQuery = (next: string): void => setFilter({ ...filter, query: next })
   const searchRef = useRef<HTMLInputElement>(null)
   const config = PANEL[section]
+  const facets = useSectionFacets(section)
 
   /**
    * `/` focuses the search, `esc` clears it and gives focus back.
@@ -116,13 +137,20 @@ export function ListPanel(): React.JSX.Element {
       }
 
       if (event.key === 'Escape' && target === searchRef.current) {
+        // State read through the store rather than from the closure, so this
+        // effect can stay bound once instead of re-registering on every
+        // keystroke — and, more importantly, so it cannot clear a *stale*
+        // filter. The captured value would be whatever it was when the listener
+        // was attached, which after `showIn` is not what is on screen. Same
+        // reason `ConversationList` reads the selection through `getState`.
+        const { section: current, listFilters, setListFilter: apply } = useUiStore.getState()
+        const active = listFilters[current] ?? EMPTY_LIST_FILTER
+
         // Only when there is something to clear. Otherwise `esc` should keep
         // meaning "close whatever is open", which is what everything else in
         // the app uses it for.
-        setQuery((current) => {
-          if (current) searchRef.current?.focus()
-          return ''
-        })
+        if (active.query) searchRef.current?.focus()
+        apply(current, { ...active, query: '' })
       }
     }
 
@@ -130,18 +158,11 @@ export function ListPanel(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
-  // A search left behind in one section is invisible in the next but still
-  // filtering it, which reads as an empty list rather than as a filter.
-  //
-  // Adjusted during render rather than in an effect: React's own documented
-  // pattern for resetting state when something changes, and the one the
-  // set-state-in-effect rule is pointing at. An effect would render the stale
-  // filter once before clearing it.
-  const [searchedSection, setSearchedSection] = useState(section)
-  if (searchedSection !== section) {
-    setSearchedSection(section)
-    setQuery('')
-  }
+  // No section-change reset any more, and the reason it existed is gone rather
+  // than overridden: one shared query string genuinely did leak between
+  // sections, so clearing it was correct. A per-section filter cannot leak, and
+  // an active one announces itself — the chips are visible chrome, and
+  // `noMatchDescription` names the filter when it is what emptied the list.
 
   const { create: createPersona } = useCreatePersona()
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -273,6 +294,11 @@ export function ListPanel(): React.JSX.Element {
             </InputGroup>
           </div>
         )}
+        {/* Under the box rather than beside it: the chips wrap, and a row that
+            grows sideways into the search field would push the field's own
+            clear button off the edge on a narrow panel (the rail goes down to
+            240px). */}
+        <FacetBar specs={facets} filter={filter} onChange={setFilter} />
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -283,12 +309,12 @@ export function ListPanel(): React.JSX.Element {
               take the search field and the "+" with it, and losing the list is
               the one failure that leaves you unable to select your way out. */}
           <ErrorBoundary variant="pane" resetKey={section}>
-            {section === 'chats' && <ConversationList query={query} />}
-            {section === 'personas' && <PersonaList query={query} />}
-            {section === 'skills' && <SkillList query={query} />}
-            {section === 'routines' && <RoutineList query={query} />}
-            {section === 'usage' && <UsageScopeList />}
-            {section === 'branches' && <BranchList query={query} />}
+            {section === 'chats' && <ConversationList filter={filter} />}
+            {section === 'personas' && <PersonaList filter={filter} />}
+            {section === 'skills' && <SkillList filter={filter} />}
+            {section === 'routines' && <RoutineList filter={filter} />}
+            {section === 'usage' && <UsageScopeList query={query} />}
+            {section === 'branches' && <BranchList filter={filter} />}
             {section === 'activity' && <ActivityScopeList />}
           </ErrorBoundary>
         </div>

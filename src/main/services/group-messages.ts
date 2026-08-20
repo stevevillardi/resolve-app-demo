@@ -100,23 +100,35 @@ export function appendToGroupMessage(id: string, line: string): void {
  * One query rather than one per group, for the same reason messagePreviews()
  * is: the list renders every group at once, and the N+1 version would be N
  * round trips through the IPC boundary on every render of the primary screen.
+ * It is proportional to the number of groups, not to how much has been said
+ * in them — see messagePreviews().
  *
  * The `rowid` tiebreak matters here too — compaction writes a summary in the
  * same millisecond a fast turn finishes, and ordering by timestamp alone would
  * make which of the two shows up in the list non-deterministic.
  */
 export function groupMessagePreviews(): GroupMessage[] {
-  const latest = new Map<string, GroupMessage>()
-  const rows = initDb()
+  return initDb()
     .select()
     .from(groupMessages)
+    .where(
+      // Driven by `groups` rather than by every row in the table — one index
+      // seek per group against
+      // `group_messages_group_timestamp_idx`, instead of reading the whole
+      // history of every repo group to keep the newest line from each.
+      sql`${groupMessages.id} IN (
+        SELECT (
+          SELECT gm.id FROM ${groupMessages} gm
+          WHERE gm.group_id = g.id
+          ORDER BY gm.timestamp DESC, gm.rowid DESC
+          LIMIT 1
+        )
+        FROM ${groups} g
+      )`
+    )
     .orderBy(desc(groupMessages.timestamp), desc(sql`rowid`))
     .all()
-
-  for (const row of rows) {
-    if (!latest.has(row.groupId)) latest.set(row.groupId, toGroupMessage(row))
-  }
-  return [...latest.values()]
+    .map(toGroupMessage)
 }
 
 /**

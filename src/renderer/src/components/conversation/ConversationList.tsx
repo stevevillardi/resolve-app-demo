@@ -13,12 +13,20 @@ import { usePersonas } from '@/hooks/usePersonas'
 import { useActiveRuns, useMessagePreviews } from '@/hooks/useMessages'
 import { useGroupMessagePreviews } from '@/hooks/useGroupMessages'
 import { useUnread } from '@/hooks/useUnread'
-import { useUsageEvents } from '@/hooks/useUsage'
+import { useUsageSummaries } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
 import { stepConversation, type ConversationRef } from '@/lib/conversation-nav'
 import { byRecency } from '@/lib/conversation-sort'
-import { groupName, previewLine } from '@/lib/format'
-import { usageForContact, usageForContacts } from '@/lib/usage'
+import {
+  filterList,
+  hasQuery,
+  isFiltering,
+  noMatchDescription,
+  type ListFilter
+} from '@/lib/list-filter'
+import { FACET_PERSONA, FACET_REPO, FACET_STATE, STATE_UNREAD } from '@/lib/section-facets'
+import { contactName, groupName, previewLine } from '@/lib/format'
+import { byContactId, summariesFor } from '@/lib/usage'
 import { cn } from '@/lib/utils'
 import type { Contact, Group, PersonaBackend, PersonaTemplate } from '@/types'
 
@@ -170,19 +178,19 @@ function GroupRow({
   )
 }
 
-export function ConversationList({ query }: { query: string }): React.JSX.Element {
+export function ConversationList({ filter }: { filter: ListFilter }): React.JSX.Element {
   const selected = useUiStore((state) => state.selectedConversation)
   const setSelected = useUiStore((state) => state.setSelectedConversation)
   const setDialog = useUiStore((state) => state.setDialog)
-  const { data: contacts = [], isPending } = useContacts()
+  const { data: contacts = [], isPending, isError } = useContacts()
   const { data: groups = [] } = useGroups()
   const { data: personaTemplates = [] } = usePersonas()
   const { data: previews = [] } = useMessagePreviews()
   const { data: groupPreviews = [] } = useGroupMessagePreviews()
-  const { data: usageEvents = [] } = useUsageEvents()
+  const { data: usageSummaries = [] } = useUsageSummaries()
   const { data: runs = [] } = useActiveRuns()
   const unread = useUnread()
-  const needle = query.trim().toLowerCase()
+  const filtering = isFiltering(filter)
   // Revealed by the disclosure at the foot of the list, and deliberately not
   // persisted: hiding is the setting, showing is a peek.
   const [showHidden, setShowHidden] = useState(false)
@@ -192,14 +200,24 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
     [previews]
   )
 
-  // Undefined rather than a zeroed summary when a contact has never run: the
-  // badge should be absent, not read "$0.00", which claims a turn was free.
+  /**
+   * Spend per conversation, from the SQL rollup rather than from raw events
+   *.
+   *
+   * This used to call `usage.list` with no argument — every usage row ever
+   * written — and then scan that array once per contact and once per group. The
+   * rail's cost of drawing therefore grew with the number of turns the whole
+   * fleet had ever taken, which is invisible at three contacts and is the first
+   * thing to go at thirty.
+   *
+   * The undefined-not-zero rule is unchanged and now lives in `summariesFor`: a
+   * contact with no rollup entry has never run a turn, and its badge should be
+   * absent rather than read "$0.00", which claims a turn was free.
+   */
+  const summaryIndex = useMemo(() => byContactId(usageSummaries), [usageSummaries])
   const usageFor = useMemo(
-    () => (contactId: string) => {
-      if (!usageEvents.some((event) => event.contactId === contactId)) return undefined
-      return usageForContact(usageEvents, contactId)
-    },
-    [usageEvents]
+    () => (contactId: string) => summariesFor(summaryIndex, [contactId]),
+    [summaryIndex]
   )
 
   const personaFor = useMemo(
@@ -215,16 +233,26 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
   const visibleContacts = useMemo(
     () =>
       byRecency(
-        contacts.filter(
-          (contact) =>
-            !needle ||
-            contact.displayName.toLowerCase().includes(needle) ||
-            contact.repoPath.toLowerCase().includes(needle)
+        filterList(
+          contacts,
+          filter,
+          {
+            [FACET_REPO]: (contact) => [contact.repoPath],
+            [FACET_PERSONA]: (contact) => [contact.personaTemplateId],
+            [FACET_STATE]: (contact) =>
+              (unread.get(`contact:${contact.id}`) ?? 0) > 0 ? [STATE_UNREAD] : []
+          },
+          (contact) => ({
+            // What the row shows, so the searchable text and the
+            // visible text finally agree.
+            label: contactName(contact, personaFor(contact.personaTemplateId)),
+            detail: contact.repoPath
+          })
         ),
         (contact) => previews.find((message) => message.contactId === contact.id)?.timestamp,
         (contact) => contact.displayName
       ),
-    [contacts, needle, previews]
+    [contacts, filter, previews, unread, personaFor]
   )
 
   /**
@@ -238,27 +266,43 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
   const visibleGroups = useMemo(
     () =>
       byRecency(
-        groups.filter((group) => {
+        filterList(
           /**
-           * A search reaches hidden groups whether or not they are revealed.
-           * Hiding governs the *resting* state of the list; if someone types
-           * the name of a group they hid, answering "nothing matches" is both
-           * wrong and the thing that would make hiding feel like deletion.
+           * A **search** reaches hidden groups whether or not they are
+           * revealed. Hiding governs the *resting* state of the list; if
+           * someone types the name of a group they hid, answering "nothing
+           * matches" is both wrong and the thing that would make hiding feel
+           * like deletion.
+           *
+           * A **facet** does not, and the distinction is deliberate. Typing a
+           * name is asking for one thing you already have in mind; ticking
+           * "checkout-service" is narrowing a list, and a hidden row
+           * reappearing because you narrowed would undo the hiding without
+           * being asked. So this keys off `hasQuery` rather than `isFiltering`.
            */
-          if (group.hidden && !showHidden && !needle) return false
-          if (!needle) return true
-          // The name is matched as well as the path, because a group can carry
-          // a name of its own — searching for what is written on the row and
-          // getting nothing back is the alternative.
-          return (
-            group.repoPath.toLowerCase().includes(needle) ||
-            groupName(group).toLowerCase().includes(needle)
-          )
-        }),
+          groups.filter((group) => !group.hidden || showHidden || hasQuery(filter)),
+          filter,
+          {
+            [FACET_REPO]: (group) => [group.repoPath],
+            // A group is a view of the contacts on a repository, so it belongs
+            // to every persona working there — otherwise filtering by persona
+            // would hide the shared thread that persona posts into.
+            [FACET_PERSONA]: (group) =>
+              contacts
+                .filter((contact) => contact.repoPath === group.repoPath)
+                .map((contact) => contact.personaTemplateId),
+            [FACET_STATE]: (group) =>
+              (unread.get(`group:${group.id}`) ?? 0) > 0 ? [STATE_UNREAD] : []
+          },
+          // The name as well as the path, now that a group can carry one of its
+          // own — searching for what is written on the row and getting nothing
+          // back was the alternative.
+          (group) => ({ label: groupName(group), detail: group.repoPath })
+        ),
         (group) => groupPreviews.find((message) => message.groupId === group.id)?.timestamp,
         (group) => groupName(group)
       ),
-    [groups, needle, groupPreviews, showHidden]
+    [groups, filter, groupPreviews, showHidden, contacts, unread]
   )
 
   /**
@@ -308,13 +352,27 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
     return <EmptyState compact loading title="Loading conversations…" />
   }
 
+  // Ahead of both nothings below, because a failed read is a third state and
+  // the other two would lie about it: "no conversations yet" is advice to create
+  // something, offered in answer to a question the app could not ask.
+  if (isError) {
+    return (
+      <EmptyState
+        compact
+        error
+        title="Couldn’t load conversations"
+        description="The app could not read from its own database. Reopening the window usually clears it."
+      />
+    )
+  }
+
   if (visibleContacts.length === 0 && visibleGroups.length === 0) {
-    return needle ? (
+    return filtering ? (
       <EmptyState
         compact
         icon={MessagesSquare}
         title="Nothing matches"
-        description={`No contact or repo matching “${query.trim()}”.`}
+        description={noMatchDescription(filter)}
       />
     ) : (
       <EmptyState
@@ -342,7 +400,10 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
             key={contact.id}
             contact={contact}
             backend={persona?.backend ?? 'claude'}
-            name={persona?.name ?? contact.displayName}
+            // The Contact's own name, not the persona's — three
+            // contacts on three repos were three rows all called "Code
+            // Reviewer". The avatar below still carries the persona.
+            name={contactName(contact, persona)}
             // previewLine strips the markdown an assistant reply is full of —
             // a row showing "## Findings" reads as a bug rather than a preview.
             preview={latest ? previewLine(latest.content) : 'No messages yet'}
@@ -368,11 +429,9 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
         const memberIds = contacts
           .filter((contact) => contact.repoPath === group.repoPath)
           .map((contact) => contact.id)
-        const memberUsage = usageEvents.some(
-          (event) => event.contactId !== null && memberIds.includes(event.contactId)
-        )
-          ? usageForContacts(usageEvents, memberIds)
-          : undefined
+        // A group's figure is its members' summed — the same composition the
+        // usage rail does for a persona, through the same helper.
+        const memberUsage = summariesFor(summaryIndex, memberIds)
         // The group's own log, not its members' 1:1 threads — a group row
         // should preview what happened *in the group*, which means session
         // summaries, mentions, and routed replies.
@@ -416,7 +475,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
         while a filter is active — a hidden group that matches the search is
         already shown, so the count would be describing a different list.
       */}
-      {!needle && hiddenGroups.length > 0 && (
+      {!hasQuery(filter) && hiddenGroups.length > 0 && (
         <button
           type="button"
           onClick={() => setShowHidden((current) => !current)}

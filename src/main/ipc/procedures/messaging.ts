@@ -16,7 +16,7 @@ import {
   groupMessagePreviews,
   listGroupMessages
 } from '../../services/group-messages'
-import { listUsageEvents } from '../../services/usage-events'
+import { listUsageEvents, usageSummariesByContact } from '../../services/usage-events'
 
 registerProcedure('messages.list', ({ contactId }) => listMessages(contactId))
 registerProcedure('messages.toolCalls', ({ contactId }) => listToolCalls(contactId))
@@ -35,4 +35,5 @@ registerProcedure('groups.mention', ({ groupId, contactId, content }) =>
 
 registerProcedure('runs.list', () => listActiveRuns())
 registerProcedure('usage.list', ({ contactId }) => listUsageEvents(contactId))
+registerProcedure('usage.summaries', () => usageSummariesByContact())
 registerProcedure('models.listForBackend', ({ backend }) => modelsForBackend(backend))

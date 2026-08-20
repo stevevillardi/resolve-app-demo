@@ -1,12 +1,12 @@
 import { randomUUID } from 'crypto'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, isNotNull, sql } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toUsageEvent } from '../db/mappers'
 import { contacts, usageEvents } from '../db/schema'
 import { emitUsageChanged } from './agent-events'
 import { checkBudgetsAfterUsage } from './budget-alerts'
 import type { AgentUsage } from '../../shared/agent'
-import type { UsageEvent, UsageSource } from '../../shared/domain'
+import type { ContactUsageSummary, UsageEvent, UsageSource } from '../../shared/domain'
 
 /**
  * Per-turn spend.
@@ -24,6 +24,71 @@ export function listUsageEvents(contactId?: string): UsageEvent[] {
     ? query.where(eq(usageEvents.contactId, contactId)).orderBy(desc(usageEvents.timestamp)).all()
     : query.orderBy(desc(usageEvents.timestamp)).all()
   return rows.map(toUsageEvent)
+}
+
+/**
+ * Every contact's spend, rolled up in SQL.
+ *
+ * The conversation rail and the usage rail both used to answer "what has this
+ * cost" by fetching `usage.list` — the whole table, unbounded — and scanning it
+ * once per row in the renderer. That is O(rows × events) redone on every render,
+ * and it grows with exactly the two things a fleet accumulates. The rail needs
+ * one number per contact, so one number per contact is what it now asks for.
+ *
+ * Modelled on `unreadCounts()`, which is the other place in this app where the
+ * question is an aggregate and the answer belongs in the database.
+ *
+ * **Every clause here mirrors a rule `aggregateUsage` already enforced**, and
+ * the two are pinned to each other by test rather than by inspection — this is
+ * a second implementation of a spend calculation, and the way that goes wrong
+ * is by disagreeing quietly.
+ *
+ * - `SUM(cost_usd)` returns NULL when no row was priced, which is exactly
+ * `totalCostUsd: null` — "unknown", not "free". Deliberately no COALESCE.
+ * - unpriced and priced are counted separately, because a total with unpriced
+ * turns behind it is a floor and `formatCostSummary` prints the `+` that says
+ * so. Losing that count is how `$12.34+` silently becomes `$12.34`.
+ * - `COUNT(cached_input_tokens)` counts non-nulls, so zero means no turn ever
+ * reported caching and the field is omitted rather than sent as 0. "The
+ * backend never told us" is not "nothing was cached".
+ *
+ * Grouped by contact only. A group's figure is its members' summed and a
+ * persona's is its contacts', so the caller composes rather than this returning
+ * three groupings to keep in step. Spend whose Contact was deleted has no id to
+ * group under and is absent — which is what the renderer's own filter did with
+ * it, and why the dashboard's unscoped totals stay the place orphaned spend
+ * remains visible.
+ */
+export function usageSummariesByContact(): ContactUsageSummary[] {
+  const rows = initDb()
+    .select({
+      contactId: usageEvents.contactId,
+      totalCostUsd: sql<number | null>`sum(${usageEvents.costUsd})`,
+      totalInputTokens: sql<number>`sum(${usageEvents.inputTokens})`,
+      totalOutputTokens: sql<number>`sum(${usageEvents.outputTokens})`,
+      totalCachedInputTokens: sql<number | null>`sum(${usageEvents.cachedInputTokens})`,
+      cachedRows: count(usageEvents.cachedInputTokens),
+      pricedEvents: count(usageEvents.costUsd),
+      unpricedEvents: sql<number>`sum(case when ${usageEvents.costUsd} is null then 1 else 0 end)`
+    })
+    .from(usageEvents)
+    // Orphaned spend has no contact to attribute to. Excluded here rather than
+    // grouped under a null key, so the caller cannot accidentally render it as
+    // one mystery contact.
+    .where(isNotNull(usageEvents.contactId))
+    .groupBy(usageEvents.contactId)
+    .all()
+
+  return rows.map((row) => ({
+    contactId: row.contactId as string,
+    totalCostUsd: row.totalCostUsd,
+    totalInputTokens: row.totalInputTokens,
+    totalOutputTokens: row.totalOutputTokens,
+    // The omission is the signal — see the schema comment in domain.ts.
+    ...(row.cachedRows > 0 ? { totalCachedInputTokens: row.totalCachedInputTokens ?? 0 } : {}),
+    unpricedEvents: row.unpricedEvents,
+    pricedEvents: row.pricedEvents
+  }))
 }
 
 /**
@@ -129,9 +194,9 @@ export function recordUsage(
  * turn" (`dist/index.d.ts:119-131`). Measured over three one-word replies on a
  * single resumed thread:
  *
- *   turn 1   input 12122   output  5   cached  4480   $0.0406
- *   turn 2   input 25610   output 10   cached 16128   $0.0558
- *   turn 3   input 39114   output 15   cached 28800   $0.0664
+ * turn 1   input 12122   output  5   cached  4480   $0.0406
+ * turn 2   input 25610   output 10   cached 16128   $0.0558
+ * turn 3   input 39114   output 15   cached 28800   $0.0664
  *
  * Output going 5 → 10 → 15 for three one-word replies is a running sum. Left
  * alone, every UsageEvent after the first over-reports by a margin that grows

@@ -169,6 +169,13 @@
       "when": 1787187137886,
       "tag": "0023_amusing_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1787189861354,
+      "tag": "0024_add_scale_indexes",
+      "breakpoints": true
     }
   ]
 }
