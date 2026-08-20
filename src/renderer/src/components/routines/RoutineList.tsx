@@ -11,7 +11,16 @@ import {
   ContextMenuItem,
   ContextMenuSeparator
 } from '@/components/ui/context-menu'
-import { formatRelative } from '@/lib/format'
+import { shortSchedule } from '@/lib/cron'
+import { contactName, formatRelative } from '@/lib/format'
+import { filterList, isFiltering, noMatchDescription, type ListFilter } from '@/lib/list-filter'
+import {
+  FACET_PERSONA,
+  FACET_REPO,
+  FACET_STATE,
+  STATE_MISSED,
+  STATE_PAUSED
+} from '@/lib/section-facets'
 import { formatElapsed } from '@/lib/home'
 import { routineRun } from '@/lib/run-view'
 import { cn } from '@/lib/utils'
@@ -26,7 +35,7 @@ import {
 import { useActiveRuns } from '@/hooks/useMessages'
 import { useNow } from '@/hooks/useNow'
 import { useUiStore } from '@/store/useUiStore'
-import type { Routine } from '@/types'
+import type { Contact, Routine } from '@/types'
 
 /**
  * Right-click actions for a routine row — the enable toggle, run-now and
@@ -94,10 +103,10 @@ function RoutineRowMenu({ routine }: { routine: Routine }): React.JSX.Element {
   )
 }
 
-export function RoutineList({ query }: { query: string }): React.JSX.Element {
+export function RoutineList({ filter }: { filter: ListFilter }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedRoutineId)
   const setSelectedId = useUiStore((state) => state.setSelectedRoutineId)
-  const needle = query.trim().toLowerCase()
+  const filtering = isFiltering(filter)
 
   const { data: routines = [], isPending } = useRoutines()
   const contacts = useContacts().data ?? []
@@ -109,11 +118,39 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
   const anyRoutineRunning = runs.some((run) => run.origin === 'routine')
   const now = useNow(anyRoutineRunning)
 
-  const visible = routines.filter(
-    (routine) =>
-      !needle ||
-      routine.prompt.toLowerCase().includes(needle) ||
-      routine.schedule.toLowerCase().includes(needle)
+  const contactOf = (routine: Routine): Contact | undefined =>
+    contacts.find((contact) => contact.id === routine.contactId)
+
+  const visible = filterList(
+    routines,
+    filter,
+    {
+      [FACET_REPO]: (routine) => {
+        const repoPath = contactOf(routine)?.repoPath
+        return repoPath ? [repoPath] : []
+      },
+      [FACET_PERSONA]: (routine) => {
+        const personaId = contactOf(routine)?.personaTemplateId
+        return personaId ? [personaId] : []
+      },
+      [FACET_STATE]: (routine) => [
+        ...(routine.enabled ? [] : [STATE_PAUSED]),
+        ...(routine.missedRunCount > 0 ? [STATE_MISSED] : [])
+      ]
+    },
+    (routine) => {
+      const contact = contactOf(routine)
+      const persona = personaTemplates.find((p) => p.id === contact?.personaTemplateId)
+      return {
+        // The row's headline, which the old predicate did not search at all:
+        // it matched `prompt` and `schedule` while showing the persona name, so
+        // typing the one thing on screen found nothing.
+        label: contact ? contactName(contact, persona) : (persona?.name ?? 'Routine'),
+        detail: routine.prompt,
+        // The schedule both ways round, so `0 9` and `Daily` both land.
+        keywords: [routine.schedule, shortSchedule(routine.schedule)]
+      }
+    }
   )
 
   // Before the two nothings below: "not loaded yet" is a third state, and
@@ -124,12 +161,12 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
   if (visible.length === 0) {
     // Two different nothings: a filter that matched nothing, and a section
     // nobody has used yet. The second one names the next action.
-    return needle ? (
+    return filtering ? (
       <EmptyState
         compact
         icon={Clock}
         title="No routines match"
-        description={`Nothing matching “${query.trim()}”.`}
+        description={noMatchDescription(filter)}
       />
     ) : (
       <EmptyState
@@ -144,7 +181,7 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
   return (
     <div className="flex flex-col">
       {visible.map((routine) => {
-        const contact = contacts.find((c) => c.id === routine.contactId)
+        const contact = contactOf(routine)
         const persona = personaTemplates.find((p) => p.id === contact?.personaTemplateId)
         const active = selectedId === routine.id
         return (
@@ -170,11 +207,24 @@ export function RoutineList({ query }: { query: string }): React.JSX.Element {
           >
             <span className={cn('block', !routine.enabled && 'opacity-60')}>
               <span className="flex items-baseline justify-between gap-2">
+                {/* The contact, not the persona (§A1). Two routines on one
+                    persona were two rows with the same title and no other way
+                    to tell them apart than reading the prompt. */}
                 <span className="truncate text-row font-medium">
-                  {persona?.name ?? 'Unknown persona'}
+                  {contact ? contactName(contact, persona) : (persona?.name ?? 'Unknown persona')}
                 </span>
-                <span className="text-muted-foreground shrink-0 font-mono text-micro">
-                  {routine.schedule}
+                {/* English, not cron (§A3). The expression stays in the title
+                    so the exact answer is one hover away, and stays monospaced
+                    only when it *is* the expression — a schedule this app's
+                    picker cannot build comes back verbatim. */}
+                <span
+                  className={cn(
+                    'text-muted-foreground shrink-0 text-micro',
+                    shortSchedule(routine.schedule) === routine.schedule && 'font-mono'
+                  )}
+                  title={routine.schedule}
+                >
+                  {shortSchedule(routine.schedule)}
                 </span>
               </span>
               <span className="text-muted-foreground mt-0.5 block truncate text-xs">

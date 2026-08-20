@@ -23,6 +23,9 @@ import { useCreateSkill } from '@/hooks/useSkills'
 import { useContacts } from '@/hooks/useConversations'
 import { BranchList } from '@/components/branches/BranchList'
 import { useCreateRoutine } from '@/hooks/useRoutines'
+import { FacetBar } from '@/components/common/FacetBar'
+import { useSectionFacets } from '@/hooks/useSectionFacets'
+import { EMPTY_LIST_FILTER, type ListFilter } from '@/lib/list-filter'
 import { useUiStore, type Section } from '@/store/useUiStore'
 import type { PersonaTemplateDraft, SkillDraft } from '@/types'
 
@@ -40,7 +43,10 @@ const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLab
   personas: { title: 'Personas', searchPlaceholder: 'Search personas', newLabel: 'New persona' },
   skills: { title: 'Skills', searchPlaceholder: 'Search skills', newLabel: 'New skill' },
   routines: { title: 'Routines', searchPlaceholder: 'Search routines', newLabel: 'New routine' },
-  usage: { title: 'Usage' },
+  // §A4: the one rail whose length grows on *both* axes at once — every
+  // persona and every repo — and the only one that had no way to narrow at all.
+  // No facets: the dashboard beside it already owns range, measure and source.
+  usage: { title: 'Usage', searchPlaceholder: 'Search personas and repos' },
   // No "+": a branch is produced by a persona doing work, never made here.
   branches: { title: 'Branches', searchPlaceholder: 'Search branches' },
   // No "+": an audit row is produced by a governance action, never made here.
@@ -88,9 +94,12 @@ export function ListPanel(): React.JSX.Element {
   const setSelectedPersonaId = useUiStore((state) => state.setSelectedPersonaId)
   const setSelectedSkillId = useUiStore((state) => state.setSelectedSkillId)
   const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
-  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<ListFilter>(EMPTY_LIST_FILTER)
+  const query = filter.query
+  const setQuery = (next: string): void => setFilter((current) => ({ ...current, query: next }))
   const searchRef = useRef<HTMLInputElement>(null)
   const config = PANEL[section]
+  const facets = useSectionFacets(section)
 
   /**
    * `/` focuses the search, `esc` clears it and gives focus back.
@@ -119,9 +128,9 @@ export function ListPanel(): React.JSX.Element {
         // Only when there is something to clear. Otherwise `esc` should keep
         // meaning "close whatever is open", which is what everything else in
         // the app uses it for.
-        setQuery((current) => {
-          if (current) searchRef.current?.focus()
-          return ''
+        setFilter((current) => {
+          if (current.query) searchRef.current?.focus()
+          return { ...current, query: '' }
         })
       }
     }
@@ -140,7 +149,12 @@ export function ListPanel(): React.JSX.Element {
   const [searchedSection, setSearchedSection] = useState(section)
   if (searchedSection !== section) {
     setSearchedSection(section)
-    setQuery('')
+    // The facets go with it. A repo chosen in Chats means nothing in Skills,
+    // and `matchesFacets` treats a selection it has no values for as matching
+    // nothing — so carrying one across would empty the next rail with no
+    // visible cause. Adjusted during render rather than in an effect, which is
+    // React's own documented pattern and what the query already used.
+    setFilter(EMPTY_LIST_FILTER)
   }
 
   const { create: createPersona } = useCreatePersona()
@@ -273,6 +287,11 @@ export function ListPanel(): React.JSX.Element {
             </InputGroup>
           </div>
         )}
+        {/* Under the box rather than beside it: the chips wrap, and a row that
+            grows sideways into the search field would push the field's own
+            clear button off the edge on a narrow panel (the rail goes down to
+            240px). */}
+        <FacetBar specs={facets} filter={filter} onChange={setFilter} />
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -283,12 +302,12 @@ export function ListPanel(): React.JSX.Element {
               take the search field and the "+" with it, and losing the list is
               the one failure that leaves you unable to select your way out. */}
           <ErrorBoundary variant="pane" resetKey={section}>
-            {section === 'chats' && <ConversationList query={query} />}
-            {section === 'personas' && <PersonaList query={query} />}
-            {section === 'skills' && <SkillList query={query} />}
-            {section === 'routines' && <RoutineList query={query} />}
-            {section === 'usage' && <UsageScopeList />}
-            {section === 'branches' && <BranchList query={query} />}
+            {section === 'chats' && <ConversationList filter={filter} />}
+            {section === 'personas' && <PersonaList filter={filter} />}
+            {section === 'skills' && <SkillList filter={filter} />}
+            {section === 'routines' && <RoutineList filter={filter} />}
+            {section === 'usage' && <UsageScopeList query={query} />}
+            {section === 'branches' && <BranchList filter={filter} />}
             {section === 'activity' && <ActivityScopeList />}
           </ErrorBoundary>
         </div>

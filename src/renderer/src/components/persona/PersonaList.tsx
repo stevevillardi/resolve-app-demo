@@ -13,6 +13,8 @@ import {
 import { useContacts } from '@/hooks/useConversations'
 import { useCreatePersona, useDeletePersona, usePersonas } from '@/hooks/usePersonas'
 import { useUiStore } from '@/store/useUiStore'
+import { filterList, isFiltering, noMatchDescription, type ListFilter } from '@/lib/list-filter'
+import { FACET_BACKEND, FACET_SANDBOX, FACET_STATE, STATE_UNUSED } from '@/lib/section-facets'
 import type { PersonaTemplate } from '@/types'
 
 /**
@@ -93,18 +95,31 @@ function PersonaRowMenu({
   )
 }
 
-export function PersonaList({ query }: { query: string }): React.JSX.Element {
+export function PersonaList({ filter }: { filter: ListFilter }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedPersonaId)
   const setSelectedId = useUiStore((state) => state.setSelectedPersonaId)
   const { data: personaTemplates = [], isPending } = usePersonas()
   const { data: contacts = [] } = useContacts()
-  const needle = query.trim().toLowerCase()
+  const filtering = isFiltering(filter)
 
-  const visible = personaTemplates.filter(
-    (persona) =>
-      !needle ||
-      persona.name.toLowerCase().includes(needle) ||
-      persona.systemPrompt.toLowerCase().includes(needle)
+  const bound = new Set(contacts.map((contact) => contact.personaTemplateId))
+
+  const visible = filterList(
+    personaTemplates,
+    filter,
+    {
+      [FACET_BACKEND]: (persona) => [persona.backend],
+      [FACET_SANDBOX]: (persona) => [persona.sandbox],
+      [FACET_STATE]: (persona) => (bound.has(persona.id) ? [] : [STATE_UNUSED])
+    },
+    (persona) => ({
+      label: persona.name,
+      detail: persona.systemPrompt,
+      // The two badges the row already draws, so typing what is visible
+      // narrows the list — the disagreement `persona-filter.ts` warns about,
+      // in the list rather than in the picker.
+      keywords: [persona.backend, persona.sandbox, persona.githubScope]
+    })
   )
 
   if (isPending) {
@@ -112,12 +127,12 @@ export function PersonaList({ query }: { query: string }): React.JSX.Element {
   }
 
   if (visible.length === 0) {
-    return needle ? (
+    return filtering ? (
       <EmptyState
         compact
         icon={Users2}
         title="No personas match"
-        description={`Nothing matching “${query.trim()}”.`}
+        description={noMatchDescription(filter)}
       />
     ) : (
       <EmptyState

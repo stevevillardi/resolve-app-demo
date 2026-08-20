@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildCron, DEFAULT_SCHEDULE, describeSchedule, parseCron, type Schedule } from './cron'
+import {
+  buildCron,
+  DEFAULT_SCHEDULE,
+  describeSchedule,
+  parseCron,
+  shortSchedule,
+  type Schedule
+} from './cron'
 
 /**
  * Two claims, and the second one is the one that keeps the picker honest.
@@ -148,5 +155,81 @@ describe('describeSchedule', () => {
     expect(describeSchedule(schedule({ frequency: 'daily', hour: 9, minute: 5 }))).toContain(
       '09:05'
     )
+  })
+})
+
+describe('shortSchedule', () => {
+  it('says every four hours in words, not in cron', () => {
+    // The §A3 complaint: the rail rendered the expression verbatim while the
+    // editor beside it had been rendering English since Phase 16.
+    expect(shortSchedule(buildCron({ ...schedule(), frequency: 'hourly', minute: 0 }))).toBe(
+      'Hourly'
+    )
+  })
+
+  it('names the minute when an hourly run is not on the hour', () => {
+    expect(shortSchedule(buildCron({ ...schedule(), frequency: 'hourly', minute: 5 }))).toBe(
+      'Hourly :05'
+    )
+  })
+
+  it('gives a daily run its time', () => {
+    expect(
+      shortSchedule(buildCron({ ...schedule(), frequency: 'daily', hour: 9, minute: 0 }))
+    ).toBe('Daily 09:00')
+  })
+
+  it('collapses all seven weekdays to daily', () => {
+    const weekly = buildCron({
+      ...schedule(),
+      frequency: 'weekly',
+      weekdays: [0, 1, 2, 3, 4, 5, 6],
+      hour: 9,
+      minute: 0
+    })
+    expect(shortSchedule(weekly)).toBe('Daily 09:00')
+  })
+
+  it('collapses Monday to Friday to weekdays', () => {
+    const weekly = buildCron({
+      ...schedule(),
+      frequency: 'weekly',
+      weekdays: [1, 2, 3, 4, 5],
+      hour: 9,
+      minute: 0
+    })
+    expect(shortSchedule(weekly)).toBe('Weekdays 09:00')
+  })
+
+  it('lists the days when it is neither', () => {
+    const weekly = buildCron({
+      ...schedule(),
+      frequency: 'weekly',
+      weekdays: [1, 3],
+      hour: 17,
+      minute: 30
+    })
+    expect(shortSchedule(weekly)).toBe('Mon, Wed 17:30')
+  })
+
+  it('gives a monthly run its day', () => {
+    const monthly = buildCron({
+      ...schedule(),
+      frequency: 'monthly',
+      dayOfMonth: 5,
+      hour: 9,
+      minute: 0
+    })
+    expect(shortSchedule(monthly)).toBe('Day 5, 09:00')
+  })
+
+  /**
+   * The contract this file's header states: `parseCron` returning null *is*
+   * Custom mode. An expression the picker cannot build is one somebody typed
+   * on purpose, and inventing prose for it would print a guess as a fact.
+   */
+  it('hands back an expression it cannot parse, verbatim', () => {
+    expect(shortSchedule('15 2,14 * * 1-5')).toBe('15 2,14 * * 1-5')
+    expect(shortSchedule('not a cron')).toBe('not a cron')
   })
 })

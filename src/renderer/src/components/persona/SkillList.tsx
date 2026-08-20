@@ -7,6 +7,8 @@ import { ContextMenuContent, ContextMenuItem } from '@/components/ui/context-men
 import { usePersonas } from '@/hooks/usePersonas'
 import { useDeleteSkill, useSkills } from '@/hooks/useSkills'
 import { useUiStore } from '@/store/useUiStore'
+import { filterList, isFiltering, noMatchDescription, type ListFilter } from '@/lib/list-filter'
+import { FACET_STATE, STATE_ATTACHED, STATE_UNATTACHED } from '@/lib/section-facets'
 import type { PersonaTemplate, Skill } from '@/types'
 
 /** Right-click delete for a skill row — the same dialog and copy as the
@@ -68,18 +70,24 @@ function SkillRowMenu({
   )
 }
 
-export function SkillList({ query }: { query: string }): React.JSX.Element {
+export function SkillList({ filter }: { filter: ListFilter }): React.JSX.Element {
   const selectedId = useUiStore((state) => state.selectedSkillId)
   const setSelectedId = useUiStore((state) => state.setSelectedSkillId)
   const { data: skills = [], isPending } = useSkills()
   const { data: personaTemplates = [] } = usePersonas()
-  const needle = query.trim().toLowerCase()
+  const filtering = isFiltering(filter)
 
-  const visible = skills.filter(
-    (skill) =>
-      !needle ||
-      skill.name.toLowerCase().includes(needle) ||
-      skill.description.toLowerCase().includes(needle)
+  const attached = new Set(personaTemplates.flatMap((persona) => persona.skillIds))
+
+  const visible = filterList(
+    skills,
+    filter,
+    {
+      // "Unused" is the question worth asking of a library that only grows:
+      // a skill no persona carries is instruction text nothing ever sends.
+      [FACET_STATE]: (skill) => [attached.has(skill.id) ? STATE_ATTACHED : STATE_UNATTACHED]
+    },
+    (skill) => ({ label: skill.name, detail: skill.description })
   )
 
   if (isPending) {
@@ -87,12 +95,12 @@ export function SkillList({ query }: { query: string }): React.JSX.Element {
   }
 
   if (visible.length === 0) {
-    return needle ? (
+    return filtering ? (
       <EmptyState
         compact
         icon={BookOpen}
         title="No skills match"
-        description={`Nothing matching “${query.trim()}”.`}
+        description={noMatchDescription(filter)}
       />
     ) : (
       <EmptyState

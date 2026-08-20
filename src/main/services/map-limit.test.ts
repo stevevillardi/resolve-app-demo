@@ -40,13 +40,17 @@ describe('mapLimit', () => {
     let inFlight = 0
     let peak = 0
 
-    await mapLimit(Array.from({ length: 12 }, (_, i) => i), 4, async (i) => {
-      inFlight += 1
-      peak = Math.max(peak, inFlight)
-      await tick()
-      inFlight -= 1
-      return i
-    })
+    await mapLimit(
+      Array.from({ length: 12 }, (_, i) => i),
+      4,
+      async (i) => {
+        inFlight += 1
+        peak = Math.max(peak, inFlight)
+        await tick()
+        inFlight -= 1
+        return i
+      }
+    )
 
     // The claim this helper exists for. A `Promise.all(items.map(fn))` passes
     // every other case here and fails exactly this one, which is the point:

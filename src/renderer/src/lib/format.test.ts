@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { contactName, formatDaySeparator, formatListTimestamp, formatRelative, formatTime, groupName, isSameDay, previewLine, repoName } from './format'
+import {
+  contactName,
+  formatDaySeparator,
+  formatListTimestamp,
+  formatRelative,
+  formatTime,
+  groupName,
+  isSameDay,
+  previewLine,
+  repoName
+} from './format'
 
 /**
  * Date formatting is locale- and timezone-sensitive, so these assert on the
@@ -211,7 +221,7 @@ describe('groupName', () => {
 describe('contactName', () => {
   const persona = { name: 'Code Reviewer' }
 
-  it('uses the Contact\'s own name, not the persona\'s', () => {
+  it("uses the Contact's own name, not the persona's", () => {
     // The whole point (Phase 26 §A1). Every list used to render the persona, so
     // three contacts on three repositories were three identical rows.
     expect(contactName({ displayName: 'Code Reviewer · billing-api' }, persona)).toBe(

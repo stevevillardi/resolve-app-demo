@@ -7,6 +7,7 @@ import { useContacts } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
 import { useUsageSummaries } from '@/hooks/useUsage'
 import { repoName } from '@/lib/format'
+import { matchesQuery } from '@/lib/list-filter'
 import { byContactId, formatCostSummary, summariesFor } from '@/lib/usage'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -17,7 +18,16 @@ import { useUiStore } from '@/store/useUiStore'
  * at the intersection of them — so scoping lives here and the dashboard is left
  * to the range, source and metric controls.
  */
-export function UsageScopeList(): React.JSX.Element {
+/**
+ * §A4: the rail that had the longest list and no way to narrow it.
+ *
+ * `ListPanel` gave every other section a search box and gave this one nothing,
+ * which is backwards — it is the only rail whose length grows on *both* axes at
+ * once, one row per persona plus one per repository. No facets: the dashboard
+ * beside it already owns range, measure and source, and a second set of
+ * controls for the same screen would only raise the question of which wins.
+ */
+export function UsageScopeList({ query }: { query: string }): React.JSX.Element {
   const scope = useUiStore((state) => state.usageScope)
   const setScope = useUiStore((state) => state.setUsageScope)
 
@@ -29,8 +39,18 @@ export function UsageScopeList(): React.JSX.Element {
   // a repo that has cost nothing yet is still a place work happens, and hiding
   // it until it bills would make the list flicker into existence mid-demo.
   const repoPaths = useMemo(
-    () => [...new Set(contacts.map((contact) => contact.repoPath))].sort(),
-    [contacts]
+    () =>
+      [...new Set(contacts.map((contact) => contact.repoPath))]
+        .sort()
+        .filter((path) => matchesQuery({ label: repoName(path), detail: path }, query)),
+    [contacts, query]
+  )
+
+  // The full path is searchable as well as the name shown, so two checkouts
+  // both called `api` can be told apart by typing what is above them.
+  const visiblePersonas = useMemo(
+    () => personas.filter((persona) => matchesQuery({ label: persona.name }, query)),
+    [personas, query]
   )
 
   /**
@@ -85,17 +105,21 @@ export function UsageScopeList(): React.JSX.Element {
         <span className="block truncate text-row font-medium">All personas</span>
       </ListRow>
 
-      {personas.length === 0 && contacts.length === 0 && (
+      {visiblePersonas.length === 0 && repoPaths.length === 0 && (
         <EmptyState
           compact
-          title="No spend yet"
-          description="Usage appears here after a contact's first reply."
+          title={query.trim() ? 'Nothing matches' : 'No spend yet'}
+          description={
+            query.trim()
+              ? `No persona or repo matching “${query.trim()}”.`
+              : "Usage appears here after a contact's first reply."
+          }
         />
       )}
 
-      {personas.length > 0 && heading('By persona')}
+      {visiblePersonas.length > 0 && heading('By persona')}
 
-      {personas.map((persona) => {
+      {visiblePersonas.map((persona) => {
         const contactIds = contacts
           .filter((contact) => contact.personaTemplateId === persona.id)
           .map((contact) => contact.id)

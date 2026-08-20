@@ -171,3 +171,44 @@ export function describeSchedule(schedule: Schedule): string {
     named.length === 1 ? named[0] : `${named.slice(0, -1).join(', ')} and ${named.at(-1)}`
   return `Every ${list} at ${at}.`
 }
+
+/**
+ * The schedule as a chip, for a list row (Phase 26 §A3).
+ *
+ * The Routines rail put the raw cron expression in its trailing slot, so the
+ * list read "0 star-slash-4 star star star" (every four hours) while the editor
+ * two panes away had been rendering `describeSchedule` in English since Phase
+ * 16. Anyone scanning the rail for "the one that runs overnight" had to parse
+ * cron in their head to find it.
+ *
+ * Not `describeSchedule` itself: that is a sentence for the line under a
+ * picker, and it runs to "On day 5 of every month at 09:00. Months that end
+ * sooner are skipped." — true, and several times the width a row has. This is
+ * the same facts at chip length, and the row keeps the expression in its
+ * `title` so the exact answer stays one hover away.
+ *
+ * **Returns the raw expression when `parseCron` returns null**, which is the
+ * contract this file's header calls out: null *is* Custom mode. An expression
+ * the app's own picker cannot build is one somebody typed on purpose, and
+ * inventing prose for it would be a guess printed as a fact.
+ */
+export function shortSchedule(expression: string): string {
+  const schedule = parseCron(expression)
+  if (!schedule) return expression
+
+  const { frequency, minute, hour, weekdays, dayOfMonth } = schedule
+  const at = clock(hour, minute)
+
+  if (frequency === 'hourly') {
+    return minute === 0 ? 'Hourly' : `Hourly :${String(minute).padStart(2, '0')}`
+  }
+  if (frequency === 'daily') return `Daily ${at}`
+  if (frequency === 'monthly') return `Day ${dayOfMonth}, ${at}`
+
+  const days = [...new Set(weekdays)].sort((a, b) => a - b)
+  if (days.length === 7) return `Daily ${at}`
+  if (days.length === 5 && [1, 2, 3, 4, 5].every((day) => days.includes(day))) {
+    return `Weekdays ${at}`
+  }
+  return `${days.map((day) => WEEKDAY_LABELS[day]).join(', ')} ${at}`
+}
