@@ -45,9 +45,15 @@ let codexPersonaName: string
  * Not a window-wide text match: the scope list always shows the *all personas*
  * total beside "All personas", so a bare `getByText('$6.00+')` keeps passing
  * after a filter has been applied — it is reading the sidebar, not the answer.
+ *
+ * Addressed by the tile's own `p` label rather than by text alone: "Spend"
+ * also names a measure-toggle option, a breakdown column and a section
+ * heading, and the tile is the only one of the four that is a `p`. Not
+ * end-anchored, because the label carries the hint button's screen-reader text
+ * after it.
  */
 function reportedSpend(): Locator {
-  return launched.window.getByText('Reported spend').locator('..')
+  return launched.window.locator('p', { hasText: /^Spend/ }).locator('..')
 }
 
 /** The source filter, addressed by its group so its labels can't collide. */
@@ -273,7 +279,12 @@ test('a total that excludes an unpriced turn is visibly partial', async () => {
   // unpriced. The `+` is the entire point: without it this reads as the whole
   // bill.
   await expect(reportedSpend()).toContainText('$6.00+')
-  await expect(launched.window.getByText(/turn.*no published price/i).first()).toBeVisible()
+
+  // Why it is partial is one hover away rather than printed under the number.
+  // The `+` is the claim; this is the explanation, and it has to still be
+  // reachable or the mark is unexplained.
+  await reportedSpend().getByRole('button', { name: 'About this figure' }).hover()
+  await expect(launched.window.getByText(/no published price/i).first()).toBeVisible()
 })
 
 test('both backends roll up into one comparable view', async () => {
