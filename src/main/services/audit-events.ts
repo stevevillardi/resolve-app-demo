@@ -19,7 +19,8 @@ import type { AuditAction, AuditEvent } from '../../shared/domain'
  * shared/domain.ts for why. `user` is the default: the overwhelming majority
  * of call sites are reached only from a renderer-initiated IPC call.
  */
-export type AuditActor = { kind: 'user' } | { kind: 'routine'; routineId: string } | { kind: 'system' }
+export type AuditActor =
+  { kind: 'user' } | { kind: 'routine'; routineId: string } | { kind: 'system' }
 
 const DEFAULT_ACTOR: AuditActor = { kind: 'user' }
 

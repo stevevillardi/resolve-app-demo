@@ -57,7 +57,9 @@ const BLURBS: Record<GuideSection, string> = {
     'Reusable instruction text any persona can attach. Write the wording once and every persona carrying it gets the same wording.',
   routines:
     'A schedule and a prompt. The contact wakes on its own, does the work while you are elsewhere, and reports back here.',
-  usage: 'Tokens and cost for every turn, split by persona, repo, model, and what asked for it.'
+  usage: 'Tokens and cost for every turn, split by persona, repo, model, and what asked for it.',
+  activity:
+    'A durable record of repo and contact governance — who granted repo trust, bound or removed a contact, merged a branch — and what triggered it.'
 }
 
 /**

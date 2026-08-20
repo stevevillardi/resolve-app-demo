@@ -12,7 +12,8 @@ export type { ThemePreference }
  * summary of everything, so a master list would be a list of what exactly? See
  * AppShell, which drops the panel for it.
  */
-export type Section = 'home' | 'chats' | 'personas' | 'skills' | 'routines' | 'usage' | 'branches'
+export type Section =
+  'home' | 'chats' | 'personas' | 'skills' | 'routines' | 'usage' | 'branches' | 'activity'
 
 export type ConversationSelection =
   { kind: 'contact'; id: string } | { kind: 'group'; id: string } | null
@@ -30,6 +31,13 @@ export type BranchSelection = { repoPath: string; branch: string } | null
  */
 export type UsageScope =
   { kind: 'all' } | { kind: 'persona'; id: string } | { kind: 'repo'; repoPath: string }
+
+/**
+ * What the Activity dashboard is scoped to (Phase 27) — repo and contact, the
+ * two axes the audit trail itself is about, mirroring UsageScope's shape.
+ */
+export type AuditScope =
+  { kind: 'all' } | { kind: 'repo'; repoPath: string } | { kind: 'contact'; id: string }
 
 /**
  * The surfaces that stay genuinely modal — everything else is a view.
@@ -87,6 +95,9 @@ interface UiState {
   usageScope: UsageScope
   setUsageScope: (scope: UsageScope) => void
 
+  auditScope: AuditScope
+  setAuditScope: (scope: AuditScope) => void
+
   dialog: ModalDialog
   setDialog: (dialog: ModalDialog) => void
 
@@ -139,6 +150,9 @@ export const useUiStore = create<UiState>()(
 
       usageScope: { kind: 'all' },
       setUsageScope: (usageScope) => set({ usageScope }),
+
+      auditScope: { kind: 'all' },
+      setAuditScope: (auditScope) => set({ auditScope }),
 
       dialog: null,
       setDialog: (dialog) => set({ dialog }),

@@ -17,6 +17,7 @@ import { SkillList } from '@/components/persona/SkillList'
 import { RoutineList } from '@/components/routines/RoutineList'
 import { PANE_STRIP } from '@/components/common/PaneHeader'
 import { UsageScopeList } from '@/components/usage/UsageScopeList'
+import { ActivityScopeList } from '@/components/activity/ActivityScopeList'
 import { useCreatePersona } from '@/hooks/usePersonas'
 import { useCreateSkill } from '@/hooks/useSkills'
 import { useContacts } from '@/hooks/useConversations'
@@ -43,7 +44,9 @@ const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLab
   routines: { title: 'Routines', searchPlaceholder: 'Search routines', newLabel: 'New routine' },
   usage: { title: 'Usage' },
   // No "+": a branch is produced by a persona doing work, never made here.
-  branches: { title: 'Branches', searchPlaceholder: 'Search branches' }
+  branches: { title: 'Branches', searchPlaceholder: 'Search branches' },
+  // No "+": an audit row is produced by a governance action, never made here.
+  activity: { title: 'Activity' }
 }
 
 /**
@@ -287,6 +290,7 @@ export function ListPanel(): React.JSX.Element {
             {section === 'routines' && <RoutineList query={query} />}
             {section === 'usage' && <UsageScopeList />}
             {section === 'branches' && <BranchList query={query} />}
+            {section === 'activity' && <ActivityScopeList />}
           </ErrorBoundary>
         </div>
       </ScrollArea>

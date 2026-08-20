@@ -1,4 +1,13 @@
-import { BarChart3, BookOpen, Clock, GitBranch, House, MessagesSquare, Users2 } from 'lucide-react'
+import {
+  BarChart3,
+  BookOpen,
+  Clock,
+  GitBranch,
+  History,
+  House,
+  MessagesSquare,
+  Users2
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Section } from '@/store/useUiStore'
 
@@ -43,5 +52,6 @@ export const NAV_ITEMS: NavItem[] = [
   { section: 'personas', label: 'Personas', icon: Users2 },
   { section: 'skills', label: 'Skills', icon: BookOpen },
   { section: 'routines', label: 'Routines', icon: Clock },
-  { section: 'usage', label: 'Usage', icon: BarChart3 }
+  { section: 'usage', label: 'Usage', icon: BarChart3 },
+  { section: 'activity', label: 'Activity', icon: History }
 ]

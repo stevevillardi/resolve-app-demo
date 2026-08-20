@@ -5,6 +5,7 @@ import { SkillLibraryView } from '@/components/persona/SkillLibraryView'
 import { RoutineEditor } from '@/components/routines/RoutineEditor'
 import { UsageDashboard } from '@/components/usage/UsageDashboard'
 import { BranchDetail } from '@/components/branches/BranchDetail'
+import { ActivityDashboard } from '@/components/activity/ActivityDashboard'
 import { WorkspaceHome } from './WorkspaceHome'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { useUiStore, type ConversationSelection, type Section } from '@/store/useUiStore'
@@ -32,6 +33,7 @@ function view(section: Section, selected: ConversationSelection): React.JSX.Elem
   if (section === 'routines') return <RoutineEditor />
   if (section === 'usage') return <UsageDashboard />
   if (section === 'branches') return <BranchDetail />
+  if (section === 'activity') return <ActivityDashboard />
 
   // Keyed on the conversation, so per-conversation component state (picker
   // dismissals, unread boundaries, the work-diff dialog) dies with a switch
