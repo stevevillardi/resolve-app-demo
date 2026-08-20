@@ -94,9 +94,21 @@ export function ListPanel(): React.JSX.Element {
   const setSelectedPersonaId = useUiStore((state) => state.setSelectedPersonaId)
   const setSelectedSkillId = useUiStore((state) => state.setSelectedSkillId)
   const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
-  const [filter, setFilter] = useState<ListFilter>(EMPTY_LIST_FILTER)
+  /**
+   * The filter now lives in the store, keyed by section (§C).
+   *
+   * It was `useState` here, cleared on every section change — the right fix
+   * while one string was shared by all sections, and unnecessary once each has
+   * its own. What forced the move is `showIn`: a link that narrows a section
+   * the user is not currently on cannot be served by state that unmounts with
+   * that section.
+   */
+  const filter = useUiStore((state) => state.listFilters[state.section]) ?? EMPTY_LIST_FILTER
+  const setListFilter = useUiStore((state) => state.setListFilter)
+  const setFilter = (next: ListFilter | ((current: ListFilter) => ListFilter)): void =>
+    setListFilter(section, typeof next === 'function' ? next(filter) : next)
   const query = filter.query
-  const setQuery = (next: string): void => setFilter((current) => ({ ...current, query: next }))
+  const setQuery = (next: string): void => setFilter({ ...filter, query: next })
   const searchRef = useRef<HTMLInputElement>(null)
   const config = PANEL[section]
   const facets = useSectionFacets(section)
@@ -125,13 +137,20 @@ export function ListPanel(): React.JSX.Element {
       }
 
       if (event.key === 'Escape' && target === searchRef.current) {
+        // State read through the store rather than from the closure, so this
+        // effect can stay bound once instead of re-registering on every
+        // keystroke — and, more importantly, so it cannot clear a *stale*
+        // filter. The captured value would be whatever it was when the listener
+        // was attached, which after `showIn` is not what is on screen. Same
+        // reason `ConversationList` reads the selection through `getState`.
+        const { section: current, listFilters, setListFilter: apply } = useUiStore.getState()
+        const active = listFilters[current] ?? EMPTY_LIST_FILTER
+
         // Only when there is something to clear. Otherwise `esc` should keep
         // meaning "close whatever is open", which is what everything else in
         // the app uses it for.
-        setFilter((current) => {
-          if (current.query) searchRef.current?.focus()
-          return { ...current, query: '' }
-        })
+        if (active.query) searchRef.current?.focus()
+        apply(current, { ...active, query: '' })
       }
     }
 
@@ -139,23 +158,11 @@ export function ListPanel(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
-  // A search left behind in one section is invisible in the next but still
-  // filtering it, which reads as an empty list rather than as a filter.
-  //
-  // Adjusted during render rather than in an effect: React's own documented
-  // pattern for resetting state when something changes, and the one the
-  // set-state-in-effect rule is pointing at. An effect would render the stale
-  // filter once before clearing it.
-  const [searchedSection, setSearchedSection] = useState(section)
-  if (searchedSection !== section) {
-    setSearchedSection(section)
-    // The facets go with it. A repo chosen in Chats means nothing in Skills,
-    // and `matchesFacets` treats a selection it has no values for as matching
-    // nothing — so carrying one across would empty the next rail with no
-    // visible cause. Adjusted during render rather than in an effect, which is
-    // React's own documented pattern and what the query already used.
-    setFilter(EMPTY_LIST_FILTER)
-  }
+  // No section-change reset any more, and the reason it existed is gone rather
+  // than overridden: one shared query string genuinely did leak between
+  // sections, so clearing it was correct. A per-section filter cannot leak, and
+  // an active one announces itself — the chips are visible chrome, and
+  // `noMatchDescription` names the filter when it is what emptied the list.
 
   const { create: createPersona } = useCreatePersona()
   const [libraryOpen, setLibraryOpen] = useState(false)

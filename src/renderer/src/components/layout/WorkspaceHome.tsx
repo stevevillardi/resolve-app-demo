@@ -31,7 +31,8 @@ import {
 } from '@/lib/home'
 import { formatListTimestamp, repoName } from '@/lib/format'
 import { formatCost, formatCostSummary, formatTokens } from '@/lib/usage'
-import { useUiStore } from '@/store/useUiStore'
+// Aliased: 'Section' is already the layout primitive imported above.
+import { useUiStore, type Section as WorkspaceSection } from '@/store/useUiStore'
 import type { DailySpendPoint } from '@/lib/home'
 import { cn } from '@/lib/utils'
 
@@ -64,6 +65,33 @@ type Variant = 'home' | 'chats'
  * four empty headings on a fresh install. The Usage section owns charts; this
  * is a place to rest, not a dashboard.
  */
+/**
+ * One noun in the fleet summary, made followable (§C).
+ *
+ * Underlined on hover only: at rest this is a sentence, and three permanently
+ * underlined spans inside one line of muted 12px text reads as damage rather
+ * than as affordance.
+ */
+function FleetLink({
+  section,
+  onGo,
+  children
+}: {
+  section: WorkspaceSection
+  onGo: (section: WorkspaceSection) => void
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={() => onGo(section)}
+      className="hover:text-foreground rounded-sm underline-offset-2 transition-colors hover:underline"
+    >
+      {children}
+    </button>
+  )
+}
+
 export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}): React.JSX.Element {
   const setDialog = useUiStore((state) => state.setDialog)
   const setSection = useUiStore((state) => state.setSection)
@@ -224,13 +252,25 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
             {/* Not a tile, because it is not a figure for this window — it is
                 what the fleet is, right now. Three numbers about seven days and
                 a fourth about today would read as four of the same thing. */}
+            {/* §C: the three nouns here name the three sections that hold
+                them, and each was a dead end — a count you could read and not
+                follow. Buttons rather than links, because each one navigates
+                rather than opening anything external. */}
             <p className="text-muted-foreground text-xs">
-              <span className="text-foreground font-mono tabular-nums">{contacts.length}</span>{' '}
-              {contacts.length === 1 ? 'contact' : 'contacts'} across{' '}
-              <span className="text-foreground font-mono tabular-nums">{repoCount}</span>{' '}
-              {repoCount === 1 ? 'repo' : 'repos'}, running{' '}
-              <span className="text-foreground font-mono tabular-nums">{personas.length}</span>{' '}
-              {personas.length === 1 ? 'persona' : 'personas'}
+              <FleetLink section="chats" onGo={setSection}>
+                <span className="text-foreground font-mono tabular-nums">{contacts.length}</span>{' '}
+                {contacts.length === 1 ? 'contact' : 'contacts'}
+              </FleetLink>{' '}
+              across{' '}
+              <FleetLink section="usage" onGo={setSection}>
+                <span className="text-foreground font-mono tabular-nums">{repoCount}</span>{' '}
+                {repoCount === 1 ? 'repo' : 'repos'}
+              </FleetLink>
+              , running{' '}
+              <FleetLink section="personas" onGo={setSection}>
+                <span className="text-foreground font-mono tabular-nums">{personas.length}</span>{' '}
+                {personas.length === 1 ? 'persona' : 'personas'}
+              </FleetLink>
             </p>
           </Section>
         )}

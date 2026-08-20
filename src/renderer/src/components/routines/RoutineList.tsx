@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, Pause, Play, Trash2, Zap } from 'lucide-react'
+import { Clock, MessagesSquare, Pause, Play, Trash2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { AvatarColorSwatch } from '@/components/common/AvatarColorSwatch'
 import { RunPulse } from '@/components/common/RunIndicator'
@@ -47,6 +47,8 @@ function RoutineRowMenu({ routine }: { routine: Routine }): React.JSX.Element {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const selectedId = useUiStore((state) => state.selectedRoutineId)
   const setSelectedId = useUiStore((state) => state.setSelectedRoutineId)
+  const setSection = useUiStore((state) => state.setSection)
+  const setSelectedConversation = useUiStore((state) => state.setSelectedConversation)
   const { save } = useUpdateRoutine()
   const { runNow } = useRunRoutineNow()
   const { remove } = useDeleteRoutine()
@@ -64,6 +66,21 @@ function RoutineRowMenu({ routine }: { routine: Routine }): React.JSX.Element {
   return (
     <>
       <ContextMenuContent>
+        {/*
+          §C: a routine *is* a contact waking up, and its output lands in that
+          contact's conversation — which was reachable only by reading the
+          persona name off the row and finding it again in Chats by eye.
+        */}
+        <ContextMenuItem
+          onClick={() => {
+            setSelectedConversation({ kind: 'contact', id: routine.contactId })
+            setSection('chats')
+          }}
+        >
+          <MessagesSquare />
+          Open its conversation
+        </ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuItem onClick={toggle}>
           {routine.enabled ? <Pause /> : <Play />}
           {routine.enabled ? 'Pause' : 'Resume'}

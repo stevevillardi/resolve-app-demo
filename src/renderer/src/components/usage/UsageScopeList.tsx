@@ -10,6 +10,10 @@ import { repoName } from '@/lib/format'
 import { matchesQuery } from '@/lib/list-filter'
 import { byContactId, formatCostSummary, summariesFor } from '@/lib/usage'
 import { useUiStore } from '@/store/useUiStore'
+import { ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
+import { EMPTY_LIST_FILTER } from '@/lib/list-filter'
+import { FACET_PERSONA, FACET_REPO } from '@/lib/section-facets'
+import { MessagesSquare } from 'lucide-react'
 
 /**
  * Master list for the usage section: all spend, one persona's, or one repo's.
@@ -28,6 +32,19 @@ import { useUiStore } from '@/store/useUiStore'
  * controls for the same screen would only raise the question of which wins.
  */
 export function UsageScopeList({ query }: { query: string }): React.JSX.Element {
+  const showIn = useUiStore((state) => state.showIn)
+
+  /**
+   * "Show me the conversations behind this number" (§C).
+   *
+   * The usage rail names a persona or a repository and says what it cost; until
+   * now that was where the trail ended. A right-click rather than a click,
+   * because the left-click already means something here — it scopes the
+   * dashboard, which is what people come to this screen for.
+   */
+  const showConversations = (facetId: string, value: string): void =>
+    showIn('chats', { ...EMPTY_LIST_FILTER, facets: { [facetId]: [value] } })
+
   const scope = useUiStore((state) => state.usageScope)
   const setScope = useUiStore((state) => state.setUsageScope)
 
@@ -130,6 +147,14 @@ export function UsageScopeList({ query }: { query: string }): React.JSX.Element 
             active={active}
             onSelect={() => setScope({ kind: 'persona', id: persona.id })}
             align="center"
+            contextMenu={
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => showConversations(FACET_PERSONA, persona.id)}>
+                  <MessagesSquare />
+                  Show its conversations
+                </ContextMenuItem>
+              </ContextMenuContent>
+            }
             leading={
               <AvatarColorSwatch
                 name={persona.name}
@@ -160,6 +185,14 @@ export function UsageScopeList({ query }: { query: string }): React.JSX.Element 
             active={active}
             onSelect={() => setScope({ kind: 'repo', repoPath })}
             align="center"
+            contextMenu={
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => showConversations(FACET_REPO, repoPath)}>
+                  <MessagesSquare />
+                  Show its conversations
+                </ContextMenuItem>
+              </ContextMenuContent>
+            }
             leading={
               <span className="border-border flex size-8 shrink-0 items-center justify-center rounded-lg border">
                 <FolderGit2 className="text-muted-foreground size-4" />

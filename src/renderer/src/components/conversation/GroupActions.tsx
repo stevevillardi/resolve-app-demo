@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, EyeOff, FolderOpen, Pencil, RotateCcw } from 'lucide-react'
+import { Eye, EyeOff, FolderOpen, GitBranch, Pencil, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +16,8 @@ import { Field } from '@/components/common/Field'
 import { revealLocalPath } from '@/hooks/useDiffs'
 import { useRenameGroup, useSetGroupHidden } from '@/hooks/useConversations'
 import { groupName, repoName } from '@/lib/format'
+import { FACET_REPO } from '@/lib/section-facets'
+import { useUiStore } from '@/store/useUiStore'
 import type { Group } from '@/types'
 
 /**
@@ -52,6 +54,7 @@ export function GroupActionItems({
 }: GroupActionItemsProps): React.JSX.Element {
   const Item = kind === 'dropdown' ? DropdownMenuItem : ContextMenuItem
   const Separator = kind === 'dropdown' ? DropdownMenuSeparator : ContextMenuSeparator
+  const showIn = useUiStore((state) => state.showIn)
   const { setHidden } = useSetGroupHidden()
   const { rename } = useRenameGroup()
 
@@ -72,6 +75,20 @@ export function GroupActionItems({
           Use the repository name
         </Item>
       )}
+      {/*
+        §C: a group is the shared thread for a repository, and "what work is
+        outstanding on this repository" is the next question anyone reading one
+        asks. It was answerable only by opening Branches and finding the repo's
+        section by eye.
+      */}
+      <Item
+        onClick={() =>
+          showIn('branches', { query: '', facets: { [FACET_REPO]: [group.repoPath] } })
+        }
+      >
+        <GitBranch />
+        Show its branches
+      </Item>
       <Item onClick={() => revealLocalPath(group.repoPath)}>
         <FolderOpen />
         Reveal repository

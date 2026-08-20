@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { ThemePreference } from '@/lib/theme'
+import type { ListFilter } from '@/lib/list-filter'
 
 export type { ThemePreference }
 
@@ -50,6 +51,45 @@ export type ModalDialog = 'newContact' | 'github' | 'command' | 'settings' | nul
 interface UiState {
   section: Section
   setSection: (section: Section) => void
+
+  /**
+   * Each rail's search text and facets, keyed by section (Phase 26 §A2/§C).
+   *
+   * This lived in `ListPanel` as one `useState` and was cleared on every
+   * section change, because one string was shared by all of them — a search
+   * left in Chats invisibly filtered Personas, so the reset was the fix.
+   * **Keying by section removes the reason rather than the rule**: each rail
+   * keeps its own, and an active one is now self-evident because the chips are
+   * visible chrome rather than an invisible string.
+   *
+   * It has to be here, not in the component, for `showIn` below: a link that
+   * says "show me this persona's contacts" is setting a filter on a section it
+   * is not currently on, which a component that unmounts per section cannot do.
+   *
+   * **Not persisted**, alongside `section` itself. A filter is where you are in
+   * a task, not a preference — relaunching into a rail silently narrowed by
+   * last week's chip is the "empty list with no visible cause" failure that
+   * `noMatchDescription` exists to prevent, and it would happen before anyone
+   * had touched a control.
+   */
+  listFilters: Partial<Record<Section, ListFilter>>
+  setListFilter: (section: Section, filter: ListFilter) => void
+
+  /**
+   * Go to a section *and* narrow it in one act.
+   *
+   * The links this exists for read as "show me X's conversations" — from a
+   * persona's spend row, from a repo group, from a skill's usage count. Every
+   * one of them is two pieces of state that must change together; done as two
+   * calls at six call sites it is six chances to set one and forget the other,
+   * and the symptom is a rail that navigated but did not narrow.
+   *
+   * Replaces the target's filter rather than merging into it, because the
+   * caller is stating the whole question. Merging would AND the new facet onto
+   * whatever the user last left there and could land them on an empty list they
+   * did not ask for.
+   */
+  showIn: (section: Section, filter: ListFilter) => void
 
   /** Whether the nav rail is expanded to show labels (⌘B). */
   navExpanded: boolean
@@ -126,6 +166,12 @@ export const useUiStore = create<UiState>()(
       // the overview as a fall-through anyway.
       section: 'home',
       setSection: (section) => set({ section }),
+
+      listFilters: {},
+      setListFilter: (section, filter) =>
+        set((state) => ({ listFilters: { ...state.listFilters, [section]: filter } })),
+      showIn: (section, filter) =>
+        set((state) => ({ section, listFilters: { ...state.listFilters, [section]: filter } })),
 
       navExpanded: false,
       setNavExpanded: (navExpanded) => set({ navExpanded }),
