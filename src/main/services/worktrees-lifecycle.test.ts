@@ -2,9 +2,10 @@ import { execFileSync } from 'child_process'
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
-import { contacts, personaTemplates } from '../db/schema'
+import { auditEvents, contacts, personaTemplates } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
@@ -113,6 +114,11 @@ describe('ensureWorktree', () => {
 
     // Work in progress survives a second turn. Rebuilding would discard it.
     expect(existsSync(join(contact.worktreePath!, 'src/scratch.ts'))).toBe(true)
+
+    // Called on every turn — a second, no-op call must not add a row, or the
+    // audit log would grow at turn rate rather than at creation rate.
+    const rows = db.select().from(auditEvents).where(eq(auditEvents.action, 'worktree_created')).all()
+    expect(rows).toHaveLength(1)
   })
 
   it('does nothing at all for a contact in the main tree', async () => {

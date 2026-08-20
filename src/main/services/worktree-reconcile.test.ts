@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, expect, describe, it, vi } from 'vitest'
 import { createTestDb } from '../db/test-db'
 import { toContact } from '../db/mappers'
-import { contacts, personaTemplates } from '../db/schema'
+import { auditEvents, contacts, personaTemplates } from '../db/schema'
 import { worktreeAdd } from './git'
 import type { AppDatabase } from '../db'
 import type { Contact } from '../../shared/domain'
@@ -30,6 +30,9 @@ let repo: string
 
 vi.mock('electron', () => ({ app: { getPath: (): string => scratch } }))
 vi.mock('../db', () => ({ initDb: (): AppDatabase => db }))
+// agent-events imports electron's BrowserWindow, which the mock above has no
+// reason to provide.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
 
 const { reconcileWorktreeBranch } = await import('./worktrees')
 
@@ -103,9 +106,12 @@ describe('reconcileWorktreeBranch', () => {
 
     expect(reconciled.branch).toBe('fix/readme-typo')
     expect(storedBranch()).toBe('fix/readme-typo')
+
+    const rows = db.select().from(auditEvents).all()
+    expect(rows.map((row) => row.action)).toEqual(['worktree_reconciled'])
   })
 
-  it('leaves a faithful row alone', async () => {
+  it('leaves a faithful row alone, and records nothing — called at every turn end', async () => {
     const worktree = join(scratch, 'wt')
     await worktreeAdd(repo, worktree, 'persona/refactor-buddy-1')
     const contact = seedContactRow({
@@ -118,6 +124,7 @@ describe('reconcileWorktreeBranch', () => {
 
     expect(reconciled).toBe(contact)
     expect(storedBranch()).toBe('persona/refactor-buddy-1')
+    expect(db.select().from(auditEvents).all()).toEqual([])
   })
 
   it('does not touch a contact working in the shared checkout', async () => {

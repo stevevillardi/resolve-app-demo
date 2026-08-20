@@ -2,6 +2,7 @@ import { dialog } from 'electron'
 import { existsSync } from 'fs'
 import { basename, join } from 'path'
 import { getAppState, setAppState } from './app-state'
+import { recordAuditEvent, type AuditActor } from './audit-events'
 import { cloneRepo, isGitRepo } from './git'
 import { getGitHubToken, missingTokenError } from './github-auth'
 import { gitHubClient } from './github-client'
@@ -105,13 +106,22 @@ function existingCheckout(root: string, name: string): string | null {
  */
 export async function cloneToWorkspace(
   fullName: string,
-  cloneUrl: string
+  cloneUrl: string,
+  actor?: AuditActor
 ): Promise<BoundRepo | null> {
   const root = getWorkspaceRoot() ?? (await chooseWorkspaceRoot())
   if (!root) return null
 
   const name = fullName.split('/').pop() ?? fullName
   const path = await cloneRepo(cloneUrl, root, name, getGitHubToken())
+
+  // No Contact exists yet — cloning is the step before binding one.
+  recordAuditEvent({
+    action: 'repo_cloned',
+    actor,
+    repoPath: path,
+    summary: `Cloned ${fullName}`
+  })
 
   return { path, name, isGitRepo: true }
 }

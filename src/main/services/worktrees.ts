@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { initDb } from '../db'
 import { contacts } from '../db/schema'
+import { recordAuditEvent, type AuditActor } from './audit-events'
 import {
   changedFiles,
   currentBranch,
@@ -126,7 +127,7 @@ function repoPathsWithWorktrees(): string[] {
  * isolated on purpose and put it back in the directory they were protecting,
  * without the run lock knowing, because the lock key was decided from the row.
  */
-export async function ensureWorktree(contact: Contact): Promise<string[]> {
+export async function ensureWorktree(contact: Contact, actor?: AuditActor): Promise<string[]> {
   const { repoPath, worktreePath, branch } = contact
   if (isolationOf(contact.isolation) !== 'worktree') return []
   if (!worktreePath || !branch) return []
@@ -136,6 +137,25 @@ export async function ensureWorktree(contact: Contact): Promise<string[]> {
   // attempt would otherwise read as ready.
   if (!existsSync(join(worktreePath, '.git'))) {
     await worktreeAdd(repoPath, worktreePath, branch)
+
+    // The checkout above already succeeded — an audit-recording failure must
+    // not turn that into a loud failure of the turn that needed it.
+    try {
+      // Only on the branch that actually creates a checkout, not on every
+      // turn this function is called for a Contact whose worktree already
+      // exists — called-per-turn means an unguarded write here would
+      // dominate the table's growth.
+      recordAuditEvent({
+        action: 'worktree_created',
+        actor,
+        contactId: contact.id,
+        repoPath,
+        personaTemplateId: contact.personaTemplateId,
+        summary: `Created worktree for ${contact.displayName} on ${branch}`
+      })
+    } catch (error) {
+      console.warn('[worktrees] could not record audit event for', contact.id, error)
+    }
   }
 
   return gitWritePathsFor(worktreePath)
@@ -225,7 +245,10 @@ export interface WorkRecord {
  * returns the Contact as it now stands so callers can keep working with the
  * truth.
  */
-export async function reconcileWorktreeBranch(contact: Contact): Promise<Contact> {
+export async function reconcileWorktreeBranch(
+  contact: Contact,
+  actor?: AuditActor
+): Promise<Contact> {
   if (isolationOf(contact.isolation) !== 'worktree') return contact
   if (!contact.worktreePath || !existsSync(join(contact.worktreePath, '.git'))) return contact
 
@@ -235,6 +258,26 @@ export async function reconcileWorktreeBranch(contact: Contact): Promise<Contact
     if (!actual || actual === contact.branch) return contact
 
     initDb().update(contacts).set({ branch: actual }).where(eq(contacts.id, contact.id)).run()
+
+    // Wrapped separately: the reconciliation above already succeeded, and an
+    // audit-recording failure must not make this function claim it didn't —
+    // same rule checkBudgetsAfterUsage follows in usage-events.ts.
+    try {
+      // Only on the branch that actually changes the row — called at every
+      // turn's end, so an unguarded write here would dominate the table.
+      recordAuditEvent({
+        action: 'worktree_reconciled',
+        actor,
+        contactId: contact.id,
+        repoPath: contact.repoPath,
+        personaTemplateId: contact.personaTemplateId,
+        summary: `Reconciled ${contact.displayName}'s branch from ${contact.branch ?? 'none'} to ${actual}`,
+        metadata: { before: contact.branch, after: actual }
+      })
+    } catch (error) {
+      console.warn('[worktrees] could not record audit event for', contact.id, error)
+    }
+
     return { ...contact, branch: actual }
   } catch (error) {
     console.warn('[worktrees] could not reconcile branch for', contact.id, error)

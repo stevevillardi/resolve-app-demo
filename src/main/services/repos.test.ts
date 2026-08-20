@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDb } from '../db/test-db'
+import { auditEvents } from '../db/schema'
 import { setGitHubClientFactory, type GitHubClient, type RepoListing } from './github-client'
+import type { AppDatabase } from '../db/create'
 
 /**
  * Repo binding (blueprint §9.1), which had no tests until the Octokit client
@@ -14,8 +17,13 @@ import { setGitHubClientFactory, type GitHubClient, type RepoListing } from './g
 
 const appState = new Map<string, string>()
 let token: string | null = 'gho_test'
+let db: AppDatabase
 
 vi.mock('electron', () => ({ dialog: { showOpenDialog: vi.fn() } }))
+vi.mock('../db', () => ({ initDb: (): AppDatabase => db }))
+// agent-events imports electron's BrowserWindow, which the mock above has no
+// reason to provide.
+vi.mock('./agent-events', () => ({ emitAuditChanged: (): void => {} }))
 vi.mock('./app-state', () => ({
   getAppState: (key: string) => appState.get(key) ?? null,
   setAppState: (key: string, value: string) => void appState.set(key, value)
@@ -25,7 +33,16 @@ vi.mock('./github-auth', () => ({
   missingTokenError: (action: string) => new Error(`Connect GitHub first to ${action}.`)
 }))
 
-const { listRepos } = await import('./repos')
+let clonedTo: string | null = null
+vi.mock('./git', () => ({
+  cloneRepo: async (_url: string, parentDirectory: string, name: string) => {
+    clonedTo = join(parentDirectory, name)
+    return clonedTo
+  },
+  isGitRepo: async () => true
+}))
+
+const { cloneToWorkspace, listRepos } = await import('./repos')
 
 function listing(overrides: Partial<RepoListing> = {}): RepoListing {
   return {
@@ -53,6 +70,8 @@ function fakeClient(repos: RepoListing[]): GitHubClient {
 beforeEach(() => {
   appState.clear()
   token = 'gho_test'
+  clonedTo = null
+  db = createTestDb()
 })
 
 afterEach(() => setGitHubClientFactory(null))
@@ -95,5 +114,21 @@ describe('listRepos', () => {
     const [repo] = await listRepos()
 
     expect(repo.localPath).toBeNull()
+  })
+})
+
+describe('cloneToWorkspace', () => {
+  it('records a repo_cloned audit event, with no Contact to attribute it to yet', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'repos-test-'))
+    appState.set('workspace_root', root)
+
+    const bound = await cloneToWorkspace('stevevillardi/persona-router', 'https://example.com/x.git')
+
+    expect(bound?.path).toBe(clonedTo)
+
+    const [row] = db.select().from(auditEvents).all()
+    expect(row.action).toBe('repo_cloned')
+    expect(row.contactId).toBeNull()
+    expect(row.repoPath).toBe(clonedTo)
   })
 })
