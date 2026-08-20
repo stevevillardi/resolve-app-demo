@@ -533,6 +533,50 @@ in localStorage — a resurrected week-old draft surprises more than it helps.
 export, never a zero.** In a spreadsheet there is nothing left to explain it and
 someone will sum the column.
 
+**Every rail filters by facet chips as well as by text, and the semantics are OR
+within a facet, AND across facets** — "checkout-service or billing-api, and on
+Codex". The alternatives fail concretely: AND everywhere makes selecting a second
+repository empty the list, and OR everywhere makes each new chip widen it, so
+narrowing becomes impossible. Options are derived from live data, and a facet with
+nothing to choose between is not rendered — a Repo chip on a one-repository
+profile offers a choice every row already satisfies. A *state* facet is the
+exception and is worth rendering at one option, because "Unread" alone still
+splits the list in two.
+
+**Text matching is ranked and the rank is then discarded.** Filters share the
+command palette's scorer, so `billing` finds "Code Reviewer · billing-api" by word
+rather than only by substring — but each list keeps its own order, recency in
+Chats and alphabetical elsewhere. Re-sorting by relevance would make rows jump as
+someone types, and in Chats it would give the previous/next-conversation keys a
+second definition of the order they walk.
+
+**A Contact is titled by its own name, never its persona's.** `display_name`
+defaults to "Code Reviewer · checkout-service", is editable at creation and by
+rename, and is already what the delete dialog and the Markdown export read. The
+lists disagreeing with those was the bug: three contacts on three repositories
+rendered as three identical rows. The accepted consequence is that renaming a
+*persona* no longer retitles its contacts — the name is a stored string, not a
+nullable override — and persona identity stays live on the row through the avatar.
+Three callers deliberately keep the persona name, because mention parsing resolves
+`@` tokens against it.
+
+**A rail's filter is per-section state, and is not persisted.** It has to outlive
+the component so one screen can narrow another — "show me this persona's
+conversations" sets a filter on a section it is not currently on — and it must not
+outlive the session, because relaunching into a rail silently narrowed by last
+week's chip is an empty list with no visible cause.
+
+**Filtering stays in the renderer.** The obvious next step is a `WHERE` clause and
+it is deliberately not taken: the conversation list derives its
+previous/next-conversation order from the arrays it renders, and moving the
+predicate into SQL moves that order with it. Aggregates are the exception and do
+belong in SQL — see Storage.
+
+**A failed read is a third state, distinct from an empty install.** Defaulting a
+failed query to an empty array renders "No personas yet" — advice to create
+something, in answer to a question the app could not ask. A *background* refetch
+that fails keeps the last good data, so this state is only ever the first load.
+
 Icons in `build/` and `resources/` are **generated** from the SVG beside them
 (`npm run icons`) — hand-editing a PNG means the next person to run that script
 silently reverts you. The app icon is inset to 824/1024 of its canvas because the
@@ -603,6 +647,31 @@ Four things about SQLite that this schema had to learn the hard way:
   external-content index is keyed by. Search would stop agreeing with the
   database and nothing would error. This is why one column stays NOT NULL and why
   re-pointing a Contact moves rows instead.
+
+**Reads that answer an aggregate belong in SQL, not in the renderer.** Two rails
+answered "what has this cost" by fetching every `usage_events` row and scanning it
+once per row drawn, and the preview line under each conversation read every
+`messages` row to keep the newest per contact. Both grew with the whole history of
+the fleet in order to produce one figure per conversation. The spend rollup is now
+a `GROUP BY`, and the preview queries are driven by their parent table, so the
+cost is one index seek per conversation. Note what this does *not* license:
+filtering stays in the renderer — see Interface.
+
+**An aggregate written twice is written to disagree.** The spend rollup exists in
+SQL and in TypeScript, so the rules live in `src/shared` and a test in the main
+project runs both over the same rows and compares. Two survive into SQL rather
+than being re-argued there: `SUM(cost_usd)` over all-NULL returns NULL, which is
+"unknown" and never free — hence no `COALESCE` — and `COUNT` of the cached column
+tells absent from zero, because "the backend never reported caching" is not
+"nothing was cached".
+
+**A foreign key does not index its referencing side, and a denormalised column
+does not index itself.** Both bit here: the column answering "which contacts use
+this persona" was a full scan, and the two columns copied onto `usage_events` so
+that spend outlives the contact that made it were scanned by every read grouping
+by them. They are indexed paired with `timestamp`, because every usage read is
+inside a range — the pair satisfies the filter and the grouping together, where
+single-column indexes leave a temp b-tree behind.
 
 Additive nullable columns need no backfill; pre-existing rows read back absent
 rather than guessed. The upgrade test builds the "old" database from a *prefix*

@@ -21,6 +21,13 @@ Worth recording separately: **the tracker stops at 23 while the code for 24 and
 cannot invent the content of two others — but it is the first thing the next
 person should close.
 
+**The design decisions from this phase live in `docs/ARCHITECTURE.md`**, not
+here — the facet semantics, the contact-naming rule and its accepted
+consequence, where a rail's filter lives, why filtering stays in the renderer
+while aggregates move to SQL, and the three indexing rules. This file is the
+build log behind them: what was wrong, what was measured, and what was
+deliberately left undone.
+
 ## §A — Findability
 
 ### A1 — the name a user typed was invisible
