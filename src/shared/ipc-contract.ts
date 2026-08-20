@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  auditEventSchema,
   contactDraftSchema,
   contactSchema,
   githubScopeSchema,
@@ -1099,6 +1100,19 @@ export const ipcContract = {
   'usage.list': {
     input: z.object({ contactId: z.string().optional() }),
     output: z.array(usageEventSchema)
+  },
+
+  /**
+   * Repo/contact governance history (Phase 27). Filter params are accepted
+   * here as an on-ramp for real server-side filtering later — audit_events
+   * is indexed on both — but this pass returns the whole table and leaves
+   * filtering/grouping client-side, matching usage.list's own posture today.
+   */
+  'audit.list': {
+    input: z
+      .object({ contactId: z.string().optional(), repoPath: z.string().optional() })
+      .optional(),
+    output: z.array(auditEventSchema)
   },
 
   /**
