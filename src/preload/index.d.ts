@@ -16,6 +16,8 @@ interface Api {
   onRoutinesChanged: (callback: () => void) => () => void
   /** Fires when a message row is written, 1:1 or group. Returns an unsubscribe. */
   onMessagesChanged: (callback: () => void) => () => void
+  /** Fires when an audit_events row is written. Returns an unsubscribe. */
+  onAuditChanged: (callback: () => void) => () => void
   /** Fires when an application-menu app action is chosen. Returns an unsubscribe. */
   onMenuAction: (callback: (action: MenuActionId) => void) => () => void
   /** Fires when main wants the shell on a destination (notification clicks). */
