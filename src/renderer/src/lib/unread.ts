@@ -1,8 +1,8 @@
 import type { PersistedMessage, GroupMessage } from '@/types'
 
 /**
- * Unread presentation logic (Phase 20, review §C4). Pure and in lib/ for the
- * usual reason: the renderer Vitest project matches `*.test.ts` only, and the
+ * Unread presentation logic. Pure and in lib/ for the usual reason: the
+ * renderer Vitest project matches `*.test.ts` only, and the
  * badge cap and divider placement are exactly the kind of off-by-one that
  * looks right in a screenshot and is wrong at the boundary.
  */

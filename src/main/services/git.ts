@@ -5,13 +5,14 @@ import { join } from 'path'
 /**
  * The little bit of git this app runs itself.
  *
- * Deliberately narrow. Blueprint §9 draws the line at not "trusting the agent
- * to shell out raw git commands unsupervised" — that is about *remote* actions,
- * which go through Octokit. This is the local side: cloning a repo so a Contact
- * has somewhere to work, asking whether a directory is a repo at all, the
- * worktree and merge plumbing from Phase 12, and — since Phase 9 — the one
- * remote operation no REST API can perform, which is uploading the commits a
- * pull request is going to be *about*.
+ * Deliberately narrow. The standing rule is that *remote* actions — pushing,
+ * opening a pull request, commenting — are performed by this process through
+ * GitHub's REST API, rather than by trusting the agent to shell out raw git
+ * commands unsupervised; that half lives in Octokit. What is here is the local
+ * side: cloning a repo so a Contact has somewhere to work, asking whether a
+ * directory is a repo at all, the worktree and merge plumbing, the diff
+ * plumbing the review surface reads, and the one remote operation no REST API
+ * can perform — uploading the commits a pull request is going to be *about*.
  *
  * Shelling out rather than taking a dependency: git is already a hard
  * requirement for everything this app does, a library would be a second
@@ -155,7 +156,7 @@ export function describeGitError(stderr: string, safeUrl: string): string {
   return `Cloning ${safeUrl} failed.`
 }
 
-// --- Remote (Phase 9) --------------------------------------------------------
+// --- Remote ------------------------------------------------------------------
 
 /**
  * The URL of `origin`, or null when there isn't one.
@@ -258,7 +259,7 @@ export function describePushError(stderr: string, branch: string): string {
   return `Pushing ${branch} failed.`
 }
 
-// --- Worktrees (Phase 12) ----------------------------------------------------
+// --- Worktrees ---------------------------------------------------------------
 
 /**
  * The message for a local command, which may safely quote git.
@@ -386,7 +387,7 @@ export async function worktreePrune(repoPath: string): Promise<void> {
  * A linked worktree's `.git` is a *file* pointing back into the main repo, so
  * every git write — the index, a new object, a ref update — lands outside the
  * worktree directory. A sandbox fenced to the working directory therefore fails
- * at `git add`, which was verified rather than assumed (see the Phase 12 plan).
+ * at `git add`, which was verified rather than assumed.
  *
  * The set is deliberately the narrowest that permits a commit. It excludes
  * `.git/hooks` and `.git/config`, and that exclusion is the point: a writable
@@ -595,7 +596,7 @@ export async function deleteBranch(repoPath: string, branch: string, force = fal
   if (result.code !== 0) throw localGitError(`Could not delete ${branch}`, result)
 }
 
-// --- Diffs & landing (Phase 19) ----------------------------------------------
+// --- Diffs & landing ---------------------------------------------------------
 
 export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed'
 
@@ -724,9 +725,9 @@ export async function diffNameOnlyBetween(
 /**
  * Stages everything and commits it, returning the new head.
  *
- * The one place the app authors a commit, and it is reached only from a click
- * (see docs/plan/19-review-landing.md) — Phase 9's refusal to commit
- * *unattended* work still stands on every turn and routine path. `--author`
+ * The one place the app authors a commit, and it is reached only from a click.
+ * The app never commits *unattended*: no turn and no routine path ever gets
+ * here, however much uncommitted work one of them leaves behind. `--author`
  * attributes the work to the persona while the user, whose click this was,
  * stays the committer git's own config names.
  */

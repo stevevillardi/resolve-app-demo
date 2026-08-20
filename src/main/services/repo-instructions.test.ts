@@ -56,9 +56,9 @@ describe('readRepoInstructions', () => {
   })
 
   it('reads both when a repo ships both and they differ', () => {
-    // Doc 15 item 6: first-hit-wins silently dropped whichever file lost, and
-    // a repo whose two files disagree is exactly the repo whose second file
-    // matters. Headers keep the origin of each half legible to the model.
+    // First-hit-wins would silently drop whichever file lost, and a repo whose
+    // two files disagree is exactly the repo whose second file matters.
+    // Headers keep the origin of each half legible to the model.
     write('CLAUDE.md', 'From Claude.')
     write('AGENTS.md', 'From Agents.')
     const result = readRepoInstructions(repo)

@@ -4,7 +4,7 @@ import { branchesKey } from '@/hooks/useBranches'
 import type { IpcOutput } from '../../../shared/ipc-contract'
 
 /**
- * The diff surface's reads and the one write beside them (Phase 19).
+ * The diff surface's reads and the one write beside them.
  *
  * Diff queries shell out to git per call, so they are fetched when a surface
  * opens and refetched only when this file's own mutations invalidate them —

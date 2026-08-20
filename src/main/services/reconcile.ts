@@ -3,10 +3,10 @@ import { initDb } from '../db'
 import { toolCalls } from '../db/schema'
 
 /**
- * Boot reconciliation (review §B6): the quit path deliberately does not wait
- * for in-flight turns — the turn dies with the process — and a crash asks
- * nobody. Either way the database keeps whatever the turn had written by
- * then, including tool_calls rows still marked `running`.
+ * Boot reconciliation. The quit path deliberately does not wait for in-flight
+ * turns — the turn dies with the process — and a crash asks nobody. Either way
+ * the database keeps whatever the turn had written by then, including
+ * tool_calls rows still marked `running`.
  *
  * At process start the run registry is empty by construction, so every
  * `running` row is a turn that died mid-call — the exact contract the table's

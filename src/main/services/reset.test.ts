@@ -7,10 +7,10 @@ import { contacts, groups, personaTemplates } from '../db/schema'
 import type { AppDatabase } from '../db/create'
 
 /**
- * The dev reset (Phase 18). The claims worth pinning: contacts leave through
- * the real deleteContact path (so real repos keep clean worktree registries),
- * persona branches are force-deleted, the profile is wiped, and everything
- * the app does not own is left exactly alone.
+ * The dev reset. The claims worth pinning: contacts leave through the real
+ * deleteContact path (so real repos keep clean worktree registries), persona
+ * branches are force-deleted, the profile is wiped, and everything the app does
+ * not own is left exactly alone.
  */
 
 let db: AppDatabase

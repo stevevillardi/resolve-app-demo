@@ -9,7 +9,7 @@ import type * as MonacoModule from 'monaco-editor'
 type DiffEditor = ReturnType<(typeof MonacoModule)['editor']['createDiffEditor']>
 
 /**
- * One file pair in Monaco's diff editor, read-only (Phase 19).
+ * One file pair in Monaco's diff editor, read-only.
  *
  * The editor instance outlives file switches — models are swapped instead of
  * the widget being rebuilt, because standalone editor construction is the
@@ -89,10 +89,10 @@ function MonacoDiff({
           // The segmented control above this pane is the only thing that
           // decides the layout. Monaco otherwise drops to inline below 900px,
           // and the branch pane hands this editor roughly 800px on a normal
-          // window (pane width less the 224px file rail) — so "Split" had been
-          // rendering inline, with two adjacent line-number gutters, for every
-          // window narrower than about 1900px. A control that silently does
-          // the other thing is worse than one that is cramped.
+          // window (pane width less the 224px file rail) — so left to itself
+          // "Split" renders inline, with two adjacent line-number gutters, for
+          // every window narrower than about 1900px. A control that silently
+          // does the other thing is worse than one that is cramped.
           useInlineViewWhenSpaceIsLimited: false,
           automaticLayout: true,
           minimap: { enabled: false },

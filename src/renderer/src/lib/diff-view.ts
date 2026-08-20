@@ -1,8 +1,8 @@
 import type { FileDiff } from '../../../shared/ipc-contract'
 
 /**
- * The pure half of the diff viewer (Phase 19) — in lib/ because logic in a
- * .tsx is untestable by construction here (the renderer test project matches
+ * The pure half of the diff viewer — in lib/ because logic in a .tsx is
+ * untestable by construction here (the renderer test project matches
  * *.test.ts only).
  */
 

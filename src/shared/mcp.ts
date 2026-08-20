@@ -13,11 +13,12 @@
  * "add a server by URL" field would let a user point a persona at an arbitrary
  * endpoint with no gate behind it: this app narrows GitHub by mapping
  * `githubScope` onto a measured tool inventory, and there is nothing equivalent
- * to do for a server nobody has inventoried. Blueprint §4's two axes describe
- * the disk and GitHub; a persona holding a server that posts to Slack is reach
- * that neither axis covers. Until that third axis exists in its own right, the
- * per-persona allowlist over a curated set *is* the axis — see the comment on
- * `personaTemplateSchema.mcpServerIds` in domain.ts.
+ * to do for a server nobody has inventoried. A persona's two governance axes
+ * describe the disk (`sandbox`) and GitHub (`githubScope`); a persona holding a
+ * server that posts to Slack is reach neither of them covers. Until that third
+ * axis exists in its own right, the per-persona allowlist over a curated set
+ * *is* the axis — see the comment on `personaTemplateSchema.mcpServerIds` in
+ * domain.ts.
  *
  * Adding an entry here is therefore a deliberate act with a design question
  * attached: what narrows it, and what does the UI say it can do?

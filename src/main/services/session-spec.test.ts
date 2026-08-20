@@ -182,8 +182,8 @@ describe('buildSessionSpec', () => {
     )
   })
 
-  // Phase 22. A persona is reusable across repositories and a model choice
-  // often is not, so the Contact's own wins — and null on the Contact means
+  // A persona is reusable across repositories and a model choice often is not,
+  // so the Contact's own wins — and null on the Contact means
   // "follow the persona", which is the default and the common case.
   it('lets the contact override its persona model', () => {
     const persona = { ...getPersonaTemplate(PERSONA_ID)!, model: 'claude-sonnet-5' }
@@ -207,10 +207,10 @@ describe('buildSessionSpec', () => {
  * Capability resolution belongs here rather than in startTurn, and this is the
  * assertion that keeps it here.
  *
- * It was in startTurn when Phase 14 wrote it, which meant a turn sent the
- * repository's instructions and its skills while this panel — the screen whose
- * entire job is "what will this turn send" — did not know they existed. Nothing
- * failed; the panel simply under-reported. Moving `capabilitiesFor` into
+ * Resolved in startTurn instead, a turn would send the repository's
+ * instructions and its skills while this panel — the screen whose entire job is
+ * "what will this turn send" — did not know they existed. Nothing fails in that
+ * arrangement; the panel simply under-reports. `capabilitiesFor` living inside
  * buildSessionSpec is what makes the two provably the same, so the test uses a
  * *real* repository on disk with content in it: asserting the fields are merely
  * defined would still pass against empty arrays.
@@ -293,7 +293,8 @@ describe('a capability granted and not reachable', () => {
   it('puts the reason in the prompt the session actually receives', () => {
     // The assertion that matters. A field on the spec that no adapter renders
     // leaves the persona exactly as unable to tell the two cases apart as it
-    // was before — which is how this gap survived step 3 and step 4.
+    // would be with no field at all, which is how a gap like this survives
+    // being plumbed: every half is present and nothing renders the result.
     grantGithub()
     const composed = composeInstructions(
       buildSessionSpec(getContact(CONTACT_ID)!, getPersonaTemplate(PERSONA_ID)!)
@@ -326,9 +327,10 @@ describe('a capability granted and not reachable', () => {
  *
  * Everything above sets `repoTrust` by writing the column directly, which
  * proves capabilitiesFor reads it but not that anything in the app can change
- * it. Until Phase 14 nothing could: there was no procedure, so the switch
- * governing whether a repository may instruct a persona was unreachable from
- * the UI. These assertions are about that gap being closed.
+ * it. `setRepoTrust` is that writer — the only way the switch governing
+ * whether a repository may instruct a persona is reachable from the UI — and a
+ * switch nothing can throw governs nothing. These assertions cover it end to
+ * end: grant, revoke, and the limits of what a grant covers.
  */
 describe('granting trust changes what the next turn sends', () => {
   const scratch = mkdtempSync(join(tmpdir(), 'trust-write-'))

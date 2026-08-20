@@ -26,10 +26,9 @@ import type {
  * Two things about this SDK shape the adapter:
  *
  * 1. `config` lives on the Codex *client*, not on ThreadOptions, and
- *    `developer_instructions` is the only route for per-persona context
- *    (blueprint §5). So a client is constructed per session rather than
- *    shared — a single app-wide Codex would force every persona to share one
- *    set of instructions.
+ *    `developer_instructions` is the only route for per-persona context. So a
+ *    client is constructed per session rather than shared — a single app-wide
+ *    Codex would force every persona to share one set of instructions.
  * 2. Every run spawns a fresh `codex exec --experimental-json` subprocess and
  *    resumes by thread id (threads live in ~/.codex/sessions). There is no
  *    long-lived process, which is why AgentSession holds no handle.
@@ -38,22 +37,23 @@ import type {
  * declares only an `import` condition — no `require`, no `default` — so a
  * `require()` of it fails outright with ERR_PACKAGE_PATH_NOT_EXPORTED, and
  * electron-vite builds the main process as CommonJS with externalized
- * dependencies. Phase 3 never hit this because codex-auth.ts imports only
- * types, which erase at compile time; this adapter is the first code to need
- * the package at runtime. `await import()` is the one form that resolves an
- * ESM-only package from CJS.
+ * dependencies. codex-auth.ts is unaffected because it imports only types,
+ * which erase at compile time; this adapter is the code that needs the package
+ * at runtime, and `await import()` is the one form that resolves an ESM-only
+ * package from CJS.
  */
 
 export const CODEX_CAPABILITIES: AgentCapabilities = {
   // Items arrive whole — there is no token-level delta in the JSONL protocol.
   streamsTextDeltas: false,
   // The inverse of Claude's shape: live CommandExecutionStatus while a command
-  // runs, which is exactly the visibility blueprint §3 credits Codex with.
+  // runs, so a Codex tool call is visible as it happens rather than only once
+  // it finishes.
   streamsToolProgress: true,
   costSource: 'computed',
-  // The CLI's own `--sandbox` preset is enforced by the OS, on every platform
-  // it runs on. This was already true in Phase 5 — it is only stated now that
-  // the Claude side has an equivalent to be compared against.
+  // The CLI's own `--sandbox` preset is enforced by the OS, on every platform it
+  // runs on — unlike the Claude side, which falls back to this app's in-process
+  // allowlist wherever the SDK has no OS implementation.
   sandboxEnforcement: 'os',
   // TurnOptions.outputSchema in 0.147.0. Per-turn rather than per-session,
   // unlike Claude — see summarize().
@@ -82,7 +82,7 @@ export function toolNameFor(item: ThreadItem): string {
 }
 
 /**
- * How a tool item answered, as bounded text (Phase 19).
+ * How a tool item answered, as bounded text.
  *
  * Commands carry their aggregated stdout/stderr; an MCP call carries either
  * its error message or its result's text parts. file_change and web_search
@@ -198,11 +198,11 @@ export const DEFAULT_CODEX_MODEL = 'gpt-5.5'
  * the summariser path — which is why it is a function rather than two literals
  * that could drift.
  *
- * This is the Codex half of "a persona's instructions are the persona's alone",
- * and until Phase 14 it did not exist. `settingSources: []` sealed Claude, and
- * every document from Phase 5 onwards then described the *app* as sealed. It
- * was not: three separate channels let a repository speak to a Codex persona
- * with no opt-in and nothing recording that it could.
+ * This is the Codex half of "a persona's instructions are the persona's alone".
+ * `settingSources: []` seals the Claude side, and it is tempting to read that
+ * as the *app* being sealed; it is not. Three separate channels otherwise let a
+ * repository speak to a Codex persona with no opt-in and nothing recording that
+ * it could, and each of the three is closed below.
  *
  * Each seal below was verified by rendering the model-visible prompt with
  * `codex debug prompt-input`, which costs nothing and shows the exact bytes —
@@ -218,8 +218,9 @@ export const DEFAULT_CODEX_MODEL = 'gpt-5.5'
  *                               and on by default, and a repo's
  *                               `.codex/hooks.json` feeds it. A hook is an
  *                               arbitrary command outside every sandbox this
- *                               app has built, which is the same reason Phase
- *                               12 refused to make `.git/hooks` writable.
+ *                               app has built, which is the same reason a
+ *                               worktree session never gets `.git/hooks`
+ *                               writable.
  *   skills.config = [...]       every discovered skill this session has not
  *                               been given, disabled by name. There is no
  *                               global switch and no wildcard — `skills.enabled`,
@@ -378,8 +379,8 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
 
     // The subprocess can fail outside the event stream entirely — a bad
     // binary path, or an expired login, which surfaces as a rejection from
-    // runStreamed() rather than a turn.failed event. Blueprint §15C wants
-    // every failure to reach the thread as a visible error, so nothing here
+    // runStreamed() rather than a turn.failed event. Every failure has to reach
+    // the thread as a visible error rather than a silent stop, so nothing here
     // is allowed to escape as a bare exception.
     try {
       const { events } = await thread.runStreamed(prompt, signal ? { signal } : {})
@@ -492,7 +493,8 @@ export function createCodexAdapter(config: AdapterConfig = {}): AgentAdapter {
   }
 
   /**
-   * One schema-constrained turn (blueprint §6 compaction).
+   * One schema-constrained turn: the compaction summary a session is asked for
+   * as it ends.
    *
    * The mirror image of the Claude side. `outputSchema` is a **per-turn**
    * TurnOptions field, so no separate session shape is needed — but there is

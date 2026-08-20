@@ -60,7 +60,7 @@ export function repoName(repoPath: string): string {
 }
 
 /**
- * What to call a group on screen (review §G5).
+ * What to call a group on screen.
  *
  * One function rather than the fallback written out at each of the places a
  * group's name is rendered, because every reader that keeps saying

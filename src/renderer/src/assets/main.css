@@ -10,8 +10,8 @@
  *
  * Concept: this is a console for a fleet of scoped workers, not a chat app.
  * The thing worth seeing at a glance is what each persona is *allowed to do* —
- * its sandbox level and its independent GitHub scope (blueprint §9, §16
- * Journey 3). So the recurring signature element is the scope chip
+ * its sandbox level and its independent GitHub scope. So the recurring
+ * signature element is the scope chip
  * (components/common/ScopeChip.tsx): a small monospace capsule, icon + label,
  * tinted by --scope-*. It is never color-alone, and it encodes real data
  * rather than decorating a container.

@@ -2,8 +2,8 @@ import type { GroupMessage, Skill } from '../../shared/domain'
 import type { InjectedSkill, RepoInstructionsBlock, SessionSpec, SiblingBranch } from './types'
 
 /**
- * Context injection (blueprint §5): a persona's system prompt plus the content
- * of every skill attached to it, as one instruction string.
+ * Context injection: a persona's system prompt plus the content of every skill
+ * attached to it, as one instruction string.
  *
  * Shared by both adapters rather than written twice, so "Claude and Codex
  * receive identical instructions" is true by construction instead of by
@@ -56,16 +56,16 @@ export function composeInstructionBlocks(spec: SessionSpec): {
   // `.git/worktrees/<name>` directory, because that is where git puts the index
   // a commit has to lock — and a model asked to create a file with a bare
   // relative name will sometimes resolve it against *that* directory instead of
-  // its own working tree. Observed live on two concurrent writers in Phase 12,
-  // both refused. Naming the working directory removed that ambiguity.
+  // its own working tree. Observed live on two concurrent writers, both
+  // refused. Naming the working directory removed that ambiguity.
   //
-  // Phase 9's Journey 3 check then found the other half of the same mistake: a
-  // routine asked for `src/<file>.ts`, a path whose directory existed in
-  // neither checkout, and the model created it in the **repository** — the
-  // other path this very block names. A missing parent directory sends a model
-  // looking for the canonical copy of the project, and this block was handing
-  // it one without saying it was out of bounds. Hence the explicit refusal
-  // sentence: naming a path is not the same as saying what may be done with it.
+  // A later live run found the other half of the same mistake: a routine asked
+  // for `src/<file>.ts`, a path whose directory existed in neither checkout,
+  // and the model created it in the **repository** — the other path this very
+  // block names. A missing parent directory sends a model looking for the
+  // canonical copy of the project, and this block was handing it one without
+  // saying it was out of bounds. Hence the explicit refusal sentence: naming a
+  // path is not the same as saying what may be done with it.
   if (spec.workingContext) {
     sections.push(renderWorkingContext(spec.workingContext))
   }
@@ -118,11 +118,11 @@ export function composeInstructionBlocks(spec: SessionSpec): {
     )
   }
 
-  // Blueprint §5's second half, and the mechanism behind §16 Journey 2: a
-  // session starts already knowing what other personas decided on this repo,
-  // without anyone pasting it in. Resolved by the caller (adapters touch no
-  // database) and appended here rather than in either adapter, so both
-  // backends get identical text by construction.
+  // The second injection source, after the persona's own skills, and the
+  // mechanism by which a session starts already knowing what other personas
+  // decided on this repo, without anyone pasting it in. Resolved by the caller
+  // (adapters touch no database) and appended here rather than in either
+  // adapter, so both backends get identical text by construction.
   //
   // Last, after the skills, because it is the most recent and most volatile
   // part of the prompt — keeping the persona and its skills as a stable prefix
@@ -134,12 +134,19 @@ export function composeInstructionBlocks(spec: SessionSpec): {
     )
   }
 
-  // Blueprint §6 says "filesystem state is free — every session reads the live
-  // repo on disk". Worktrees make that false: a writer's changes live on a
-  // branch that is checked out nowhere the reader can see. What saves §6 is that
-  // worktrees share one object store, so the branch is fully *readable* without
-  // anything being merged — §6 degrades from "the filesystem is free" to "the
-  // object store is free", which is nearly as good.
+  // Filesystem state is supposed to be free: every session reads the live repo
+  // on disk, so one Contact's code changes are visible to the next for nothing,
+  // and only intent and rationale need the Group layer to cross a Contact
+  // boundary. A writer with its own worktree stops that being literally true —
+  // its work sits on a branch checked out nowhere any reader can look — so what
+  // is free degrades to "committed and merged work is free, work in progress is
+  // not", which is exactly why the Group journal has to carry intent rather
+  // than leaving the tree to speak for itself.
+  //
+  // What rescues the rest is that worktrees share one object store, so a
+  // sibling's branch is fully *readable* without anything being merged: free
+  // filesystem state becomes free object-store access, which is nearly as
+  // good — provided the session is told the branch is there.
   //
   // Injected rather than discovered because the model cannot find this out for
   // itself: `git branch` and `git worktree` are both denied to a read_only

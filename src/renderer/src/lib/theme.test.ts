@@ -4,7 +4,7 @@ import { applyThemeClass, prefersDark, resolveTheme, subscribeToSystemTheme } fr
 /**
  * Theme resolution runs before first paint (main.tsx calls applyThemeClass at
  * module scope), so getting it wrong shows up as a white flash on every launch
- * for a dark-mode user — the exact bug the Phase 2 rework fixed.
+ * for a dark-mode user.
  */
 
 let systemPrefersDark = false

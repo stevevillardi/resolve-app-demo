@@ -26,9 +26,9 @@ registerProcedure('shell.openExternal', async ({ url }) => {
   return { opened: true }
 })
 
-// Local paths (Phase 19): same shape as the URL allowlist above — the roots
-// are what the app already knows (bound repos, its own worktrees), validated
-// in services/local-paths.ts where the rule has tests.
+// Local paths: same shape as the URL allowlist above — the roots are what the
+// app already knows (bound repos, its own worktrees), validated in
+// services/local-paths.ts where the rule has tests.
 registerProcedure('shell.openPath', async ({ path }) => {
   if (!isKnownLocalPath(path)) return { opened: false }
   const failure = await shell.openPath(path)
@@ -42,10 +42,10 @@ registerProcedure('shell.revealPath', async ({ path }) => {
 })
 
 /**
- * Export (review §G2). Deliberately in this module rather than a new one: it is
- * the same kind of thing as the two above — a request to reach outside the
- * profile directory — and keeping them together means the next person adding
- * one reads the allowlist rule and the reason this one is exempt in one place.
+ * Export. Deliberately in this module rather than a new one: it is the same
+ * kind of thing as the two above — a request to reach outside the profile
+ * directory — and keeping them together means the next person adding one reads
+ * the allowlist rule and the reason this one is exempt in one place.
  */
 registerProcedure('files.saveText', async (input) => ({
   path: await saveTextFile(input)

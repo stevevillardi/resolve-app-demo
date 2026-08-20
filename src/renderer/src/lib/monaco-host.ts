@@ -1,7 +1,7 @@
 import type * as MonacoModule from 'monaco-editor'
 
 /**
- * One lazy Monaco per window (Phase 19).
+ * One lazy Monaco per window.
  *
  * Loaded on first use rather than at startup — Monaco is megabytes, and the
  * chats screen must not pay for a diff nobody has opened. The worker is

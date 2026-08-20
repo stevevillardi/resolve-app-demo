@@ -42,13 +42,13 @@ import { DOCS_URL } from '../../../../shared/menu'
  * The screen that explains the app.
  *
  * Home is where every launch lands (`section` is not persisted) and where a
- * fresh install lands twice over, and until now it answered both with a
- * centred sentence and one button. The sentence was accurate and taught
- * nothing: this app's nouns are not guessable from a chat window. A Contact is
+ * fresh install lands twice over. A centred sentence and one button would
+ * answer both accurately and teach nothing: this app's nouns are not guessable
+ * from a chat window. A Contact is
  * a persona *bound to a repository*; a repo has a group thread nobody has a
  * session in; finished work arrives on a git branch rather than in the reply;
- * and there are five keyboard bindings whose only inventory was inside the
- * palette you needed one of them to open.
+ * and there are five keyboard bindings whose only other inventory is inside the
+ * palette you need one of them to open.
  *
  * Two shapes, because a first launch and a fifth week want different amounts
  * of this:
@@ -232,7 +232,7 @@ function FirstSteps(): React.JSX.Element | null {
     turns: previews.length,
     routines: routines.length,
     // `connected` alone is a stored file, not a working token — the exact
-    // conflation `tokenState` was added to end (Phase 16).
+    // conflation `tokenState` exists to end.
     githubConnected:
       (github?.connected ?? false) &&
       github?.tokenState !== 'rejected' &&

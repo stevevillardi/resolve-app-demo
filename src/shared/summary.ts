@@ -2,9 +2,14 @@ import { z } from 'zod'
 import { systemSummaryCategorySchema } from './domain'
 
 /**
- * The end-of-session summary contract (blueprint §6), in both the shapes it
- * has to exist in: Zod for validating what came back, JSON Schema for telling
- * the backend what to produce.
+ * The end-of-session summary contract, in both the shapes it has to exist in:
+ * Zod for validating what came back, JSON Schema for telling the backend what
+ * to produce.
+ *
+ * A summary is how one session's intent reaches the next one. Code changes are
+ * free to cross — every session reads the same repo off disk — but the reasoning
+ * behind them lives in a private conversation, so it is written down here and
+ * re-injected into the repo's other sessions.
  *
  * Lives in `shared/` rather than beside the compaction service so that
  * `scripts/probe-structured.ts` can import the real thing. The probe used to
@@ -36,11 +41,13 @@ import { systemSummaryCategorySchema } from './domain'
  *
  * The `category` descriptions are load-bearing prose, not documentation: they
  * are the only instruction the model gets about where the line falls, and
- * `durable` is derived from the answer. An earlier wording defined `routine` as
- * "everything else", and a live Journey 2 run classified an actual edit to
- * auth.ts as routine — the model read the category as being about how much it
- * had deliberated, and it had simply been told what to do. Written this way the
- * question is what the turn left behind, which is what §6 actually cares about.
+ * `durable` is derived from the answer — `decision` and `tradeoff` are kept
+ * indefinitely and injected into every later session on the repo, `routine`
+ * rows are not. An earlier wording defined `routine` as "everything else", and a
+ * live run then filed an actual edit to auth.ts as routine: the model read the
+ * category as being about how much it had deliberated, and it had simply been
+ * told what to do. Written this way the question is what the turn left behind,
+ * which is the only thing a later session needs from it.
  */
 export const SUMMARY_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -109,8 +116,10 @@ export const summarySchema = z.object({
   branch: z.string().nullable().optional(),
   /**
    * A request for a human to merge somebody else's branch into this session's
-   * tree — the one thing in docs/plan/12-worktree-isolation.md's three layers
-   * that a persona cannot do for itself, and should not.
+   * tree — the one step of worktree isolation a persona cannot take for itself,
+   * and should not. Getting its own checkout and its own branch is automatic;
+   * landing another checkout's work in it is a human click in the Branches
+   * panel, which is where the isolation stops being free.
    *
    * Nested `additionalProperties: false` and its own `required` above, because
    * strict mode applies to sub-objects too and would otherwise 400 on every

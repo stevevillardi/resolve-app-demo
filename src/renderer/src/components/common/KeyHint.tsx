@@ -12,8 +12,8 @@ import { cn } from '@/lib/utils'
  *
  * Shared rather than local to the Home guide because the command palette's
  * footer already lists five shortcuts, and two surfaces that both teach
- * keyboard bindings should not draw a key two different ways — that is exactly
- * how the four pane headers drifted before Phase 13.
+ * keyboard bindings must not draw a key two different ways. One component, so
+ * every surface stays identical.
  */
 export function KeyHint({
   children,

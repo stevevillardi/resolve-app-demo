@@ -26,11 +26,9 @@ import { useUiStore, type Section } from '@/store/useUiStore'
 import type { PersonaTemplateDraft, SkillDraft } from '@/types'
 
 // `newLabel` is only set where the action actually does something — a "+" that
-// visibly does nothing when clicked is worse than no "+" at all. Personas and
-// skills got theirs in Phase 4, when there was finally somewhere to persist
-// them; routines got theirs in Phase 8, when a scheduler finally existed to
-// fire one. Routines still need a Contact to bind to, so the button is present
-// but disabled until there is one — see `canCreate` below.
+// visibly does nothing when clicked is worse than no "+" at all. Routines need
+// a Contact to bind to, so their button is present but disabled until there is
+// one — see `canCreate` below.
 const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLabel?: string }> = {
   // Present only to satisfy `Record<Section, …>`. Home renders no list panel at
   // all — AppShell drops the whole panel group for it — so nothing here is ever
@@ -47,8 +45,9 @@ const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLab
 }
 
 /**
- * What a brand-new persona starts as — the safest scope on both axes (§4), and
- * no MCP servers, which is the third thing that has to start closed.
+ * What a brand-new persona starts as — the safest scope on both axes, read-only
+ * on disk and read-only on GitHub, and no MCP servers, which is the third thing
+ * that has to start closed.
  */
 const NEW_PERSONA: PersonaTemplateDraft = {
   name: 'New persona',

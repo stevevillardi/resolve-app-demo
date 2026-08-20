@@ -139,7 +139,7 @@ describe('MCP servers', () => {
 
 describe('the two axes stay independent', () => {
   /**
-   * The finding this phase exists to close. `sandbox: full_access` sets
+   * The finding these cases exist to close. `sandbox: full_access` sets
    * `permissionMode: 'bypassPermissions'`, and a GitHub decision keyed off the
    * filesystem level would hand every full-disk persona merge rights nobody
    * granted it. Nine combinations, asserted, so no future edit can quietly
@@ -168,8 +168,8 @@ describe('the two axes stay independent', () => {
   })
 
   it('still denies all seventeen writes at full_access on disk', () => {
-    // Spelled out on its own because it is the single combination the phase was
-    // built around, and a loop is easy to read past.
+    // Spelled out on its own because it is the single combination the two-axis
+    // rule was built around, and a loop is easy to read past.
     const resolved = capabilitiesFor(
       contact(),
       persona({ mcpServerIds: ['github'], sandbox: 'full_access', githubScope: 'read_only' })

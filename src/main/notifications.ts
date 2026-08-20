@@ -8,12 +8,13 @@ import type { NavigateTarget } from '../shared/navigation'
 import type { NotificationText } from './notification-text'
 
 /**
- * The OS notification surface (Phase 20, review §C1).
+ * The OS notification surface.
  *
- * The one piece of iMessage the app had not copied: something happened, and
- * nothing buzzed. Everything unattended — a routine's 3 a.m. run, a ten-minute
- * turn finishing while the user is in their editor, a budget crossing — used
- * to leave only rows the user had to go look for.
+ * The piece of iMessage the rest of the app would be missing without it:
+ * something happened, and something buzzed. Everything unattended — a
+ * routine's 3 a.m. run, a ten-minute turn finishing while the user is in their
+ * editor, a budget crossing — would otherwise leave only rows the user has to
+ * go looking for.
  *
  * Thin on purpose, like tray.ts: the copy lives in notification-text.ts where
  * it is tested, the decisions about *when* to notify live with their callers,
@@ -23,7 +24,7 @@ import type { NotificationText } from './notification-text'
 /**
  * Default ON — absence of the flag means enabled. The app's whole unattended
  * story is the reason notifications exist, so shipping them opt-in would
- * re-create the silence this phase removes; the Settings toggle is the opt-out.
+ * re-create the silence they exist to end; the Settings toggle is the opt-out.
  */
 export function notificationsEnabled(): boolean {
   return getAppState('notifications_enabled') !== 'false'
@@ -51,9 +52,9 @@ const ROUTINE_NAME_MAX = 60
 
 /**
  * A routine's outcome, every recorded status — completed, failed, *and*
- * skipped. A lock-refused 3 a.m. fire is precisely the silence this phase
- * exists to end; only fires that were never attempts (routine deleted, run
- * still going) stay quiet, because they write no history either.
+ * skipped. A lock-refused 3 a.m. fire is precisely the silence these exist to
+ * end; only fires that were never attempts (routine deleted, run still going)
+ * stay quiet, because they write no history either.
  *
  * Not gated on window attention: an unattended fire is the routine's normal
  * case, and even with the app frontmost a background routine finishing is not

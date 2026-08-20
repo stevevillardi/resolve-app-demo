@@ -84,7 +84,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
   const usage = useMemo(() => usageForContact(usageEvents, contactId), [usageEvents, contactId])
 
-  // Which usage row paid for which reply (§G6), from the same array. Built once
+  // Which usage row paid for which reply, from the same array. Built once
   // rather than scanned per message: a long thread renders hundreds of bubbles.
   const turnCosts = useMemo(() => usageByMessage(usageEvents), [usageEvents])
 
@@ -160,9 +160,9 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
 
   // The store covers turns this renderer started or swept in; the runs query
   // covers the gap before a sweep lands and any push the sweep missed. Without
-  // the second half, a routine turn left the composer enabled and Stop
-  // unreachable — the user could type into a running conversation and only
-  // learn about the turn from main's lock refusal (Phase 25).
+  // the second half, a routine turn leaves the composer enabled and Stop
+  // unreachable — the user types into a running conversation and only learns
+  // about the turn from main's lock refusal.
   const ownRun = runs.find((run) => run.contactId === contactId)
   const isRunning = Boolean(turn && !turn.stream.finished) || Boolean(ownRun)
 
@@ -183,16 +183,15 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
   return (
     // `@container/pane` declared here rather than inherited: this view does not
     // use PaneBody, which is where every other pane gets it, so a `@…/pane:`
-    // class in the header would silently never fire. That is the same defect
-    // Phase 16 found across the whole renderer — a responsive class measuring a
-    // container nobody declared.
+    // class in the header would silently never fire — a responsive class
+    // measuring a container nobody declared fails without an error.
     <div className="@container/pane bg-background flex h-full min-h-0 flex-col">
       {/*
         The repo's name, not its path. The full path is often 60+ characters —
-        a macOS temp checkout is over 80 — and it was taking the entire header
+        a macOS temp checkout is over 80 — and would take the entire header
         while telling you nothing the last segment doesn't. The whole path is
-        still one hover away, which is the right ratio for something you need
-        about once a session.
+        one hover away, which is the right ratio for something you need about
+        once a session.
       */}
       <ThreadHeader
         leading={
@@ -290,7 +289,7 @@ export function ThreadView({ contactId }: ThreadViewProps): React.JSX.Element {
                     <WorkChips work={message.work} onOpen={() => setWorkMessageId(message.id)} />
                   )}
                   {/*
-                    What this turn cost, under the reply it bought (§G6). Read
+                    What this turn cost, under the reply it bought. Read
                     from the usage events this view already holds, so no new
                     query — only migration 0020's link. Absent rather than zero
                     when there is no row: a turn from before the column existed

@@ -4,8 +4,8 @@ import { personasKey } from './usePersonas'
 import type { Skill, SkillDraft } from '@/types'
 
 /**
- * Skill library reads and writes (Phase 4). The list is small and entirely
- * local, so there's no pagination and no staleness policy worth tuning —
+ * Skill library reads and writes. The list is small and entirely local, so
+ * there's no pagination and no staleness policy worth tuning —
  * mutations invalidate and the list refetches from SQLite in under a
  * millisecond.
  */

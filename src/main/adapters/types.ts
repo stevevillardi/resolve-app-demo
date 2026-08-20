@@ -2,7 +2,9 @@ import type { AgentCapabilities, AgentEvent, AgentUsage } from '../../shared/age
 import type { GroupMessage, PersonaBackend, PersonaTemplate, Skill } from '../../shared/domain'
 
 /**
- * The AgentAdapter contract (blueprint §3).
+ * The AgentAdapter contract: one interface, one implementation per backend.
+ * Both create a session, run a prompt, stream events and resume by id, and
+ * both normalize into the one internal AgentEvent type.
  *
  * Nothing in src/main/adapters/ may import `electron` or the database. The
  * caller resolves a persona's skills and hands them in; the adapter composes
@@ -82,20 +84,20 @@ export interface ResolvedServer {
 /**
  * Everything an adapter needs to start or resume a session.
  *
- * Deviates from blueprint §3's literal `createSession(persona, repoPath)`:
- * skill *content* has to arrive from outside, because resolving skillIds means
- * touching the database and adapters don't.
+ * More than the persona and a path, deliberately: skill *content* has to
+ * arrive from outside, because resolving skillIds means touching the database
+ * and adapters don't.
  */
 export interface SessionSpec {
   persona: PersonaTemplate
   /**
    * Absolute path to the directory the session works in. Becomes the cwd.
    *
-   * Named for the repo because that is what it was until Phase 12; since then it
-   * is the *working* path, which for an isolated Contact is its worktree rather
-   * than the repo itself. Everything downstream — the cwd, the write boundary,
-   * isInsideRepo()'s fence — wants the working path, so the name is the only
-   * thing that stayed behind.
+   * This is the *working* path, not necessarily the repository: for an
+   * isolated Contact it is that Contact's own worktree, and the repository it
+   * was cut from is named separately in `workingContext`. Everything
+   * downstream — the cwd, the write boundary, isInsideRepo()'s fence — wants
+   * the working path, so despite the name that is what belongs here.
    */
   repoPath: string
   /**
@@ -124,14 +126,15 @@ export interface SessionSpec {
    * given a bare relative filename will sometimes resolve it against that.
    */
   workingContext?: { workingPath: string; repoPath: string; branch: string }
-  /** Already resolved from persona.skillIds by the caller (blueprint §5). */
+  /** Already resolved from persona.skillIds by the caller. */
   skills: Skill[]
   /**
    * The names of the *repository's own* skills this Contact has been given.
    *
    * A different thing from `skills` above, and the two are easy to confuse: a
-   * `Skill` here is the app's own injected prose (blueprint §4), while these
-   * are `SKILL.md` documents the repo ships and the backend discovers by
+   * `Skill` here is this app's own prose, injected into the system prompt,
+   * while these are `SKILL.md` documents the repo ships — executable
+   * capabilities the backend discovers on disk and chooses to invoke for
    * itself. Anything a backend would find and that is not named here is
    * disabled by name before the turn starts — see codexConfigFor().
    *
@@ -183,8 +186,8 @@ export interface SessionSpec {
    * persona asked to check for new issues, with no GitHub account connected,
    * finds no tool and answers that there are none. "I looked and found nothing"
    * and "I was never able to look" are different sentences and only one of them
-   * is true — and blueprint §16 Journey 3 opens with exactly that step, so the
-   * silent version is the one most likely to be seen.
+   * is true — and an unattended routine very often opens with exactly that
+   * check, so the silent version is the one most likely to be seen.
    *
    * Lands in the dynamic half of the prompt rather than the cacheable prefix: it
    * is re-resolved every turn like the group context, so connecting an account
@@ -192,8 +195,10 @@ export interface SessionSpec {
    */
   unavailableServers?: { id: string; reason: string }[]
   /**
-   * The repo's recent Group summaries, oldest first — blueprint §5's second
-   * injection source and the mechanism behind §16 Journey 2.
+   * The repo's recent Group summaries, oldest first — the second thing
+   * injected on session start, after the persona's own skills, and the
+   * mechanism by which a Contact starts a turn already knowing what other
+   * personas decided on this repository without anyone pasting it in.
    *
    * Resolved by the caller for the same reason `skills` is: selecting them
    * means querying the database, and nothing under src/main/adapters/ may.
@@ -276,9 +281,10 @@ export interface AdapterConfig {
   denyReadPaths?: string[]
   /**
    * Every native SDK message, before normalization. Exists for
-   * scripts/probe-adapters.ts --raw, which is how the token-accounting and
-   * context-injection questions in blueprint §14 get answered — they need the
-   * numbers the SDK actually returned, not our reading of them.
+   * scripts/probe-adapters.ts --raw, which is how questions like "is Codex's
+   * `cached_input_tokens` additive or a subset of `input_tokens`" and "does
+   * `developer_instructions` actually reach the model" get settled — they need
+   * the numbers the SDK actually returned, not our reading of them.
    */
   onRawEvent?: (event: unknown) => void
 }
@@ -309,8 +315,9 @@ export interface AgentAdapter {
   resume(spec: SessionSpec, sessionId: string): AgentSession
   run(session: AgentSession, prompt: string, signal?: AbortSignal): AsyncIterable<AgentEvent>
   /**
-   * One turn that answers with JSON matching `schema`, for blueprint §6's
-   * end-of-session compaction.
+   * One turn that answers with JSON matching `schema`, for the end-of-session
+   * compaction that reduces a finished session to a structured
+   * `{ summary, category }` for the repository's Group.
    *
    * Beside run() rather than an option on it, for three reasons that only
    * showed up on reading the vendored SDKs:

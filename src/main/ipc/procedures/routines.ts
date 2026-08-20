@@ -11,7 +11,7 @@ import { fireRoutine, nextRuns, syncSchedules } from '../../services/scheduler'
 import { getContact } from '../../services/contacts'
 
 /**
- * Routine CRUD, validation, and the manual trigger (blueprint §7).
+ * Routine CRUD, validation, and the manual trigger.
  *
  * Every mutation re-syncs the schedules. That composition lives here rather
  * than inside `routines.ts` on purpose: the scheduler depends on the CRUD

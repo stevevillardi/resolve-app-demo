@@ -4,11 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
  * The one place `AdapterConfig` is built for the whole app, so a turn started
  * by a message, an @mention or a routine is configured identically.
  *
- * It had no tests until Phase 14, and the gap was not academic: `denyReadPaths`
- * had been declared on AdapterConfig since Phase 5, plumbed all the way into
- * the Claude OS sandbox, asserted in sandbox.test.ts — and never supplied by
- * anyone. Both halves of that plumbing were covered and the join between them
- * was not, which is exactly the shape of hole an integration point leaves.
+ * What these tests pin is the join, which is exactly the shape of hole an
+ * integration point leaves: `denyReadPaths` is declared on AdapterConfig,
+ * plumbed all the way into the Claude OS sandbox and asserted in
+ * sandbox.test.ts, so both halves of that plumbing can be fully covered while
+ * nothing ever supplies the value. The assertions below are about what this
+ * function actually hands the adapters.
  */
 
 const USER_DATA = '/tmp/switchboard-test-userdata'
@@ -32,8 +33,8 @@ const { GITHUB_MCP_TOKEN_ENV } = await import('../adapters/github-mcp-tools')
 describe('adapterConfig', () => {
   it("keeps agents out of the app's own secret store", () => {
     // Written from the claim rather than from the code: the property is "a
-    // persona cannot read where this app keeps its credentials", and it is the
-    // producer that was missing, not the guard.
+    // persona cannot read where this app keeps its credentials", and this
+    // function is the producer of that guard.
     expect(adapterConfig('codex').denyReadPaths).toEqual([`${USER_DATA}/secrets`])
   })
 
@@ -47,11 +48,10 @@ describe('adapterConfig', () => {
   })
 
   /**
-   * The other half, and the one that was missing for three phases: only codex
-   * was filled in here, so a packaged build failed `spawn ENOTDIR` on every
-   * Claude call including the launch auth probe, which surfaced as an error
-   * banner. Asserted per backend because the config is built per backend and
-   * a Claude persona is the case that broke.
+   * The other half. With only codex filled in here, a packaged build fails
+   * `spawn ENOTDIR` on every Claude call including the launch auth probe, and
+   * surfaces as an error banner. Asserted per backend because the config is
+   * built per backend, and a Claude persona is the case that breaks.
    */
   it.each(['claude', 'codex'] as const)('injects both binary paths for %s', (backend) => {
     const config = adapterConfig(backend)
@@ -69,9 +69,9 @@ describe('adapterConfig', () => {
   })
 
   it('withholds it from a session that was never granted the server', () => {
-    // The first version set this whenever an account was connected, reasoning
-    // that a session with no server has nothing that would read it and no
-    // shell that could echo it. The second half was measured false:
+    // Setting this whenever an account is connected would rest on "a session
+    // with no server has nothing that would read it, and no shell that could
+    // echo it". The second half is measured false:
     // `echo $SWITCHBOARD_GITHUB_MCP_TOKEN` is allowed at workspace_write, so
     // every persona at that level could read the app's GitHub token out of its
     // own environment — including ones granted no MCP server at all.
@@ -101,7 +101,7 @@ describe('backend scoping of the token variable', () => {
   it('never puts the GitHub token in a Claude subprocess environment', () => {
     // Claude receives the token as an Authorization header on the server
     // config (github-mcp) and has no reader for this variable — an env var
-    // with no reader is pure blast radius. Doc 15 item 6.
+    // with no reader is pure blast radius.
     expect(
       GITHUB_MCP_TOKEN_ENV in (adapterConfig('claude', { needsGithubToken: true }).env ?? {})
     ).toBe(false)

@@ -2,13 +2,13 @@ import { sessionBoundaries } from './session'
 import type { PersistedMessage, UsageEvent } from '@/types'
 
 /**
- * Taking a conversation, and the spend it produced, out of the app (review §G2).
+ * Taking a conversation, and the spend it produced, out of the app.
  *
- * The review's phrasing is the design brief: "the honest cost data deserves an
- * exit door". This app goes to some trouble to record what it does not know —
- * a null cost is `—` and never `$0.00`, a partial total wears a `+`, the
- * context meter reads `≈` — and all of that is worth nothing if the only way
- * to get the numbers anywhere else is to retype them off a chart.
+ * The design brief in one line: the honest cost data deserves an exit door.
+ * This app goes to some trouble to record what it does not know — a null cost
+ * is `—` and never `$0.00`, a partial total wears a `+`, the context meter
+ * reads `≈` — and all of that is worth nothing if the only way to get the
+ * numbers anywhere else is to retype them off a chart.
  *
  * Pure, and here rather than in main, for the reason the file-header convention
  * in this directory exists: the renderer Vitest project matches `*.test.ts`

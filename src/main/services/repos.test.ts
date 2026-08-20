@@ -5,11 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setGitHubClientFactory, type GitHubClient, type RepoListing } from './github-client'
 
 /**
- * Repo binding (blueprint §9.1), which had no tests until the Octokit client
- * became a port — there was nothing to substitute for a live API call.
+ * Repo binding, driven through the Octokit port: the client is substitutable,
+ * so the account's listing is scripted here rather than fetched.
  *
- * What is actually this module's own logic is the local half: which of the
- * account's repos is already checked out under the workspace root.
+ * What is actually this module's own logic is the local half — which of the
+ * account's repos is already checked out under the workspace root — and that is
+ * what these pin.
  */
 
 const appState = new Map<string, string>()

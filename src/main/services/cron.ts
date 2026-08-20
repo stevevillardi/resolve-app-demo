@@ -1,7 +1,7 @@
 import { createTask, validateDetailed } from 'node-cron'
 
 /**
- * Cron expression validation and next-fire preview (blueprint §7).
+ * Cron expression validation and next-fire preview.
  *
  * This and `scheduler.ts`'s engine adapter are the only two files that import
  * `node-cron`, deliberately. The obvious alternative was to put a validator in
@@ -12,8 +12,8 @@ import { createTask, validateDetailed } from 'node-cron'
  * call, and leave `import { schedule } from 'node-cron'` one word away in
  * renderer code.
  *
- * The other alternative, a hand-rolled validator shared by both sides, is the
- * failure the decision log already records twice: two implementations that can
+ * The other alternative, a hand-rolled validator shared by both sides, is a
+ * mistake this codebase has already made twice: two implementations that can
  * disagree, where the disagreement looks like a passing test. So validation is
  * a main-process service reached over IPC, and main validates again on write —
  * the renderer's copy is UX, main's is the guarantee.

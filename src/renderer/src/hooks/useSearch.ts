@@ -5,7 +5,7 @@ import type { IpcOutput } from '../../../shared/ipc-contract'
 export type MessageSearchResults = IpcOutput<'search.messages'>
 
 /**
- * Message-content search for the ⌘K palette (review §B4).
+ * Message-content search for the ⌘K palette.
  *
  * Enabled from two characters — the same floor the service enforces — and
  * kept on `keepPreviousData` so the Messages section holds steady while the

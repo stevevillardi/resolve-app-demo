@@ -7,28 +7,30 @@ import { groupMessages, groups } from '../db/schema'
 import type { Group, GroupMessage, GroupMessageDraft } from '../../shared/domain'
 
 /**
- * The Group's message log (blueprint §4, §6, §8).
+ * The Group's message log.
  *
  * This is the layer that makes the app multi-agent rather than three parallel
- * chats: §6's observation is that filesystem state is shared for free but
- * *intent* is not, so the reasoning behind a change has to be carried across
- * Contact boundaries explicitly. These rows are that carrier — written by
- * compaction, read back into every session that starts on the same repo.
+ * chats: filesystem state is shared for free — every session reads the same
+ * live repo on disk — but *intent* is not. The reasoning behind a change lives
+ * in one private 1:1 thread, so it has to be carried across Contact boundaries
+ * explicitly. These rows are that carrier — written by compaction, read back
+ * into every session that starts on the same repo.
  */
 
 /**
- * How much history a new session is told about (blueprint §5).
+ * How much history a new session is told about.
  *
- * §6 says durable entries are "kept indefinitely, always injected", and this
- * limit does not contradict that so much as put a floor under it: the log is
- * append-only and a year-old repo would eventually inject more context than a
- * turn can hold. Fifty is well above where any current repo sits, so in
- * practice "always" holds while the failure mode stays bounded.
+ * The retention rule is that durable entries are kept indefinitely and always
+ * injected, and this limit does not contradict that so much as put a floor
+ * under it: the log is append-only and a year-old repo would eventually inject
+ * more context than a turn can hold. Fifty is well above where any current repo
+ * sits, so in practice "always" holds while the failure mode stays bounded.
  *
- * Blueprint §14 lists retention and re-summarisation as an open question and
- * defers it past v1. These stay named constants, and contextForRepo() takes
- * them as parameters, so answering it later is a change of policy rather than
- * a change of shape.
+ * Retention and re-summarisation of the durable log are unsolved: nothing
+ * prunes it, and at some size the decision log itself needs summarising rather
+ * than trimming. These stay named constants, and contextForRepo() takes them as
+ * parameters, so answering that later is a change of policy rather than a
+ * change of shape.
  */
 export const DURABLE_CONTEXT_LIMIT = 50
 export const ROUTINE_CONTEXT_LIMIT = 5
@@ -75,9 +77,10 @@ export function insertGroupMessage(draft: GroupMessageDraft): GroupMessage {
  * the summariser at turn end, but the pull request is the scheduler's own
  * post-turn step — the model has already summarised a push *it* could not do
  * (the sandbox blocks its network) as a failure by then. Appending the app's
- * own outcome is what keeps the Group from asserting a PR failed while the PR
- * sits open on GitHub (Phase 11, F4). The model's sentence is kept: what it
- * believed is part of the record; the correction is dated by adjacency.
+ * own outcome after the model's account is what keeps the Group from asserting
+ * a PR failed while the PR it opened sits open on GitHub. The model's sentence
+ * is kept rather than replaced: what it believed is part of the record, and the
+ * app's outcome is simply the last word. The correction is dated by adjacency.
  */
 export function appendToGroupMessage(id: string, line: string): void {
   const db = initDb()
@@ -117,7 +120,7 @@ export function groupMessagePreviews(): GroupMessage[] {
 }
 
 /**
- * Stamps every open `branch_request` about `branch` as answered (Phase 19).
+ * Stamps every open `branch_request` about `branch` as answered.
  *
  * Called from the merge and discard paths — the two clicks that answer the
  * ask — and idempotent by construction: only rows still unresolved are
@@ -153,9 +156,10 @@ export function groupForRepo(repoPath: string): Group | null {
  * What a session starting on `repoPath` should be told about its colleagues.
  *
  * Two queries rather than one, because the two categories are retained on
- * different rules (§6): durable entries are the project's running decision log
- * and are always injected, while routine ones are recency-only — the older
- * ones stay in SQLite and remain queryable, they just stop being surfaced.
+ * different rules: durable entries — the summaries categorised `decision` or
+ * `tradeoff` — are the project's running decision log, kept indefinitely and
+ * always injected, while routine ones are recency-only. The older routine
+ * entries stay in SQLite and remain queryable, they just stop being surfaced.
  * A single `ORDER BY timestamp DESC LIMIT n` would let a burst of routine
  * chatter push the decisions out, which is exactly the failure this split
  * exists to prevent.
@@ -183,10 +187,10 @@ export function contextForRepo(
           // Both summary-shaped types, not just `system_summary`. A routine
           // posts its summary as `routine_run` so one unattended fire leaves
           // one row — and work done while nobody was watching is precisely
-          // what §6 exists to carry across Contact boundaries. Filtering on
-          // `system_summary` alone would make every routine invisible to its
-          // colleagues, which is the same failure as a real change filed as
-          // `routine` and dropped from context.
+          // what this log exists to carry across Contact boundaries.
+          // Filtering on `system_summary` alone would make every routine
+          // invisible to its colleagues, which is the same failure as a real
+          // change filed as `routine` and dropped from context.
           //
           // `branch_request` is deliberately NOT here. It is addressed to the
           // human — only a person can merge — and injecting it would read to

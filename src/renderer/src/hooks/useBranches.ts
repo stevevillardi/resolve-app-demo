@@ -66,8 +66,8 @@ export function useMergeBranch(): {
       callProcedure('branches.merge', input),
     // Every branch's file list is measured against a working copy that just
     // changed, so the whole list is stale rather than one row of it. The merge
-    // also stamped any branch_request it answered (Phase 19), so the group
-    // threads and the cached diffs move with it.
+    // also stamped any branch_request it answered, so the group threads and
+    // the cached diffs move with it.
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: branchesKey })
       void queryClient.invalidateQueries({ queryKey: groupMessagesRootKey })

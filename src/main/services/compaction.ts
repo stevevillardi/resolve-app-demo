@@ -11,14 +11,15 @@ import { SUMMARY_JSON_SCHEMA, summarySchema } from '../../shared/summary'
 import type { PersonaTemplate } from '../../shared/domain'
 
 /**
- * End-of-session compaction (blueprint §6).
+ * End-of-session compaction.
  *
- * §6's insight is that filesystem state crosses Contact boundaries for free and
- * intent does not: the reasoning behind a change lives in one private
- * conversation and is invisible to every other persona on the repo. So after
- * each turn we ask for a structured summary of what just happened and post it
- * to the repo's Group, where src/main/services/group-messages.ts reads it back
- * into every session that starts there afterwards.
+ * Filesystem state crosses Contact boundaries for free — every session reads
+ * the same live repo on disk — and intent does not: the reasoning behind a
+ * change lives in one private 1:1 conversation and is invisible to every other
+ * persona on the repo. So after each turn we ask for a structured summary of
+ * what just happened and post it to the repo's Group, where
+ * src/main/services/group-messages.ts reads it back into every session that
+ * starts there afterwards.
  *
  * Three properties this module is built around, in descending order of how
  * annoying they are to rediscover:
@@ -167,23 +168,24 @@ export async function summarizeTurn(
     // A routine's summary IS its Group record — it replaces the `system_summary`
     // rather than joining it, so one unattended fire leaves one row. It still
     // carries `category`/`durable`, because contextForRepo reads both types and
-    // work done while nobody watched is exactly what §6 has to carry across
-    // Contact boundaries.
+    // work done while nobody watched is exactly what the Group log has to carry
+    // across Contact boundaries.
     const row = insertGroupMessage({
       groupId: group.id,
       type: origin.kind === 'routine' ? 'routine_run' : 'system_summary',
       contactId,
       content: parsed.data.summary,
       category: parsed.data.category,
-      // §6's rule, and the only place it is decided: decisions and tradeoffs
-      // are the running decision log and are always re-injected; routine
-      // entries stay queryable but fall out of context by recency.
+      // The retention rule, and the only place it is decided: a summary
+      // categorised `decision` or `tradeoff` is durable — the project's
+      // running decision log, kept indefinitely and always re-injected — while
+      // a `routine` one stays queryable but falls out of context by recency.
       durable,
       ...(branch ? { branch } : {})
     })
 
-    // A separate row rather than a field on the summary: this is the one thing
-    // in the phase a persona cannot do for itself, it needs its own shape in the
+    // A separate row rather than a field on the summary: merging is the one
+    // step a persona cannot take for itself, it needs its own shape in the
     // thread because it is actionable, and it must not be swept up by the
     // recency limits that govern the decision log.
     // Compared against the row rather than against `work`, so it holds whether

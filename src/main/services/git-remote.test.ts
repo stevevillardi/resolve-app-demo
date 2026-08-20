@@ -10,9 +10,9 @@ import { cloneRepo, originUrl, pushBranch } from './git'
  * repository on disk** standing in for GitHub, so the push half is exercised
  * end to end with no network and no credentials.
  *
- * This is the part of Phase 9 that no amount of REST mocking reaches: a pull
- * request is about commits, and the commits have to be uploaded by git before
- * the API has anything to open a PR against. The behaviours worth pinning are
+ * This is the part of the GitHub path that no amount of REST mocking reaches: a
+ * pull request is about commits, and the commits have to be uploaded by git
+ * before the API has anything to open a PR against. The behaviours worth pinning are
  * the ones that would otherwise be discovered on a real repository — that a
  * push leaves no remote behind, and that a diverged branch is refused rather
  * than forced.

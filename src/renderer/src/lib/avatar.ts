@@ -2,8 +2,8 @@ import { createAvatar } from '@dicebear/core'
 import * as bottts from '@dicebear/bottts'
 
 /**
- * Bot avatars (Phase 17). A persona is rendered as a DiceBear "bottts" robot:
- * its avatarSeed picks which robot it is (historically the template's id, now
+ * Bot avatars. A persona is rendered as a DiceBear "bottts" robot: its
+ * avatarSeed picks which robot it is (the template's id by default,
  * re-rollable in the persona editor), and the user-chosen avatarColor tints
  * the robot's body — so the same persona looks the same on every surface and
  * every launch.
@@ -48,8 +48,8 @@ export function botttsDataUri(seed: string, color: string): string {
 }
 
 /**
- * A fresh seed for the robot picker. A UUID, like the ids that seeded every
- * robot before the seed was a choice — same entropy, same aesthetic space.
+ * A fresh seed for the robot picker. A UUID, the same shape as the template
+ * ids a robot is seeded from by default — same entropy, same aesthetic space.
  */
 export function randomAvatarSeed(): string {
   return crypto.randomUUID()

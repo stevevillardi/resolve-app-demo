@@ -6,7 +6,7 @@ import type { TurnWork } from '../../../../shared/domain'
 const CHIP_LIMIT = 4
 
 /**
- * What a turn did to the tree, under its bubble (Phase 19, review A6).
+ * What a turn did to the tree, under its bubble.
  *
  * One button, not a chip per file: the answer to "what changed" is the diff,
  * and per-file entry points would suggest per-file destinations this dialog

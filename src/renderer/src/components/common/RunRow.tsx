@@ -8,10 +8,9 @@ import type { ActiveRun } from '../../../../shared/ipc-contract'
 
 /**
  * One in-flight turn, wherever a fleet surface lists them — Home's running
- * section and the nav-rail popover share this row (Phase 25; extracted from
- * WorkspaceHome). The origin chip is what runs.list gained in the same phase:
- * "routine" next to a name answers the question Home's list used to raise —
- * did I start this, or did a schedule?
+ * section and the nav-rail popover share this row, so both stay identical. The
+ * origin chip carries the answer a name alone cannot give: "routine" next to a
+ * contact says a schedule started this, not you.
  */
 export function RunRow({
   run,

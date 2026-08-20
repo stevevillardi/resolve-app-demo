@@ -12,13 +12,9 @@ import type { Contact, PersonaBackend } from '@/types'
 /**
  * Rename and delete for the selected Contact.
  *
- * There was no way to do either: `contacts.delete` had existed in main since
- * Phase 12, with worktree cleanup and a two-step refusal, and nothing in the
- * renderer ever called it. Renaming was not possible at all.
- *
- * Header menu, and since Phase 17 also the conversation row's right-click —
- * both render ContactActionItems, so they cannot drift. The items and dialogs
- * live in ContactActions.tsx; this file is just the ⋯ button.
+ * The header menu, and the conversation row's right-click, both render
+ * ContactActionItems, so they cannot drift. The items and dialogs live in
+ * ContactActions.tsx; this file is just the ⋯ button.
  */
 export function ContactMenu({
   contact,

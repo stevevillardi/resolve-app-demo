@@ -29,11 +29,11 @@ interface PaneHeaderProps {
 /**
  * The window's title strip — the top 48px, and the one definition of it.
  *
- * Four places drew this independently: here, `EmptyPane`, the list panel, and
- * the nav rail's header. That is what let it drift, and the drift was not
- * cosmetic. `bg-card` was added to this file alone, so the seam it was meant to
- * close reopened on the one screen that renders `EmptyPane` — a profile with no
- * contacts, which is every fresh install and so the first thing anyone sees.
+ * One constant, shared by every surface that draws the strip — this file,
+ * `EmptyPane`, the list panel and the nav rail's header. A second copy of these
+ * classes is a seam waiting to reopen, and it reopens first on the screen that
+ * renders `EmptyPane`: a profile with no contacts, which is every fresh install
+ * and so the first thing anyone sees.
  *
  * Three properties, all load-bearing:
  *
@@ -59,10 +59,9 @@ export const PANE_STRIP = 'border-border bg-card drag-region h-12 shrink-0 borde
 /**
  * The top strip of every detail pane, with a title in it.
  *
- * Every workspace view had hand-rolled this same header, which is why they had
- * drifted apart — different gaps, different truncation, some with a subtitle
- * slot and some without. One component means the border beneath them stays a
- * single unbroken line across the window at every section.
+ * One component rather than a header per workspace view, so gaps, truncation
+ * and the subtitle slot are identical everywhere and the border beneath them
+ * stays a single unbroken line across the window at every section.
  *
  * The actions cluster opts out of the drag region with `no-drag`: interactive
  * children inside one stop receiving clicks entirely.

@@ -8,9 +8,9 @@ import type { ConversationSelection } from '@/store/useUiStore'
  * both narrowed by the panel's filter box — and this takes that array as given.
  * That is the whole point: a second ordering computed from the same inputs is a
  * second chance to disagree with the list, and the failure would be a shortcut
- * that skips a row the user is looking straight at. Phase 22 fixed exactly that
- * shape of bug in the composer's lock check, where the renderer predicted
- * main's answer instead of asking for it.
+ * that skips a row the user is looking straight at. It is the same shape of bug
+ * as a composer lock check that predicts main's answer instead of asking for
+ * it.
  *
  * So the rule is "⌥↑/⌥↓ move to the next row *you can see*". A filtered list is
  * walked as filtered, and when the panel is not on screen at all the binding is

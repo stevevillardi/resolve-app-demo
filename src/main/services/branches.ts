@@ -27,10 +27,13 @@ import type { GithubScope } from '../../shared/domain'
 /**
  * The standing view of work that exists nowhere the user can see it.
  *
- * Layer 3 of docs/plan/12-worktree-isolation.md. Layers 1 and 2 are automatic —
- * a session is told which branches exist and can read any of them — but moving
- * work between checkouts is a decision, so it is the only part with a human in
- * it. A persona can ask (`branch_request`); nothing merges without a click.
+ * The third layer of worktree isolation, and the only one with a human in it.
+ * Layer 1, awareness — a session starts knowing which sibling branches exist
+ * and what they touched — and layer 2, reading — worktrees share one object
+ * store, so any of those branches can be diffed and shown without merging
+ * anything — are both automatic. Moving work between checkouts is a decision,
+ * so it is not. A persona can ask (`branch_request`); nothing merges without a
+ * click.
  *
  * Sourced from git rather than from the contacts table, deliberately. A branch
  * outlives the Contact that made it — `worktree remove` keeps it and so does
@@ -50,19 +53,18 @@ export interface BranchSummary {
   files: string[]
   /** False when the Contact is gone or the user deleted the directory. */
   hasWorktree: boolean
-  /** Whether the main tree's HEAD already contains this branch (Phase 19). */
+  /** Whether the main tree's HEAD already contains this branch. */
   merged: boolean
   /**
-   * Uncommitted paths sitting in the branch's worktree (Phase 19) — the work
-   * `files` cannot see because nothing committed it yet, and what the commit
-   * affordance offers to land. Empty when there is no live worktree to read.
+   * Uncommitted paths sitting in the branch's worktree — the work `files`
+   * cannot see because nothing committed it yet, and what the commit affordance
+   * offers to land. Empty when there is no live worktree to read.
    */
   dirtyFiles: string[]
   /**
-   * The GitHub authority of the persona behind the branch (Phase 9), so the
-   * panel knows whether to offer a pull request. Null for an orphan branch —
-   * there is no persona left to authorise one, and merge and discard are all
-   * that remain.
+   * The GitHub authority of the persona behind the branch, so the panel knows
+   * whether to offer a pull request. Null for an orphan branch — there is no
+   * persona left to authorise one, and merge and discard are all that remain.
    */
   githubScope: GithubScope | null
 }
@@ -195,20 +197,20 @@ export async function mergeIntoWorkingPath(
   }
 
   await mergeBranch(targetPath, branch)
-  // The click that answers the ask (Phase 19): any open branch_request about
-  // this branch stops reading as a standing one.
+  // The click that answers the ask: any open branch_request about this branch
+  // stops reading as a standing one.
   resolveBranchRequests(repoPath, branch)
   return { merged: true }
 }
 
 /**
- * Lands a branch's uncommitted work as a commit, on a click (Phase 19).
+ * Lands a branch's uncommitted work as a commit, on a click.
  *
- * The one caller of commitAll, and deliberately the only path by which this
- * app authors a commit — Phase 9's rule against committing *unattended* work
- * still stands on every turn and routine path. The persona is the `--author`,
- * so `git log` attributes the work truthfully; the committer stays whoever
- * git's own config says, which is the user whose click this was.
+ * The one caller of commitAll, and deliberately the only path by which this app
+ * authors a commit: the app never commits *unattended*, so no turn and no
+ * routine reaches this. The persona is the `--author`, so `git log` attributes
+ * the work truthfully; the committer stays whoever git's own config says, which
+ * is the user whose click this was.
  */
 export async function commitBranchWork(
   repoPath: string,

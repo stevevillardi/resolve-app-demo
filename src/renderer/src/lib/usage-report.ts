@@ -217,8 +217,8 @@ export const SOURCE_LABEL: Record<UsageSource, string> = {
 
 /**
  * Splits spend by what asked for it. `routine` is the one that matters most —
- * it is the only unsupervised spend, and blueprint §7 wants it visible on its
- * own. `summary` is what coordination costs (Phase 7).
+ * it is the only unsupervised spend, and it belongs visible on its own.
+ * `summary` is what coordination costs.
  */
 export function bySource(): UsageSelector {
   return (event) => ({ key: event.source, label: SOURCE_LABEL[event.source] })

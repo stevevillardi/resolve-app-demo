@@ -4,7 +4,7 @@ import { useUiStore } from '@/store/useUiStore'
 /**
  * The app's one toast outlet, mounted once in App.
  *
- * Usage policy (Phase 17): toasts confirm transient actions whose result is
+ * Usage policy: toasts confirm transient actions whose result is
  * not otherwise on screen — copied, rebound, run started. Form validation and
  * turn failures stay inline where the user is already looking; a toast that
  * duplicates an inline error just says the same bad news twice.

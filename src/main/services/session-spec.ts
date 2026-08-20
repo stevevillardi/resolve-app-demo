@@ -61,14 +61,17 @@ export function buildSessionSpec(
           }
         }
       : {}),
-    // Blueprint §5: what the rest of the fleet has decided on this repo.
+    // What the rest of the fleet has decided on this repo — the durable Group
+    // entries plus the most recent routine ones — injected on session start.
     // Resolved fresh per turn rather than per session, so a summary written by a
     // colleague between two of this contact's turns is visible on the next one
     // instead of at the next restart.
     groupContext: contextForRepo(contact.repoPath),
-    // Blueprint §6 stops being literally true once a writer has its own
-    // checkout — its changes are on a branch nobody else has on disk. The object
-    // store is still shared, so they remain readable; this is how the session
+    // "Filesystem state is free" — every session reads the live repo on disk,
+    // so one Contact's changes are visible to the next for nothing — stops
+    // being literally true once a writer has its own checkout: its work sits on
+    // a branch checked out nowhere anyone else can see. The object store is
+    // still shared, so those changes remain readable; this is how the session
     // finds out there is anything to read.
     siblingBranches: siblingBranchesFor(contact),
     // Only when it is not the repo: a Contact working in its own repo needs no
@@ -94,7 +97,7 @@ export function buildSessionSpec(
 
 /**
  * What the *next* turn on this contact would inject, in a shape the renderer
- * can render (blueprint §5).
+ * can render.
  *
  * Resolved in main rather than assembled in the renderer for three reasons the
  * renderer cannot work around:

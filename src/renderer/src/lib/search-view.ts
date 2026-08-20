@@ -1,5 +1,5 @@
 /**
- * Turns a search snippet into renderable segments (review §B4).
+ * Turns a search snippet into renderable segments.
  *
  * The search service wraps matched tokens in \u0001/\u0002 control
  * characters — markers that cannot occur in real message text, unlike

@@ -2,13 +2,14 @@ import { BrowserWindow } from 'electron'
 import { NAVIGATE_CHANNEL, type NavigateTarget } from '../shared/navigation'
 
 /**
- * The one answer to "which window?" (Phase 20).
+ * The one answer to "which window?".
  *
- * Three places had grown their own copy of the same lookup — the menu's
- * sendAction, showMainWindow in index.ts, and agent-events' targetWindow — and
- * Phase 20 adds two more callers (notifications deciding whether anyone is
- * looking, and a click handler that must focus before it navigates). Five
- * copies of a find() is how one of them quietly diverges.
+ * Everything that needs the window comes through here: the application menu,
+ * which shows it before sending an action; `activate`, which re-creates it;
+ * agent-events, pushing a stream to the renderer; notifications, deciding
+ * whether anyone is looking before they buzz; and the tray and notification
+ * click handlers, which must focus before they navigate. A copy of the same
+ * find() in each of them is how one of them quietly diverges.
  *
  * The window is resolved per call, never cached: setupIpc() runs before
  * createWindow(), so there is nothing to capture at import time — and on macOS

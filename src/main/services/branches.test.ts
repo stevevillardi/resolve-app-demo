@@ -9,7 +9,8 @@ import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
 /**
- * Layer 3: the part of worktree isolation with a human in it.
+ * The part of worktree isolation with a human in it: awareness and reading are
+ * automatic, but moving work between checkouts takes a click.
  *
  * Against real git, for the same reason git-worktree.test.ts is — the claims
  * here are about what git does (a branch outliving its Contact, a merge landing
@@ -110,7 +111,7 @@ describe('listPersonaBranches', () => {
       contactName: 'Refactor Buddy · my-app',
       files: ['src/b.ts'],
       hasWorktree: true,
-      // Carried so the panel knows whether to offer a pull request (Phase 9).
+      // Carried so the panel knows whether to offer a pull request.
       githubScope: 'open_pr'
     })
   })
@@ -232,9 +233,9 @@ describe('discardBranch', () => {
   })
 })
 
-// --- Phase 19: the review surface's claims -----------------------------------
+// --- The review surface's claims ---------------------------------------------
 
-describe('merged and dirtyFiles (Phase 19)', () => {
+describe('merged and dirtyFiles', () => {
   it('reports a branch unmerged until its work lands, then merged', async () => {
     const contact = await workingWriter()
     expect((await listPersonaBranches())[0].merged).toBe(false)
@@ -258,7 +259,7 @@ describe('merged and dirtyFiles (Phase 19)', () => {
   })
 })
 
-describe('commitBranchWork (Phase 19)', () => {
+describe('commitBranchWork', () => {
   it('commits everything with the persona as author, on a click', async () => {
     const contact = await workingWriter()
     writeFileSync(join(contact.worktreePath as string, 'src/loose.ts'), 'uncommitted\n')
@@ -315,7 +316,7 @@ describe('commitBranchWork (Phase 19)', () => {
   })
 })
 
-describe('branch_request resolution (Phase 19)', () => {
+describe('branch_request resolution', () => {
   function seedRequest(branch: string): string {
     const group = db.select().from(groups).all()[0]
     const id = `req-${branch}`

@@ -18,7 +18,7 @@ describe('contract shape', () => {
     }
   })
 
-  it('registers every procedure the Phase 3 UI depends on', () => {
+  it('registers every procedure the UI depends on', () => {
     // Guards against a rename landing in main but not in the renderer.
     expect(Object.keys(ipcContract)).toEqual(
       expect.arrayContaining([
@@ -34,7 +34,7 @@ describe('contract shape', () => {
         'github.cancelDeviceFlow',
         'github.disconnect',
         'shell.openExternal',
-        // Phase 4
+        // Data layer
         'skills.list',
         'skills.get',
         'skills.create',
@@ -49,7 +49,7 @@ describe('contract shape', () => {
         'contacts.get',
         'contacts.create',
         'groups.list',
-        // Phase 6
+        // Messaging, runs and spend
         'messages.list',
         'messages.previews',
         'messages.send',
@@ -57,19 +57,19 @@ describe('contract shape', () => {
         'runs.list',
         'usage.list',
         'models.listForBackend',
-        // Phase 7
+        // Group coordination
         'groups.getForRepo',
         'groupMessages.list',
         'groupMessages.previews',
         'groups.mention',
-        // Phase 12
+        // Worktree isolation and its branches
         'contacts.delete',
         'branches.list',
         'branches.targets',
         'branches.preview',
         'branches.merge',
         'branches.discard',
-        // Phase 14
+        // Repo trust
         'contacts.setRepoTrust',
         'contacts.repoOffers'
       ])

@@ -214,7 +214,7 @@ describe('worktreeRemove', () => {
 })
 
 describe('gitWritePathsFor', () => {
-  // The finding this whole phase turns on: a worktree's .git is a file pointing
+  // The finding worktree isolation turns on: a worktree's .git is a file pointing
   // into the main repo, so git writes land outside the working directory. A
   // sandbox fenced to the worktree fails at `git add`.
   it('points outside the worktree, because that is where git writes', async () => {

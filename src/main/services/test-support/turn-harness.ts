@@ -6,11 +6,11 @@ import type { SandboxLevel } from '../../../shared/domain'
 /**
  * The scripted backend the turn-loop tests run against.
  *
- * Shared rather than copied because two files now need it — `messaging.test.ts`
- * for the pipeline itself and `scheduler.test.ts` for what a routine does to it
- * — and a second copy of a 100-line harness is exactly the drift the decision
- * log warns about: the two would agree about different things and both stay
- * green. Same reasoning that put `createTestDb` in `db/test-db.ts`.
+ * Shared rather than copied because two files need it — `messaging.test.ts` for
+ * the pipeline itself and `scheduler.test.ts` for what a routine does to it —
+ * and a second copy of a 100-line harness is exactly the drift worth avoiding:
+ * the two would come to agree about different things and both stay green. Same
+ * reasoning that put `createTestDb` in `db/test-db.ts`.
  *
  * Not a `.test.ts`, so vitest does not collect it as a suite.
  *
@@ -175,8 +175,8 @@ export function openableGate(): { promise: Promise<void>; open: () => void } {
  * Lets the microtask queue drain so the un-awaited runTurn() can finish.
  *
  * The depth is plumbing, not a claim — it only has to exceed the number of
- * awaits on the longest turn path (Phase 19's work capture added one; the
- * Phase 21 watchdog wrapper adds two or three per streamed event), with
+ * awaits on the longest turn path (the post-turn work capture adds one; the
+ * inactivity-watchdog wrapper adds two or three per streamed event), with
  * headroom so the next await added doesn't fail every suite at once.
  */
 export async function settle(turns = 64): Promise<void> {

@@ -60,8 +60,8 @@ describe('monthlyFloor', () => {
     expect(monthlyFloor([{ timestamp: boundary, costUsd: 2 }], NOW).floorUsd).toBe(2)
   })
 
-  // The corollary the phase doc records: all-unpriced means floor $0, which
-  // means never alerting. Accepted rather than patched with a guess.
+  // The corollary, accepted rather than patched with a guess: all-unpriced
+  // means floor $0, which means never alerting.
   it('is zero for an all-unpriced month, with the flag raised', () => {
     const { floorUsd, hasUnpriced } = monthlyFloor([{ timestamp: NOW - 1000, costUsd: null }], NOW)
     expect(floorUsd).toBe(0)

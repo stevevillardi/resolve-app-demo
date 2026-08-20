@@ -4,10 +4,9 @@ import { cn } from '@/lib/utils'
  * The backend brand marks, inlined.
  *
  * Same reason `components/github/GithubMark.tsx` exists: lucide-react 1.x
- * dropped every brand mark, so the app had been standing in generic glyphs —
- * `Sparkles` for Claude and `SquareTerminal` for Codex, except in onboarding,
- * which used `Sparkles` and `Terminal`. Two surfaces naming the same two things
- * with three different icons between them.
+ * dropped every brand mark, so there is no shared icon set to reach for. One
+ * component per mark, so every surface that names a backend draws the same
+ * glyph rather than each picking its own stand-in.
  *
  * Each follows the GithubMark contract exactly, so they drop into any slot a
  * `LucideIcon` fits: one named export, `fill="currentColor"` with the source's

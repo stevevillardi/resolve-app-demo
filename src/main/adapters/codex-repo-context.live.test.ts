@@ -10,19 +10,20 @@ import type { SessionSpec } from './types'
 /**
  * What a repository can say to a Codex persona without anybody's permission.
  *
- * These are the Phase 14 leak probes, checked in. Both were written from the
- * *claim* — "a persona's instructions are the persona's alone" — rather than
- * from the code, which is the rule `00-progress.md` records after `sed -i`
- * passed a test that did not enforce it. Both failed the first time they ran,
- * against a build every other test agreed with: `settingSources: []` sealed
- * Claude and the docs then described the app as sealed, while Codex had been
- * reading the repo's AGENTS.md and its `.codex/skills` since Phase 5.
+ * These are the leak probes, checked in. Both are written from the *claim* — "a
+ * persona's instructions are the persona's alone" — rather than from the code,
+ * because a test written from the implementation agrees with the implementation
+ * and proves nothing about the property. Both failed the first time they ran,
+ * against a build every other test agreed with: sealing Claude with
+ * `settingSources: []` looked like sealing the app, while Codex went on reading
+ * the repo's AGENTS.md and its `.codex/skills`.
  *
- * The cheap version of this check is codex.test.ts, which asserts the config
- * options, and `codex debug prompt-input`, which renders the model-visible
- * prompt locally for nothing. This file is the expensive version that proves
- * the options do what the options are believed to do — the distinction Phase 5
- * learned the hard way when a green suite agreed with a sandbox that leaked.
+ * The cheap version of this check is codex.test.ts, which asserts that the
+ * config options are *set*, and `codex debug prompt-input`, which renders the
+ * model-visible prompt locally for nothing. This file is the expensive version,
+ * and it asserts something different: that those options *do what they are
+ * believed to do*. Only the second claim is a seal — a green suite can agree
+ * with a sandbox that leaks.
  *
  * **Skipped unless `LIVE_CODEX_CONTEXT=1`.** A few cents per run: two turns,
  * one sentence each.
@@ -136,7 +137,7 @@ describe.skipIf(!LIVE)('what a repository can say to a Codex persona', () => {
     async () => {
       // The other half of the same claim. An opt-in that silently does nothing
       // would pass the test above, so the seal is only proved by watching it
-      // open — the same argument as the merge-tree dry run in Phase 12.
+      // open as well as watching it hold.
       const reply = await ask(repoWith(SKILL_REPO), LIST_SKILLS, ['pineapple'])
       expect(reply.toLowerCase()).toContain('pineapple')
     }

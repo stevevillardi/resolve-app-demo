@@ -4,7 +4,7 @@ import { listTrackedFiles } from './git'
 import { workingPathFor } from './run-lock'
 
 /**
- * The file list behind the composer's @file autocomplete (review §B3).
+ * The file list behind the composer's @file autocomplete.
  *
  * Listed from the contact's *working* path so an isolated persona completes
  * against its own worktree — the tree its turns actually read. But that path

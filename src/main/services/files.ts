@@ -2,7 +2,7 @@ import { writeFile } from 'fs/promises'
 import { dialog } from 'electron'
 
 /**
- * Saving something the user asked for to somewhere the user chose (review §G2).
+ * Saving something the user asked for to somewhere the user chose.
  *
  * The app's first write outside its own profile directory, so the posture is
  * worth stating. Everything else that touches a path is allowlisted:

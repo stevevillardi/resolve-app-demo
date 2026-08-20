@@ -178,12 +178,11 @@ describe('previewLine', () => {
 })
 
 /**
- * A group's displayed name (review §G5).
+ * A group's displayed name.
  *
- * The fallback is the whole function: a group's name was derived from its
- * repository path for every version of this app until now, and it still is
- * until someone overrides it. Getting the null case wrong would rename every
- * group in an upgraded profile to nothing at once.
+ * The fallback is the whole function: a group's name is derived from its
+ * repository path until someone overrides it. Getting the null case wrong would
+ * rename every group in an upgraded profile to nothing at once.
  */
 describe('groupName', () => {
   it('uses the stored name when there is one', () => {

@@ -76,8 +76,10 @@ describe('personaTemplate', () => {
   })
 
   it('keeps the two permission axes independent', () => {
-    // Blueprint §4 is explicit that these don't have to agree, so no
-    // cross-field rule should reject a read-only sandbox that can open PRs.
+    // Disk access and GitHub authority are separate questions and do not have
+    // to agree, so no cross-field rule should reject a read-only sandbox that
+    // can open PRs. (The one refused pairing lives on the write shapes in
+    // ipc-contract.ts, not here.)
     expect(() =>
       personaTemplateSchema.parse({
         ...PERSONA,
@@ -299,7 +301,8 @@ describe('usageEvent', () => {
   }
 
   it('accepts a null cost', () => {
-    // Codex reports tokens but no dollar figure (§3).
+    // Codex reports tokens but no dollar figure, so an unpriced model has to be
+    // storable as null rather than as a zero that reads as free.
     expect(() => usageEventSchema.parse({ ...BASE, costUsd: null })).not.toThrow()
   })
 

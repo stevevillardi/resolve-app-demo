@@ -10,9 +10,10 @@ import type { RepoOption } from '../../../shared/ipc-contract'
  * box did not exist. So the list was capped at 100 *and* unsearchable, in a
  * dialog showing about six rows at a time — for anyone with a real account that
  * is a scroll through a hundred names looking for one. This file was the first
- * half of the answer; §G3's paging is the second, and the two are meant to be
- * read together: fetch enough that the list is the account, then rank it so the
- * size stops mattering.
+ * half of the answer; the picker's paging — its "load more" through the
+ * account's repositories — is the second, and the two are meant to be read
+ * together: fetch enough that the list is the account, then rank it so the size
+ * stops mattering.
  *
  * Ranking is `scoreCommand`'s rather than a second implementation of the same
  * idea. It already splits on `/`, which is exactly what a repo full name needs:
@@ -42,8 +43,8 @@ export function filterRepos(repos: RepoOption[], query: string): RepoOption[] {
 /**
  * Whether the list we are showing might not be the whole account.
  *
- * The check outlives the cap it was written against (review §G3) and is now far
- * less likely to fire, but the failure mode is unchanged: a list of exactly
+ * The check outlives the cap it was written against and is now far less likely
+ * to fire, but the failure mode is unchanged: a list of exactly
  * REPO_FETCH_LIMIT rows is indistinguishable from the first REPO_FETCH_LIMIT of
  * more, and presenting a truncated list as complete tells someone their
  * repository does not exist when it is merely past the end. The number moved,

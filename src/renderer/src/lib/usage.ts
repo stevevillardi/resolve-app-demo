@@ -8,8 +8,8 @@ import type { PersonaBackend, UsageEvent, UsageSummary } from '@/types'
  * *counted*, not skipped: `costUsd: null` means the model that served the turn
  * has no row in CODEX_PRICES (src/main/adapters/pricing.ts), so its spend is
  * unknown rather than zero. Summing only the priced turns and returning a bare
- * number — which this used to do — produces a confident `$12.34` that is
- * quietly short by however much the unpriced turns actually cost.
+ * number produces a confident `$12.34` that is quietly short by however much
+ * the unpriced turns actually cost.
  *
  * formatCost was already careful to print `—` for a single unknown. Carrying
  * `unpricedEvents` through is what keeps that care intact once there is more
@@ -66,9 +66,9 @@ export function usageForContacts(events: UsageEvent[], contactIds: string[]): Us
 /**
  * A single cost, formatted.
  *
- * `null` prints as `—` rather than `$0.00`: since Phase 5 both backends yield a
- * dollar figure — Claude's from its SDK, Codex's computed from our own price
- * table — so a null is a model we have no price for, not a backend that cannot
+ * `null` prints as `—` rather than `$0.00`: both backends yield a dollar figure
+ * — Claude's from its SDK, Codex's computed from our own price table — so a
+ * null is a model we have no price for, not a backend that cannot
  * tell us. Showing it as zero would read as "this turn was free".
  *
  * Prefer formatCostSummary anywhere the number came from more than one turn.
@@ -130,10 +130,10 @@ export interface ContextTokens {
 /**
  * Two figures about this contact's session, read from what was billed.
  *
- * They used to be one, called `promptTokens`, and that was wrong on Codex in a
- * way that only mattered once something divided by it. The repo's own measured
- * numbers make it concrete (`00-progress.md`, Phase 6/7 close-out): cumulative
- * input `12122 → 25610 → 39114`, so the stored deltas are `12122 / 13488 /
+ * They are deliberately not one number: collapsing them into a single
+ * `promptTokens` is wrong on Codex in a way that only shows once something
+ * divides by it. Measured against the real backend: cumulative input
+ * `12122 → 25610 → 39114`, so the stored deltas are `12122 / 13488 /
  * 13504`. The **sum** — 39,114 — is what the session has cost in input. The
  * newest **delta** — 13,504 — is roughly what the last request actually held.
  * Reporting the sum as "how large the prompt is" overstates by 3× after three
@@ -235,7 +235,7 @@ export function contextFill(tokens: ContextTokens): ContextFill | null {
 }
 
 /**
- * Usage rows indexed by the reply they paid for (review §G6).
+ * Usage rows indexed by the reply they paid for.
  *
  * The thread already holds every usage event for the contact, so putting a cost
  * beside a turn needs no new query — only the link that migration 0020 added.

@@ -10,9 +10,8 @@ import { SUMMARY_JSON_SCHEMA, summarySchema } from '../../shared/summary'
 
 /**
  * Event shapes here are the ones observed on real `codex exec
- * --experimental-json` runs (see docs/plan/05-backend-adapters.md), so the
- * normalization is pinned to what the CLI actually emits rather than to what
- * the .d.ts permits.
+ * --experimental-json` runs, so the normalization is pinned to what the CLI
+ * actually emits rather than to what the .d.ts permits.
  */
 
 let events: ThreadEvent[] = []
@@ -251,8 +250,8 @@ describe('usageFromTurn', () => {
  * say "during the turn". These three readings are verbatim from
  * `npm run probe:adapters -- --backend codex` over one resumed thread, three
  * single-word replies: output goes 5 → 10 → 15, which no three one-word replies
- * do. Fabricating them would have missed the bug entirely, so they stay as
- * captured (rule (e)).
+ * do. A fabricated fixture would have agreed with the typings and missed this
+ * entirely, so the readings stay exactly as captured.
  */
 describe('usageFromTurn subtracts what the thread was already billed for', () => {
   const TURN_2 = {
@@ -328,18 +327,19 @@ describe('usageFromTurn subtracts what the thread was already billed for', () =>
 
 describe('session wiring', () => {
   it('passes the persona instructions as developer_instructions', async () => {
-    // Blueprint §14 open item #1: this is the only injection route the SDK
-    // offers, and it lives on the client rather than the thread.
+    // `developer_instructions` is the only route the SDK offers for per-persona
+    // context, and it lives on the client rather than the thread — so a persona
+    // whose instructions do not land here reaches the model with none at all.
     await collect([])
     expect((lastClientOptions?.config as Record<string, string>).developer_instructions).toBe(
       'You review code.'
     )
   })
 
-  // Written from the claim rather than from the code, per 00-progress.md: the
-  // property is "a repository cannot instruct a persona", and the live proof is
-  // codex-agents-md.live.test.ts. This is the cheap guard that stops the option
-  // being dropped in a refactor.
+  // Written from the claim rather than from the code: the property is "a
+  // repository cannot instruct a persona", and the live proof is
+  // codex-repo-context.live.test.ts. This is the cheap guard that stops the
+  // option being dropped in a refactor.
   it('seals the repo AGENTS.md by capping project docs at zero bytes', async () => {
     await collect([])
     expect((lastClientOptions?.config as Record<string, number>).project_doc_max_bytes).toBe(0)
@@ -353,9 +353,9 @@ describe('session wiring', () => {
   })
 
   // Codex's hook engine is stable and on by default, and a repo's
-  // `.codex/hooks.json` feeds it. A hook is an arbitrary command run at
-  // session start, outside every sandbox this app has — the same hazard Phase
-  // 12 refused when it left `.git/hooks` unwritable.
+  // `.codex/hooks.json` feeds it. A hook is an arbitrary command run at session
+  // start, outside every sandbox this app has — the same hazard that keeps
+  // `.git/hooks` unwritable for a worktree session.
   it('turns the hooks engine off outright', async () => {
     await collect([])
     const features = (lastClientOptions?.config as Record<string, Record<string, boolean>>).features
@@ -687,7 +687,8 @@ describe('stream normalization', () => {
 
   it('still finishes with done when the subprocess never streamed', async () => {
     // An expired login rejects runStreamed() outright rather than emitting
-    // turn.failed — blueprint §15C still wants that visible in the thread.
+    // turn.failed, and that still has to reach the thread as a visible error
+    // rather than a turn that quietly produces nothing.
     const adapter = createCodexAdapter()
     const failing = adapter.createSession(SPEC)
     vi.spyOn(FakeThread.prototype, 'runStreamed').mockRejectedValueOnce(

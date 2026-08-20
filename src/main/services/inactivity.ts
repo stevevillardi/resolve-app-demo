@@ -1,7 +1,8 @@
 /**
- * The turn watchdog (review §B5): a wedged backend turn used to stream
- * nothing forever while holding the repo's write lock, and the only way out
- * was a human noticing and clicking Stop.
+ * The turn watchdog: ten minutes of silence aborts the turn through the
+ * controller it already has. Without it a wedged backend turn streams nothing
+ * forever while holding the repo's write lock, and the only way out is a human
+ * noticing and clicking Stop.
  *
  * Inactivity rather than wall-clock, deliberately: a legitimate turn can run
  * for half an hour while emitting tool events the whole way, and killing it

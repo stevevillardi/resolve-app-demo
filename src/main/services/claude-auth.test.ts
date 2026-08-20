@@ -6,8 +6,8 @@ import type { AccountInfo } from '@anthropic-ai/claude-agent-sdk'
  * Claude Code CLI — so what's under test is the mapping from AccountInfo onto
  * our status shape, the caching, and the failure handling.
  *
- * Phase 3 confirmed against the real SDK that accountInfo() resolves without
- * consuming a turn, which is why detection is free enough to run at launch.
+ * Confirmed against the real SDK: accountInfo() resolves without consuming a
+ * turn, which is why detection is free enough to run at launch.
  */
 
 let accountInfoImpl: () => Promise<AccountInfo>

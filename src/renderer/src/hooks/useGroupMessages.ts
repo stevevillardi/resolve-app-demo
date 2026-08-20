@@ -6,7 +6,7 @@ import { groupMessagesRootKey, messagesKey } from './useMessages'
 import type { GroupMessage } from '@/types'
 
 /**
- * The Group thread's reads and its @mention send (Phase 7, blueprint §6/§8).
+ * The Group thread's reads and its @mention send.
  *
  * The thing worth understanding before editing: an @mention is not a separate
  * kind of turn. It runs against the mentioned Contact's real session, streams

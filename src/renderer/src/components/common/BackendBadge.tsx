@@ -7,14 +7,12 @@ interface BackendBadgeProps {
   className?: string
 }
 
-// The real marks now — `Sparkles` and `SquareTerminal` were placeholders for a
-// lucide version that had brand icons, and onboarding had drifted to a third
-// glyph for the same two things.
+// The real vendor marks, from one table, so every surface that names a backend
+// draws the same two glyphs — lucide has no brand icons to fall back on.
 //
-// Still muted ink rather than brand colour, which is the older decision and the
-// one worth keeping: the backend is an implementation fact sitting next to the
-// scope chips, and two saturated logos would out-shout the permissions that are
-// the actual point of the row.
+// Muted ink rather than brand colour: the backend is an implementation fact
+// sitting next to the scope chips, and two saturated logos would out-shout the
+// permissions that are the actual point of the row.
 const BACKEND = {
   claude: { label: 'claude', Icon: ClaudeMark },
   codex: { label: 'codex', Icon: CodexMark }

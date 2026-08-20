@@ -5,10 +5,10 @@ import type { PersonaTemplate } from '../../shared/domain'
 import type { SessionSpec } from './types'
 
 /**
- * Normalization is asserted against message shapes captured from real runs
- * (see docs/plan/05-backend-adapters.md), so the mapping is tested without
- * spending anything. The live half — that a turn actually streams and that a
- * denied write really leaves the disk untouched — is recorded in that doc.
+ * Normalization is asserted against message shapes captured from real runs, so
+ * the mapping is tested without spending anything. The live half — that a turn
+ * actually streams and that a denied write really leaves the disk untouched —
+ * costs money to check and belongs to the env-gated live tests, not here.
  */
 
 const query = vi.fn()
@@ -471,9 +471,9 @@ describe('stream normalization', () => {
   /**
    * The CLI reports some failures as a *successful* result whose text is its
    * own error prose, flagged only by `is_error: true` — shape captured live
-   * 2026-08-18 by giving a persona a nonexistent model (Phase 11, F6). Left
-   * on the reply path it rendered as an ordinary assistant bubble, became the
-   * sidebar preview, and never offered retry.
+   * 2026-08-18 by giving a persona a nonexistent model. Left on the reply path
+   * it renders as an ordinary assistant bubble, becomes the sidebar preview,
+   * and never offers retry.
    */
   it('routes an is_error success down the error path, not the reply path', async () => {
     const prose =
@@ -656,8 +656,8 @@ describe('MCP wiring', () => {
   })
 
   it('keeps GitHub denied when the filesystem axis is wide open', async () => {
-    // The combination this phase exists for. At full_access the permission mode
-    // is bypassPermissions and canUseTool is never consulted, so the deny that
+    // The combination that matters. At full_access the permission mode is
+    // bypassPermissions and canUseTool is never consulted, so the deny that
     // matters is the name list — asserting the callback here would be asserting
     // a layer the SDK has already skipped.
     const persona = {
@@ -729,11 +729,11 @@ describe('summarize', () => {
     return {
       type: 'result',
       subtype: 'success',
-      // Note what this actually is: the JSON **as a string**, not the
-      // placeholder an earlier reading of sdk.d.ts:1860-1866 predicted. The
-      // placeholder in that note is the tool_result carrier inside the
-      // transcript ("Structured output provided successfully"), which matters
-      // for forking a session, not for reading its answer.
+      // Note what this actually is: the JSON **as a string**. The placeholder
+      // sdk.d.ts:1860-1866 describes is easy to misread as this field — it is
+      // the tool_result carrier inside the transcript ("Structured output
+      // provided successfully"), which matters for forking a session, not for
+      // reading its answer.
       result: JSON.stringify(SUMMARY),
       structured_output: SUMMARY,
       total_cost_usd: 0.016992999999999998,
@@ -834,9 +834,9 @@ describe('summarize', () => {
  * The one row of `context-windows.ts` this repository has *measured*.
  *
  * That table is transcribed from vendor documentation and nothing in the unit
- * suite can check it against the source — which is how all eight Claude rows
- * came to sit at 200k when seven of them hold 1M, and how the context meter
- * came to report a half-full prompt as full. This fixture is the exception: it
+ * suite can check it against the source, so a wrong row is wrong silently — a
+ * model whose real window is 1M recorded as 200k shows up only as the context
+ * meter reporting a half-full prompt as full. This fixture is the exception: it
  * is a real `result` message from a real run, and the SDK stamped the window on
  * it. So for exactly one model, the table can be held against an observation
  * instead of against a reading.

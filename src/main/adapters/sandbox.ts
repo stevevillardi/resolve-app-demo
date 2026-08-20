@@ -11,10 +11,11 @@ import {
 } from './github-mcp-tools'
 
 /**
- * Sandbox enforcement (blueprint §4's `sandbox` axis).
+ * Sandbox enforcement — the persona's `sandbox` axis.
  *
- * Blueprint §3 asks for sandbox levels that are enforced rather than labeled.
- * There are two layers here, and the order matters:
+ * `sandbox` and `githubScope` are two independent permission axes on a persona,
+ * and the design asks for sandbox levels that are actually enforced rather than
+ * merely labeled. There are two layers here, and the order matters:
  *
  *   1. **The OS sandbox does the enforcing.** Both SDKs can confine the
  *      commands they run at the operating-system level — Codex via its
@@ -24,13 +25,13 @@ import {
  *      `canUseTool`. It refuses obvious mutations early, with a message the
  *      model can act on, and it has tests that cost nothing to run.
  *
- * The layering is deliberate and was not always this way. The first cut of
- * Phase 5 made layer 2 the *only* Claude-side policy, which meant a hand-rolled
- * shell parser was the entire security boundary — the exact thing the comment
- * on SHELL_CONTROL says not to hand-roll. A post-phase review found real
- * escapes through it (`find . -delete`, `sed -ni`, `git -c diff.external=…`),
- * all now covered in sandbox.test.ts. They are fixed below, but the reason they
- * stopped being frightening is layer 1, not the patches.
+ * The layering is deliberate, and the order is the whole point: layer 2 is a
+ * deny layer sitting over layer 1, never the boundary on its own. A hand-rolled
+ * shell parser must not be the entire security boundary — the exact thing the
+ * comment on SHELL_CONTROL says not to hand-roll — because real escapes go
+ * through one (`find . -delete`, `sed -ni`, `git -c diff.external=…`, all
+ * covered in sandbox.test.ts). Those are handled below, but the reason they are
+ * not frightening is layer 1, not the patches.
  *
  * What layer 2 is NOT: a complete mediator. Verified by probe runs — the SDK's
  * own classifier decides first and only calls `canUseTool` for tool uses it
@@ -68,8 +69,8 @@ const PATH_FIELD_BY_TOOL: Record<string, string> = {
 /**
  * Shell commands a `read_only` session may run.
  *
- * Deliberately short and inspection-only. A read-only reviewer that cannot run
- * `git diff` is much less useful for blueprint §16 Journey 1, which is why
+ * Deliberately short and inspection-only. A read-only persona asked to review
+ * the changes in a file cannot do that job without `git diff`, which is why
  * Bash is not simply banned at this level — but everything here reports on the
  * repo rather than changing it.
  */
@@ -297,7 +298,7 @@ export function evaluateToolUse(
 // --- The GitHub axis --------------------------------------------------------
 
 /**
- * `githubScope` enforcement for MCP tool calls — blueprint §4's *other* axis.
+ * `githubScope` enforcement for MCP tool calls — the persona's *other* axis.
  *
  * Deliberately not folded into evaluateToolUse(), which opens with
  * `if (level === 'full_access') return ALLOWED`. Keying a GitHub decision off
@@ -330,7 +331,8 @@ export function evaluateToolUse(
 
 /** Written on a branch, reviewable as a diff, revertible. `open_pr` keeps these. */
 const OPEN_PR_DENIED = new Set([
-  // Blueprint §16 is explicit: propose, do not merge.
+  // The rule is the app's own: unattended work proposes via pull request, it
+  // does not push or merge.
   'merge_pull_request',
   // These four write file content straight to a ref over the REST API. No
   // commit the user made, no branch the sandbox fenced, no diff anybody could
@@ -394,9 +396,16 @@ export function githubMcpDisallowedTools(scope: GithubScope): string[] {
  * but a determined model could still write a script to a file and run it. It
  * raises the cost of walking around the axis from "type the obvious command" to
  * "deliberately work around a stated restriction", which is the difference
- * between an accident and a decision. What it is *not* is a boundary — see
- * docs/plan/15-deferred-capability-work.md for the part that cannot be fixed
- * in this process at all.
+ * between an accident and a decision. What it is *not* is a boundary: the real
+ * boundary would be scrubbing the developer's ambient `gh` and `git`
+ * credentials out of the session's environment, which this app does not do.
+ *
+ * One part of this cannot be fixed from inside this process at all. At
+ * `sandbox: full_access` the app sets `permissionMode: 'bypassPermissions'` on
+ * Claude and `danger-full-access` on Codex, and after that neither backend asks
+ * this app about anything — so at that sandbox level no in-process gate runs,
+ * this one included, and `githubScope` survives only as far as the tool names
+ * handed to the SDK up front.
  */
 const GITHUB_REACHING_HEADS = new Set(['gh', 'curl', 'wget', 'http', 'https'])
 
@@ -492,7 +501,7 @@ export function evaluateMcpToolUse(scope: GithubScope, toolName: string): Sandbo
 // --- Backend option translation ---------------------------------------------
 
 /**
- * Codex's own sandbox names, which are hyphenated where blueprint §4's are
+ * Codex's own sandbox names, which are hyphenated where this app's are
  * underscored. Assuming the two agreed would have silently passed an invalid
  * `--sandbox` value.
  */

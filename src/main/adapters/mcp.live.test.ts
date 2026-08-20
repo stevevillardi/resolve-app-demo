@@ -16,9 +16,10 @@ import type { ResolvedServer, SessionSpec } from './types'
  * What a persona can actually do on GitHub, proved by doing it.
  *
  * The unit tests assert the options this app *builds*. These assert what the
- * backends and the server do with them, which is a different claim and the one
- * blueprint §16 Journey 3 rests on. Phase 5 learned that distinction the
- * expensive way: a green suite agreed with a sandbox that leaked.
+ * backends and the server do with them, which is a different claim — and it is
+ * the one an unattended routine rests on when it reads an issue and proposes a
+ * pull request with nobody watching. A green suite can agree with a sandbox
+ * that leaks; only a live run settles it.
  *
  * Two of these are written to fail loudly rather than quietly. A persona denied
  * a write must be shown to have *not written* — so the assertion is on GitHub's
@@ -138,8 +139,9 @@ function fixtureIssue(): number {
 describe.skipIf(!LIVE)('what a persona can do on GitHub, live', () => {
   const backends: PersonaBackend[] = ['claude', 'codex']
 
-  // Journey 3's opening sentence — "checks for newly reported issues" — which
-  // Phase 9 shipped every other step of and could not do at all.
+  // The opening move of an unattended routine: check for newly reported issues.
+  // Every step after it — opening a pull request, posting the outcome — is
+  // moot if the persona cannot read the issues in the first place.
   it.each(backends)(
     'reads this repo’s open issues on %s',
     async (backend) => {
@@ -156,7 +158,7 @@ describe.skipIf(!LIVE)('what a persona can do on GitHub, live', () => {
   )
 
   /**
-   * The constraint the phase exists for, stated as a negative.
+   * The constraint this file exists for, stated as a negative.
    *
    * Run at `sandbox: workspace_write`, and the level matters. The first version
    * of this ran at `full_access` on the reasoning that it would stop the

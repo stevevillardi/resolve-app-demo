@@ -2,7 +2,7 @@ import { scoreCommand } from './command-palette'
 import type { PersonaTemplate } from '@/types'
 
 /**
- * Filtering the persona list in the new-contact flow (review §G4).
+ * Filtering the persona list in the new-contact flow.
  *
  * The same shape as `filterRepos`, and for the same reason: the persona step
  * was an unbounded, unranked list in a dialog showing about four rows at a

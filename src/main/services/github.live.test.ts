@@ -10,15 +10,16 @@ import type { AppDatabase } from '../db/create'
 import type { Contact } from '../../shared/domain'
 
 /**
- * The three Phase 9 acceptance checks that only a real repository can settle:
- * that a pull request appears on GitHub, that a second attempt comments instead
- * of duplicating, and that a dead token says so.
+ * The three claims about GitHub that only a real repository can settle: that a
+ * pull request appears on GitHub, that a second attempt comments instead of
+ * duplicating, and that a dead token says so.
  *
  * **Skipped unless `LIVE_GITHUB=1`**, the same house rule as the other live
  * files — but unlike them this one spends **no model credits**. It commits with
  * git rather than asking a persona to, because what is under test is the remote
  * half: a mocked adapter and a real GitHub are exactly the right combination
- * here. Journey 3, which does need a model, lives in journey3.live.test.ts.
+ * here. The unattended-routine check, which does need a model, lives in
+ * journey3.live.test.ts.
  *
  *   GITHUB_TOKEN=$(gh auth token) GITHUB_LIVE_REPO=owner/repo \
  *     LIVE_GITHUB=1 npx vitest run --project main src/main/services/github.live.test.ts

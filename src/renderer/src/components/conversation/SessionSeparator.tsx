@@ -1,5 +1,5 @@
 /**
- * Where the persona stopped remembering (Phase 22).
+ * Where the persona stopped remembering.
  *
  * UnreadSeparator's shape, in the muted register rather than the accent: an
  * unread line is news and wants the eye, while this is a fact about the past

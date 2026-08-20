@@ -97,9 +97,9 @@ describe('recordUsage', () => {
   })
 
   it('attributes routine spend to its routine, and round-trips it', () => {
-    // The id was always in hand at the call site and discarded until Phase 20
-    // needed per-routine budgets. Plain attribution, not a FK — the figure
-    // must survive the routine being deleted.
+    // The id is recorded because a per-routine budget needs to know which
+    // routine spent what. Plain attribution, not a FK — the figure must
+    // survive the routine being deleted.
     recordUsage('contact-1', 'routine', USAGE, SESSION, 'routine-9')
     expect(listUsageEvents('contact-1')[0].routineId).toBe('routine-9')
   })

@@ -209,7 +209,7 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
   const parsed = parseMention(draft, mentionTargets)
 
   // The typeahead every messaging app trains people to expect at the `@`
-  // keystroke (Phase 11, F3). The icon-button picker stays as the clickable
+  // keystroke. The icon-button picker stays as the clickable
   // route; this is the same roster surfacing under the caret. Escape dismisses
   // until the draft changes again. Adjusted during render rather than in an
   // effect — the same prefill pattern NewContactFlow uses — so a draft change
@@ -457,9 +457,9 @@ export function GroupThreadView({ groupId }: GroupThreadViewProps): React.JSX.El
           fileMinStart={fileMinStart}
           busy={isRunning}
           onStop={() => live?.turn && cancel(live.turn.runId)}
-          // A draft addressed to nobody has nowhere to go: the Group has no
-          // session of its own (§4), so an unaddressed message is not a message
-          // this thread can send.
+          // A draft addressed to nobody has nowhere to go: a Group is a merged
+          // view and a router, never a session of its own, so an unaddressed
+          // message is not a message this thread can send.
           disabled={!parsed}
           hint={<span>Mention a persona with @ to route this to its own session.</span>}
           notice={

@@ -24,7 +24,7 @@ function subscribe(onMessage: (message: AgentStreamMessage) => void): () => void
 // Generic bridge for the hand-rolled typed IPC layer (src/shared/ipc-contract.ts).
 // Renderer never gets one bespoke bridge method per procedure — everything goes
 // through this single invoke, validated against the shared contract on both ends.
-// `onAgentEvent`/`onRunsChanged` are the push half (Phase 6): one channel again,
+// `onAgentEvent`/`onRunsChanged` are the push half: one channel again,
 // demultiplexed here so the renderer subscribes per run without ipcRenderer.
 const api = {
   invoke: (name: IpcProcedureName, input: unknown) => ipcRenderer.invoke(IPC_CHANNEL, name, input),

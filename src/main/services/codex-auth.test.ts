@@ -3,8 +3,8 @@ import type { DeviceFlowState } from '../../shared/ipc-contract'
 
 /**
  * Codex auth. The device-code parsing is tested against output captured from
- * the real `codex login --device-auth` during Phase 3 — including its ANSI
- * colouring, which is the thing most likely to break a naive regex.
+ * the real `codex login --device-auth` — including its ANSI colouring, which is
+ * the thing most likely to break a naive regex.
  *
  * Spawning is faked: the binary is ~220MB and a real login would need a
  * browser. What matters here is the parsing and the status mapping.
@@ -183,8 +183,8 @@ describe('getCodexAuthStatus', () => {
 
   it('reports a timeout as detection failure, not as logged out', () => {
     // The regression this file exists to pin: a cold ~220MB binary can outlive
-    // the probe timeout, and that used to read as "connect Codex" while chats
-    // ran fine off the same credentials.
+    // the probe timeout, and reading that as "connect Codex" tells someone to
+    // reconnect while their chats run fine off the same credentials.
     spawnSyncResult = { status: null, error: new Error('spawnSync codex ETIMEDOUT') }
     expect(codex.getCodexAuthStatus()).toMatchObject({
       authenticated: false,
@@ -213,8 +213,9 @@ describe('getCodexAuthStatus', () => {
   })
 
   it('skips WARNING noise and reports the substantive line', () => {
-    // The real CLI front-loads warnings (a CODEX_HOME path dump was reaching
-    // the Home banner verbatim); the line a person can act on comes after.
+    // The real CLI front-loads warnings (a CODEX_HOME path dump that would
+    // otherwise reach the Home banner verbatim); the line a person can act on
+    // comes after.
     spawnSyncResult = {
       status: 2,
       stderr:

@@ -30,8 +30,8 @@ beforeEach(() => {
 
 describe('first run', () => {
   it('inserts the recommended tier and only the recommended tier', () => {
-    // Startup seeding is exactly the pre-Phase-17 content; the wider catalog
-    // is opt-in through the picker, never installed uninvited.
+    // Startup seeding is the recommended tier and nothing else; the wider
+    // catalog is opt-in through the picker, never installed uninvited.
     seedIfNeeded()
     expect(new Set(listSkills().map((s) => s.id))).toEqual(RECOMMENDED_SKILL_IDS)
     expect(new Set(listPersonaTemplates().map((p) => p.id))).toEqual(RECOMMENDED_PERSONA_IDS)
@@ -132,7 +132,7 @@ describe('the catalog itself', () => {
 
   it('grants no seeded persona full sandbox access or any MCP server', () => {
     // A seeded persona must earn nothing by default — and full_access would
-    // collide with the scope rule Phase 17 enforces on write.
+    // collide with the scope pairing rule enforced on write.
     for (const persona of SEED_PERSONA_TEMPLATES) {
       expect(persona.sandbox).not.toBe('full_access')
       expect(persona.mcpServerIds).toEqual([])

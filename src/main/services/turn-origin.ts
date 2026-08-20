@@ -8,11 +8,11 @@ import type { AgentUsage } from '../../shared/agent'
  * bookkeeping around it: which Group row it leaves behind, which `source` its
  * spend is attributed to, and who wants to know when it finished.
  *
- * That used to be an optional `groupId` parameter whose truthiness toggled three
- * unrelated things. Phase 8 needs a fourth combination (no inbound Group row, a
- * `routine_run` on the way out, `source: 'routine'`), which a second optional
- * parameter could not express readably — so the intent is named instead of
- * inferred.
+ * An optional `groupId` parameter whose truthiness toggles three unrelated
+ * things cannot carry all of them. A routine fire is the combination that
+ * breaks it: no inbound Group row, a `routine_run` posted on the way out, and
+ * spend attributed `source: 'routine'` — which no second optional parameter
+ * expresses readably. So the intent is named here rather than inferred.
  *
  * The discriminant is deliberately spelled the same as `usageSourceSchema`'s
  * values, so the usage stamp is `origin.kind` rather than a mapping table that
@@ -26,14 +26,14 @@ export type TurnOrigin =
   /** A 1:1 message the user typed. */
   | { kind: 'message' }
   /**
-   * An @mention from a Group thread (blueprint §8). The group is *chosen* — the
-   * user was looking at that thread — so it is carried here.
+   * An @mention from a Group thread. The group is *chosen* — the user was
+   * looking at that thread — so it is carried here.
    */
   | { kind: 'mention'; groupId: string }
   /**
-   * A scheduled or manually-triggered Routine fire (blueprint §7). No groupId:
-   * a routine's group is *derived*, since there is exactly one per repo and the
-   * routine must post to that one. `startTurn` resolves it from the contact.
+   * A scheduled or manually-triggered Routine fire. No groupId: a routine's
+   * group is *derived*, since there is exactly one per repo and the routine
+   * must post to that one. `startTurn` resolves it from the contact.
    */
   | { kind: 'routine'; routineId: string }
 

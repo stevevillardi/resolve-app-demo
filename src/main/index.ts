@@ -85,9 +85,10 @@ function createWindow(): void {
   installEditableFieldMenu(mainWindow)
 
   // Hide rather than close, so the app stays resident and its routines keep
-  // firing with no window on screen (blueprint §15E). Reopening is then instant
-  // — no renderer reboot, no splash, no auth.getStatus round trip — and the
-  // window is destroyed only when the app is genuinely quitting.
+  // firing with no window on screen: routines run in this process, and an app
+  // that quits when its window closes cannot fire one. Reopening is then
+  // instant — no renderer reboot, no splash, no auth.getStatus round trip —
+  // and the window is destroyed only when the app is genuinely quitting.
   mainWindow.on('close', (event) => {
     if (isQuitting()) return
     // No tray means no way back in and no way out — hiding then would leave the
@@ -160,9 +161,9 @@ app.whenReady().then(async () => {
 
   // Before the tray, so its first menu has real next-run times rather than an
   // empty list it would have to be told about later — and before the window,
-  // because not depending on one is the entire point of the phase. The callback
-  // wakes both audiences a routine has: the tray in main, the renderer's
-  // routine rows over the push channel.
+  // because the scheduler must not depend on one: routines fire whether or not
+  // a window exists. The callback wakes both audiences a routine has: the tray
+  // in main, the renderer's routine rows over the push channel.
   startScheduler(nodeCronEngine(), () => {
     refreshTrayMenu()
     emitRoutinesChanged()

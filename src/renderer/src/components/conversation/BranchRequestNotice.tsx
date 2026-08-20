@@ -8,7 +8,7 @@ interface BranchRequestNoticeProps {
   branch: string
   authorName?: string
   timestamp?: number
-  /** When the ask was answered — a merge or discard stamped it (Phase 19). */
+  /** When the ask was answered — a merge or discard stamped it. */
   resolvedAt?: number
   onReview?: (branch: string) => void
 }
@@ -20,7 +20,7 @@ interface BranchRequestNoticeProps {
  * only one with a control on it. Reading another branch needs no permission and
  * no merge — a persona does that itself — so anything that reaches here is a
  * case where work has to physically move between checkouts, which is a decision
- * rather than a step (docs/plan/12-worktree-isolation.md).
+ * rather than a step.
  *
  * Built as a third sibling of RoutineRunNotice and JournalNotice rather than a
  * variant of either: it borrows the log-entry gutter so it sits in the same

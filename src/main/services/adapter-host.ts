@@ -12,8 +12,8 @@ import type { PersonaBackend } from '../../shared/domain'
  * Exists because `src/main/adapters/` is deliberately electron-free and
  * database-free (see adapters/types.ts), so everything machine-specific has to
  * be injected from outside. Concentrating that here means a turn started by a
- * message, an @mention (Phase 7) or a routine (Phase 8) is configured
- * identically — the alternative is three call sites that drift.
+ * message, an @mention or a routine is configured identically — the
+ * alternative is three call sites that drift.
  */
 
 /**
@@ -38,24 +38,27 @@ function backendEnv(backend: PersonaBackend, needsGithubToken: boolean): NodeJS.
   // needs the environment, so it belongs here: this function is already the
   // only place a secret meets a subprocess.
   //
-  // **Only when this session was actually granted the server.** The first
-  // version set it whenever an account was connected, on the reasoning that "a
-  // session with no server configured has nothing that would read this, and a
-  // persona is never given a shell that could echo it". The second half of that
-  // was false and was measured to be false: `echo $SWITCHBOARD_GITHUB_MCP_TOKEN`
-  // is allowed at `workspace_write`, so every persona at that level or above
-  // could read the app's GitHub token out of its own environment — including
-  // personas granted no MCP server at all.
+  // **Only when this session was actually granted the server.** Setting it
+  // whenever an account is connected would rest on "a session with no server
+  // configured has nothing that would read this, and a persona is never given a
+  // shell that could echo it". The second half of that is false, and measured
+  // to be false: `echo $SWITCHBOARD_GITHUB_MCP_TOKEN` is allowed at
+  // `workspace_write`, so every persona at that level or above could read the
+  // app's GitHub token out of its own environment — including personas granted
+  // no MCP server at all.
   //
   // Narrowing it does not make the token safe from a shell that was granted the
   // server; it makes the blast radius the set of personas a human deliberately
-  // gave GitHub to, rather than all of them. See docs/plan/15 for the part that
-  // cannot be fixed here.
+  // gave GitHub to, rather than all of them. The reading itself cannot be shut
+  // off from inside this process: the shell guard is a deny list matched
+  // against command text, which raises echoing this variable from "type the
+  // obvious command" to "deliberately work around a stated restriction", but is
+  // not a boundary.
   //
-  // And only for Codex (doc 15 item 6): Claude receives the token as an
-  // Authorization header on the server config and never reads this variable,
-  // so setting it in Claude's subprocess put the secret somewhere with no
-  // reader — harmless until something grows one.
+  // And only for Codex: Claude receives the token as an Authorization header on
+  // the server config and never reads this variable, so setting it in Claude's
+  // subprocess would put the secret somewhere with no reader — harmless until
+  // something grows one.
   const github = backend === 'codex' && needsGithubToken ? getGitHubToken() : null
 
   return {
@@ -76,9 +79,10 @@ function backendEnv(backend: PersonaBackend, needsGithubToken: boolean): NodeJS.
  * resolvers need `electron` to find them, which is exactly why the adapters
  * take them as config instead of importing.
  *
- * "Fails late" was literal. Only codex was filled in here for three phases,
- * and nothing caught it, because the whole class of bug is invisible until the
- * app is packaged — every test and every dev run resolves these correctly.
+ * "Fails late" is literal: the whole class of bug is invisible until the app is
+ * packaged — every test and every dev run resolves these correctly — so a
+ * binary path missing from this object survives the entire suite and shows up
+ * only in a build.
  */
 export function adapterConfig(
   backend: PersonaBackend,
@@ -86,14 +90,14 @@ export function adapterConfig(
 ): AdapterConfig {
   return {
     codexBinaryPath: resolveCodexBinary(),
-    // Both backends, for the same reason. Only codex had this until a packaged
-    // build proved the Claude half was missing — see AdapterConfig.
+    // Both backends, for the same reason: inside a packaged app neither SDK's
+    // own require.resolve lookup finds its binary — see AdapterConfig.
     claudeBinaryPath: resolveClaudeBinary(),
     env: backendEnv(backend, options.needsGithubToken ?? false),
-    // The field has existed since Phase 5, is plumbed all the way into the
-    // Claude OS sandbox, and until now nothing ever filled it — so the one
-    // directory its own doc comment names was reachable by every persona. A
-    // declared guard with no producer reads as a guard.
+    // `denyReadPaths` is plumbed all the way into the Claude OS sandbox, and
+    // this line is its only producer: without it the one directory its own doc
+    // comment names is reachable by every persona, because a declared guard
+    // that nobody fills still reads as a guard.
     denyReadPaths: [secretsPathForDenyList()]
   }
 }

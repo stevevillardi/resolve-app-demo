@@ -23,12 +23,11 @@ import { cn } from '@/lib/utils'
 import type { Contact, Group, PersonaBackend, PersonaTemplate } from '@/types'
 
 /**
- * Every row is real as of Phase 6 — contacts and groups came in Phase 4, and
- * the preview, timestamp and cost that had been reading "No messages yet" now
- * come from the `messages` and `usage_events` rows a turn actually writes.
+ * Every row's preview, timestamp and cost come from the `messages` and
+ * `usage_events` rows a turn actually writes.
  *
  * A group's figures are its members' summed, since a group has no session of
- * its own (blueprint §8: it is a merged view and a router).
+ * its own — it is a merged view and a router.
  */
 
 function SectionLabel({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -42,8 +41,8 @@ function SectionLabel({ children }: { children: React.ReactNode }): React.JSX.El
 /**
  * Groups get a stacked cluster of their members' avatars rather than a generic
  * icon — at a glance you can see *who* is working in a repo, which is the only
- * thing a group is for (blueprint §8: it is a merged view and router, not a
- * session of its own).
+ * thing a group is for: it is a merged view and a router, not a session of its
+ * own.
  */
 function GroupAvatarCluster({
   repoPath,
@@ -141,12 +140,11 @@ function ContactRow({
 }
 
 /**
- * A group row plus its right-click menu and that menu's dialogs (review §G5).
+ * A group row plus its right-click menu and that menu's dialogs.
  *
  * The same shape as `ContactRow` above and for the same reason: each row needs
  * its own dialog state, and the items are the ones the group thread header's ⋯
  * menu renders, so right-clicking a group offers exactly what opening it would.
- * Group rows were the last thing in this list with no menu at all.
  */
 function GroupRow({
   group,
@@ -211,7 +209,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
     [personaTemplates]
   )
 
-  // Recency-sorted within each section (Phase 20): the services return
+  // Recency-sorted within each section: the services return
   // alphabetical, which suits a phone book, not a messages app. The preview —
   // already fetched for the row's own subtitle — is the timestamp authority.
   const visibleContacts = useMemo(
@@ -230,7 +228,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
   )
 
   /**
-   * Hidden groups (review §G5), for the disclosure at the foot of the list.
+   * Hidden groups, for the disclosure at the foot of the list.
    *
    * Its own list rather than a length difference, so the count stays right
    * while a filter is narrowing everything else.
@@ -249,9 +247,9 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
            */
           if (group.hidden && !showHidden && !needle) return false
           if (!needle) return true
-          // The name is matched as well as the path, now that a group can carry
-          // one of its own — searching for what is written on the row and
-          // getting nothing back was the alternative.
+          // The name is matched as well as the path, because a group can carry
+          // a name of its own — searching for what is written on the row and
+          // getting nothing back is the alternative.
           return (
             group.repoPath.toLowerCase().includes(needle) ||
             groupName(group).toLowerCase().includes(needle)
@@ -269,8 +267,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
    * Bound here rather than in `AppShell` because this is where that order
    * exists. Recomputing it up there from the same queries would be a second
    * ordering to keep in step with this one, and the symptom of drift would be a
-   * shortcut that skips a row the user is looking straight at — the shape of
-   * bug Phase 22 fixed in the composer's lock check.
+   * shortcut that skips a row the user is looking straight at.
    *
    * ⌥ rather than ⌘: on macOS ⌘↑/⌘↓ move the caret to the start and end of a
    * text field, and the composer holds focus for most of the time anyone
@@ -377,8 +374,8 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
           ? usageForContacts(usageEvents, memberIds)
           : undefined
         // The group's own log, not its members' 1:1 threads — a group row
-        // should preview what happened *in the group*, which since Phase 7
-        // means session summaries, mentions, and routed replies.
+        // should preview what happened *in the group*, which means session
+        // summaries, mentions, and routed replies.
         const latest = groupPreviews.find((message) => message.groupId === group.id)
 
         return (

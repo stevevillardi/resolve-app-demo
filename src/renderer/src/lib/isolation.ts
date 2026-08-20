@@ -6,12 +6,12 @@ import type { Isolation } from '@/types'
  * Written out rather than derived, because the cost is the thing that decides
  * it and none of those costs are inferable from the name.
  *
- * Its own module rather than living beside the flow that first used it: since
- * Phase 22 this choice is made in two places — at bind time in
- * `NewContactFlow`, and afterwards in `ChangeIsolationDialog` — and two screens
- * describing the same three modes differently is exactly the drift worth making
- * impossible. (eslint's `react-refresh/only-export-components` asks for the
- * same split for its own reasons.)
+ * Its own module rather than living beside the flow that first used it: this
+ * choice is made in two places — at bind time in `NewContactFlow`, and
+ * afterwards in `ChangeIsolationDialog` — and two screens describing the same
+ * three modes differently is exactly the drift worth making impossible.
+ * (eslint's `react-refresh/only-export-components` asks for the same split for
+ * its own reasons.)
  */
 export interface IsolationOption {
   value: Isolation

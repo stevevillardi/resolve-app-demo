@@ -136,7 +136,7 @@ describe('summarizeTurn', () => {
    * rather than joining it, so one unattended fire leaves one row rather than
    * two saying much the same thing. It still carries category/durable, because
    * contextForRepo reads both types — work done while nobody was watching is
-   * exactly what §6 has to carry across Contact boundaries.
+   * exactly what the Group log has to carry across Contact boundaries.
    */
   it('files a routine turn as routine_run instead, keeping its category', async () => {
     summarizeResult = GOOD
@@ -180,7 +180,8 @@ describe('summarizeTurn', () => {
   })
 
   it('marks routine work non-durable', async () => {
-    // §6's rule, and the only place it is decided.
+    // The retention rule, and the only place it is decided: `decision` and
+    // `tradeoff` are durable and always injected, `routine` is neither.
     summarizeResult = { ...GOOD, data: { summary: 'Read some files.', category: 'routine' } }
     await summarizeTurn('contact-1', 'q', 'a')
     expect(listGroupMessages(GROUP)[0].durable).toBe(false)
@@ -231,7 +232,8 @@ describe('summarizeTurn', () => {
     // It runs after every single turn, so an MCP handshake here is a cost
     // nobody asked for — and a summariser that could comment on an issue is a
     // capability nobody granted. The same argument as the skills above, made
-    // for the axis Phase 14 added rather than left to be inferred from it.
+    // explicitly for the capability surface — MCP servers, repo-discovered
+    // skills and repo-authored instructions — rather than left to be inferred.
     summarizeResult = GOOD
     await summarizeTurn('contact-1', 'q', 'a')
 
@@ -290,8 +292,8 @@ describe('branch requests', () => {
     expect(listGroupMessages(GROUP).map((m) => m.type)).toEqual(['system_summary'])
   })
 
-  // A separate row rather than a field on the summary: it is the one step of
-  // the phase a human has to take, so it needs a shape of its own in the thread.
+  // A separate row rather than a field on the summary: merging is the one step
+  // a human has to take, so it needs a shape of its own in the thread.
   it('records a request as its own row alongside the summary', async () => {
     needing({ branch: 'persona/refactor-buddy-a3f9', reason: 'Needs the new auth helper.' })
     await summarizeTurn('contact-1', 'q', 'a')

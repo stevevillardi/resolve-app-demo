@@ -11,8 +11,7 @@ import { createDb } from './create'
  * `test-db.ts` builds a `:memory:` database with every migration applied at
  * once, which proves the migrations compose from nothing. It cannot prove what
  * actually ships — a profile with real rows in it, upgraded in place. That is
- * the thing that breaks, and `06-core-messaging-handoff.md` §11 item 13 carried
- * it as unverified.
+ * the thing that breaks.
  *
  * Rather than checking in a binary fixture that goes stale on the next
  * migration, this builds the "old" database from the migration files
@@ -60,8 +59,9 @@ describe('migrating a populated database', () => {
   it('carries pre-0004 personas and usage rows across every later migration', () => {
     const path = scratchDbPath()
 
-    // The shape a Phase 3/4 profile actually had: no persona model column, no
-    // usage attribution columns, no group_messages.branch, no session id.
+    // The shape the earliest shipped profiles actually had: no persona model
+    // column, no usage attribution columns, no group_messages.branch, no
+    // session id.
     const old = createDb(path, migrationsThrough('0003_drop_bootstrap_check'))
     old.run(
       `INSERT INTO persona_templates (id, name, avatar_color, backend, system_prompt, skill_ids, sandbox, github_scope)
@@ -137,9 +137,9 @@ describe('migrating a populated database', () => {
   })
 
   it('leaves a deleted contact’s spend behind, still attributed', () => {
-    // Written from the claim rather than from the schema: deleting a Contact
-    // used to cascade its usage away, so a total covering last month shrank
-    // when somebody tidied up a Contact this month. Spend is a record of money
+    // Written from the claim rather than from the schema: spend outlives the
+    // Contact that spent it, so a total covering last month must not shrink
+    // when somebody tidies up a Contact this month. Spend is a record of money
     // that was actually spent; no later bookkeeping makes that untrue.
     const path = scratchDbPath()
     const db = createDb(path, DRIZZLE)
@@ -322,7 +322,7 @@ describe('migrating a populated database', () => {
 })
 
 /**
- * Migration 0020's referential action, executed rather than read (review §G6).
+ * Migration 0020's referential action, executed rather than read.
  *
  * `usage_events.message_id` points at a table that itself cascades from
  * `contacts`, so the action on this FK decides whether a contact can be deleted
@@ -370,10 +370,10 @@ describe('usage_events.message_id on delete', () => {
   })
 
   /**
-   * And the spend survives it. Phase 10's rule is that spend outlives what
-   * spent it, which is why `contact_id` is `set null`; a CASCADE here would
-   * have deleted a month of cost history along with a tidied-up contact, and
-   * the delete above would still have "passed".
+   * And the spend survives it. The rule is that spend outlives what spent it,
+   * which is why `contact_id` is `set null`; a CASCADE here would have deleted
+   * a month of cost history along with a tidied-up contact, and the delete
+   * above would still have "passed".
    */
   it('keeps the spend, with the links nulled rather than the row removed', () => {
     const db = populated()

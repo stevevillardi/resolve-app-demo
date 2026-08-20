@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { callProcedure } from '@/lib/ipc-client'
 
 /**
- * The working tree's paths for @file autocomplete (review §B3).
+ * The working tree's paths for @file autocomplete.
  *
  * Gated on `enabled` — the thread views pass "the draft contains an @" —
  * because listing a repo spawns git, and an open thread is no reason to pay

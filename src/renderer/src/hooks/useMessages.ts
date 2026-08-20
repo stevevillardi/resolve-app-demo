@@ -14,7 +14,7 @@ import type { PersistedMessage } from '@/types'
 import type { ActiveRun, IpcOutput } from '../../../shared/ipc-contract'
 
 /**
- * Thread reads and the send/stop pair (Phase 6).
+ * Thread reads and the send/stop pair.
  *
  * A send is unusual for this app in that the mutation resolving means the turn
  * *started*, not that it finished. The reply arrives on the push channel, is
@@ -47,12 +47,15 @@ export function useMessages(contactId: string): UseQueryResult<PersistedMessage[
   const queryClient = useQueryClient()
 
   // Background turns — a routine fire, a mention answered elsewhere — write
-  // rows with no runId subscription in this view, and before this the open
-  // thread showed them only after a remount or window refocus (Phase 25).
-  // Same signal useMessagePreviews already rides; the prefix invalidation
-  // covers the toolCalls entry too.
+  // rows with no runId subscription in this view, so without this push the open
+  // thread would show them only after a remount or window refocus. Same signal
+  // useMessagePreviews already rides; the prefix invalidation covers the
+  // toolCalls entry too.
   useEffect(
-    () => onMessagesChanged(() => void queryClient.invalidateQueries({ queryKey: messagesKey(contactId) })),
+    () =>
+      onMessagesChanged(
+        () => void queryClient.invalidateQueries({ queryKey: messagesKey(contactId) })
+      ),
     [queryClient, contactId]
   )
 
@@ -66,10 +69,10 @@ export function useMessagePreviews(): UseQueryResult<PersistedMessage[]> {
   const queryClient = useQueryClient()
 
   // Messages written by background runs — a routine, a reply landing on a
-  // thread nobody has open — reach no runId subscription, so before this push
-  // the sidebar's preview (and everything else derived from message rows) only
-  // refreshed by accident. Group previews ride the same signal: a group row is
-  // a message row.
+  // thread nobody has open — reach no runId subscription, so without this push
+  // the sidebar's preview (and everything else derived from message rows) would
+  // refresh only by accident. Group previews ride the same signal: a group row
+  // is a message row.
   useEffect(
     () =>
       onMessagesChanged(() => {
@@ -145,7 +148,7 @@ export function useSendMessage(contactId: string): {
   return {
     // The per-call onSuccess is how the composer's draft gets cleared only
     // once main accepted the turn — a lock refusal rejects, and the draft
-    // has to survive it (review §B2).
+    // has to survive it.
     send: (content, opts) =>
       mutation.mutate(content, opts?.onSuccess ? { onSuccess: opts.onSuccess } : {}),
     isPending: mutation.isPending,
@@ -200,10 +203,11 @@ export function useCancelRun(): { cancel: (runId: string) => void } {
  * Every turn running anywhere, refetched whenever main says the set changed.
  *
  * The whole set rather than this contact's, because what disables a composer is
- * a turn on a *sibling* contact bound to the same repo (blueprint §15D).
+ * a turn on a *sibling* contact bound to the same repo: one turn per repo at a
+ * time is the lock main enforces.
  */
 /**
- * The persisted tool record for a thread (Phase 17). Keyed under the thread's
+ * The persisted tool record for a thread. Keyed under the thread's
  * messages key, so the invalidation a finished turn already does refetches
  * this too — no second wiring to forget.
  */
@@ -229,7 +233,7 @@ export function useActiveRuns(): UseQueryResult<ActiveRun[]> {
 }
 
 /**
- * Sweeps useRunStore against main's active-run list (Phase 11, F7).
+ * Sweeps useRunStore against main's active-run list.
  *
  * The store's normal exit is the turn's own `done` event, but that only
  * arrives through a mounted subscriber — a turn finishing while the user is
@@ -253,7 +257,7 @@ export function useRunReconciliation(): void {
       const byContact = useRunStore.getState().byContact
       const runs = await callProcedure('runs.list', undefined)
 
-      // The add half (Phase 25): runs no renderer mutation ever began — a
+      // The add half: runs no renderer mutation ever began — a
       // routine fire, or any turn surviving a renderer reload — enter the
       // store here so they stream with the same machinery a sent message
       // uses. A mid-turn begin() starts from emptyStream; deltas emitted

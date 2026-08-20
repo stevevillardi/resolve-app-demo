@@ -1,5 +1,5 @@
 /**
- * Turning a Group composer draft into a routed mention (blueprint §8).
+ * Turning a Group composer draft into a routed mention.
  *
  * Lives in lib/ rather than inside GroupThreadView on purpose: the renderer
  * Vitest project matches `src/renderer/**\/*.test.ts` and there is no
@@ -26,7 +26,7 @@ export function mentionToken(name: string): string {
 
 /**
  * The partial name being typed at the head of the draft — what a typeahead
- * filters by — or null when no suggestions belong on screen (Phase 11, F3).
+ * filters by — or null when no suggestions belong on screen.
  *
  * Null in three cases: the draft is not a mention at all, the mention is
  * already settled (a resolved name followed by content — parseMention says

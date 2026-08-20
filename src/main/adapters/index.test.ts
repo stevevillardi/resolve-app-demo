@@ -12,8 +12,11 @@ describe('adapterFor', () => {
   })
 
   it('describes each backend by capability, not by name', () => {
-    // Blueprint §3: the UI branches on what a backend can do, and the two
-    // diverge in both directions rather than one being strictly richer.
+    // The UI branches on what a backend can do rather than on which backend it
+    // is, and the two diverge in both directions rather than one being strictly
+    // richer: Codex streams during a tool call and Claude does not, while
+    // Claude reports a dollar cost directly and Codex returns token counts the
+    // app has to price itself.
     expect(adapterFor('claude').capabilities).toMatchObject({
       streamsTextDeltas: true,
       costSource: 'sdk'

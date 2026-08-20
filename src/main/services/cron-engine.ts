@@ -22,8 +22,8 @@ import type { CronEngine, CronHandle } from './scheduler'
  * "every day at 09:00" means the user's 09:00. Note node-cron's own caveat that
  * a sub-hourly schedule can pause for the length of a DST shift.
  *
- * What this cannot do, and what the phase doc records as a limitation: a fire
- * missed because the machine slept or the app was quit is **not** caught up.
+ * What this cannot do, recorded as a standing limitation: a fire missed
+ * because the machine slept or the app was quit is **not** caught up.
  * node-cron persists nothing and offers no exactly-once guarantee across
  * restarts. The scheduler records the miss rather than pretending it ran.
  */

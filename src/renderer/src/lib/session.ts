@@ -4,10 +4,9 @@
  * A Switchboard thread is endless by design; the backend session underneath it
  * is not. It gets replaced when the resume key dies and the app heals it, when
  * a Contact is rebound to another persona, when its persona changes backend,
- * and — from Phase 22 — whenever the user asks for a fresh one. Until now every
- * one of those was silent: the persona simply stopped remembering the messages
- * above, with nothing on screen to say so, and the review named that as the
- * forever-thread's core dishonesty.
+ * and whenever the user asks for a fresh one. Left unmarked, every one of those
+ * is silent: the persona simply stops remembering the messages above, with
+ * nothing on screen to say so, which is the forever-thread's core dishonesty.
  *
  * Pure and here rather than in the component because the renderer Vitest
  * project matches `*.test.ts` only. The rule below is small, and every part of

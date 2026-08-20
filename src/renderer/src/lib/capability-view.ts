@@ -128,7 +128,7 @@ export function mcpServerLabel(id: string): string {
 /**
  * What each backend brings that this app cannot switch off.
  *
- * Measured, not reasoned — see docs/plan/00-progress.md. Claude ships 16
+ * Measured, not reasoned. Claude ships 16
  * built-in skills plus 48 slash commands and neither `skills: []` nor
  * `plugins: []` removes them; Codex ships 5, two of which acquire further
  * capabilities of their own. Every other capability on this screen is something

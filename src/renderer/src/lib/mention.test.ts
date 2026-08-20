@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { matchMentionTargets, mentionQuery, mentionToken, parseMention, type MentionTarget } from './mention'
+import {
+  matchMentionTargets,
+  mentionQuery,
+  mentionToken,
+  parseMention,
+  type MentionTarget
+} from './mention'
 
 const TARGETS: MentionTarget[] = [
   { contactId: 'c-reviewer', name: 'Code Reviewer' },
@@ -62,10 +68,9 @@ describe('parseMention', () => {
 })
 
 /**
- * Phase 11, F3: typing `@` used to give no completion at all — the only
- * affordances were the icon-button picker and a red hint. These pin the
- * typeahead's decision half: when suggestions belong on screen and in what
- * order.
+ * Typing `@` offers a completion rather than leaving the icon-button picker as
+ * the only affordance. These pin the typeahead's decision half: when
+ * suggestions belong on screen and in what order.
  */
 describe('mentionQuery', () => {
   it('is the partial name while the user is still addressing', () => {
@@ -111,9 +116,7 @@ describe('matchMentionTargets', () => {
   })
 
   it('matches case-insensitively and drops non-matches', () => {
-    expect(matchMentionTargets('refactor', TARGETS).map((t) => t.name)).toEqual([
-      'Refactor Buddy'
-    ])
+    expect(matchMentionTargets('refactor', TARGETS).map((t) => t.name)).toEqual(['Refactor Buddy'])
     expect(matchMentionTargets('zzz', TARGETS)).toEqual([])
   })
 })
