@@ -99,13 +99,6 @@ const authStatusSchema = z.object({
 const apiKeyInputSchema = z.object({ apiKey: z.string().min(1) })
 
 /**
- * One in-flight turn, as the UI needs to see it.
- *
- * `contactName` rather than just an id because its whole job is to be shown in
- * a sentence — "Refactor Buddy is already working in this repo" — and the
- * renderer would otherwise have to join back to the contact list to say so.
- */
-/**
  * A repo the user could bind to, from the GitHub side — listed through the API
  * rather than typed as a path, and offered for cloning when it is not on disk.
  */
@@ -201,6 +194,13 @@ const contactContextSchema = z.object({
 export type ContactContext = z.infer<typeof contactContextSchema>
 export type RepoOffers = NonNullable<IpcOutput<'contacts.repoOffers'>>
 
+/**
+ * One in-flight turn, as the UI needs to see it.
+ *
+ * `contactName` rather than just an id because its whole job is to be shown in
+ * a sentence — "Refactor Buddy is already working in this repo" — and the
+ * renderer would otherwise have to join back to the contact list to say so.
+ */
 const activeRunSchema = z.object({
   runId: z.string(),
   contactId: z.string(),
@@ -402,7 +402,6 @@ export const ipcContract = {
     })
   },
 
-  /** OS notifications on/off. Default ON — absence of the flag means enabled. */
   /**
    * The theme the user picked. Stored app-side rather than in the renderer
    * because main paints the window background from it before the bundle loads
@@ -417,6 +416,7 @@ export const ipcContract = {
     output: z.object({ preference: themePreferenceSchema })
   },
 
+  /** OS notifications on/off. Default ON — absence of the flag means enabled. */
   'notifications.get': {
     input: z.void(),
     output: z.object({ enabled: z.boolean() })
@@ -758,19 +758,6 @@ export const ipcContract = {
     output: contactSchema
   },
   /**
-   * Moves a Contact between the repo itself and its own checkout.
-   *
-   * Its own procedure rather than a widened `contacts.update`, for the reason
-   * `setRepoTrust` gives below: a rename and a relocation are different
-   * decisions, and one permissive update is how the second becomes a side
-   * effect of the first.
-   *
-   * `discardUncommitted` only matters when leaving a worktree that has
-   * uncommitted changes — main refuses without it, and that refusal is a
-   * decision to put in front of a human rather than an error to render red.
-   * The same two-step `contacts.delete` uses.
-   */
-  /**
    * Replaces a Contact and brings its conversation with it.
    *
    * One procedure rather than a renderer-side create-then-delete pair, because
@@ -802,6 +789,19 @@ export const ipcContract = {
     input: z.object({ id: z.string(), model: z.string().nullable() }),
     output: contactSchema
   },
+  /**
+   * Moves a Contact between the repo itself and its own checkout.
+   *
+   * Its own procedure rather than a widened `contacts.update`, for the reason
+   * `setRepoTrust` gives below: a rename and a relocation are different
+   * decisions, and one permissive update is how the second becomes a side
+   * effect of the first.
+   *
+   * `discardUncommitted` only matters when leaving a worktree that has
+   * uncommitted changes — main refuses without it, and that refusal is a
+   * decision to put in front of a human rather than an error to render red.
+   * The same two-step `contacts.delete` uses.
+   */
   'contacts.setIsolation': {
     input: z.object({
       id: z.string(),
@@ -901,7 +901,6 @@ export const ipcContract = {
     output: z.object({ deleted: z.boolean() })
   },
 
-  /** No create: a group is implied by its repo, never made directly. */
   /**
    * Per-conversation unread counts, both kinds in one call. The
    * renderer refetches on messages-changed, so this is the single authority
@@ -968,6 +967,7 @@ export const ipcContract = {
     output: groupSchema
   },
 
+  /** No create: a group is implied by its repo, never made directly. */
   'groups.list': {
     input: z.void(),
     output: z.array(groupSchema)

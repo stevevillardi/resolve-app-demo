@@ -43,7 +43,6 @@ import type {
   Skill
 } from '@/types'
 
-/** Stands in for `model: null` — Select can't carry null as a value. */
 /** The seed palette (chart colours + the optional tier's hues). */
 const PALETTE_COLORS = [
   '#2a78d6',
@@ -75,6 +74,7 @@ function randomAvatarColor(): string {
   return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`
 }
 
+/** Stands in for `model: null` — Select can't carry null as a value. */
 const DEFAULT_MODEL = '__default__'
 
 // The only segmented control in the app whose options name a *thing* rather
