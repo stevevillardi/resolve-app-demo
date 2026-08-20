@@ -223,13 +223,15 @@ optional:
 ## Verification
 
 - `npm run build` — typecheck + unit suite + bundle. **1,979 passing**.
-- `npx playwright test --project=e2e` — 91 passing, 1 failing. That failure
-  (`guide.spec.ts` "folds away and stays folded across a relaunch") **pre-exists
-  on main**: verified by building main in a throwaway worktree and running the
-  same spec, which fails the same test with the same 7/1 split. The guide ticks
-  its steps off live auth state, and the throwaway profile cannot isolate the
-  macOS Keychain — the caveat `00-progress.md` already records for Claude Code
-  login, now known to reach GitHub too.
+- `npx playwright test --project=e2e` — **92 passing**. Worth recording how that
+  number got there: for most of this branch's life it was 91 with one failure in
+  `guide.spec.ts`, which was diagnosed as pre-existing by building main in a
+  throwaway worktree and running the same spec, where it failed the same test
+  with the same 7/1 split. Main has since fixed it independently, which confirms
+  the diagnosis. The underlying hazard stands and is worth knowing: the guide
+  ticks its steps off live auth state, and the throwaway profile cannot isolate
+  the macOS Keychain — the caveat already recorded for Claude Code login reaches
+  GitHub too.
 - `npm run screens` — 133 screens, both themes, both widths.
 - Driven by hand at 1500×950 on the seeded profile: chips on Chats, the repo chip
   narrowing to one contact and its group, "Every 4h" and "Daily 09:00" in
