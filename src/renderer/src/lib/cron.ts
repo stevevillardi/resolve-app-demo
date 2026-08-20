@@ -194,7 +194,7 @@ export function describeSchedule(schedule: Schedule): string {
  */
 export function shortSchedule(expression: string): string {
   const schedule = parseCron(expression)
-  if (!schedule) return expression
+  if (!schedule) return stepHours(expression) ?? expression
 
   const { frequency, minute, hour, weekdays, dayOfMonth } = schedule
   const at = clock(hour, minute)
@@ -211,4 +211,34 @@ export function shortSchedule(expression: string): string {
     return `Weekdays ${at}`
   }
   return `${days.map((day) => WEEKDAY_LABELS[day]).join(', ')} ${at}`
+}
+
+/**
+ * The one Custom shape common enough to be worth reading: every N hours.
+ *
+ * `parseCron` cannot represent `0 star-slash-4 star star star` — step syntax is
+ * outside what the picker builds, and widening `parseCron` to cover it would be
+ * wrong, because null returning *is* Custom mode and the picker would then have
+ * to draw a frequency it has no control for.
+ *
+ * So this sits in the display path only, where being unable to round-trip
+ * costs nothing. It exists because that expression is the seeded demo's own
+ * routine and the literal thing on screen in the complaint that opened this
+ * phase — a rail reading "0 star-slash-4 star star star" while the editor two
+ * panes away said it in English.
+ *
+ * Anything else still comes back verbatim. Guessing at a general cron
+ * translator is how a display starts asserting a schedule the app does not
+ * actually run.
+ */
+function stepHours(expression: string): string | null {
+  const match = /^(\d{1,2}) \*\/(\d{1,2}) \* \* \*$/.exec(expression.trim())
+  if (!match) return null
+
+  const minute = Number(match[1])
+  const every = Number(match[2])
+  if (minute > 59 || every < 2 || every > 23) return null
+
+  const at = minute === 0 ? '' : ` :${String(minute).padStart(2, '0')}`
+  return `Every ${every}h${at}`
 }

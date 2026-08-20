@@ -128,6 +128,9 @@ export function stateFacet(
   return {
     id: FACET_STATE,
     label,
+    // One is enough here — see `minOptions`. "Unread" alone still splits the
+    // list in two, unlike a lone repository, which every row is in.
+    minOptions: 1,
     options: candidates
       .filter((candidate) => candidate.present)
       .map(({ value, label: optionLabel }) => ({ value, label: optionLabel }))

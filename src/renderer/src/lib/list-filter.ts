@@ -50,6 +50,21 @@ export interface FacetSpec {
   /** The chip's resting label — "Repo", "Persona". */
   label: string
   options: FacetOption[]
+  /**
+   * How many options this facet needs before it is worth rendering.
+   *
+   * Defaults to `FACET_MIN_OPTIONS`, which is right for the facets that
+   * *partition by identity* — Repo, Persona, Backend. One repository means
+   * every row is in it, so the chip offers a choice that changes nothing.
+   *
+   * A **state** facet is the exception and needs 1: "Unread" on its own still
+   * splits the list into the rows that are and the rows that are not, which is
+   * the entire question. Found by looking at the running app — the Chats rail
+   * had unread badges on screen and no chip to filter by them, because the
+   * blanket rule had silently swallowed a single-option facet that was doing
+   * real work.
+   */
+  minOptions?: number
 }
 
 /**
@@ -73,7 +88,7 @@ export type FacetValues<T> = Record<string, (item: T) => string[]>
 export const FACET_MIN_OPTIONS = 2
 
 export function visibleFacets(specs: FacetSpec[]): FacetSpec[] {
-  return specs.filter((spec) => spec.options.length >= FACET_MIN_OPTIONS)
+  return specs.filter((spec) => spec.options.length >= (spec.minOptions ?? FACET_MIN_OPTIONS))
 }
 
 export function hasQuery(filter: ListFilter): boolean {

@@ -127,11 +127,29 @@ describe('stateFacet', () => {
     expect(values(spec)).toEqual(['missed'])
   })
 
-  it('is hidden entirely when only one state is present', () => {
+  /**
+   * A state facet is still worth rendering with a single option, unlike every
+   * other kind.
+   *
+   * "Unread" on its own splits the list into the rows that are and the rows
+   * that are not, which is the whole question — whereas a lone *repository* is
+   * one every row is already in, so its chip changes nothing. Caught by looking
+   * at the running app: the Chats rail had unread badges on screen and no chip
+   * to filter by them, because the blanket two-option rule had swallowed a
+   * facet that was doing real work.
+   */
+  it('is still shown when only one state is present', () => {
     const spec = stateFacet('Status', [
       { value: 'paused', label: 'Paused', present: true },
       { value: 'missed', label: 'Missed a run', present: false }
     ])
+
+    expect(values(spec)).toEqual(['paused'])
+    expect(visibleFacets([spec])).toHaveLength(1)
+  })
+
+  it('is hidden when no state is present at all', () => {
+    const spec = stateFacet('Status', [{ value: 'paused', label: 'Paused', present: false }])
     expect(visibleFacets([spec])).toEqual([])
   })
 })

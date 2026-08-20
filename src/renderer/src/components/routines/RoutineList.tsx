@@ -210,7 +210,10 @@ export function RoutineList({ filter }: { filter: ListFilter }): React.JSX.Eleme
                 {/* The contact, not the persona (§A1). Two routines on one
                     persona were two rows with the same title and no other way
                     to tell them apart than reading the prompt. */}
-                <span className="truncate text-row font-medium">
+                <span
+                  className="truncate text-row font-medium"
+                  title={contact ? contactName(contact, persona) : undefined}
+                >
                   {contact ? contactName(contact, persona) : (persona?.name ?? 'Unknown persona')}
                 </span>
                 {/* English, not cron (§A3). The expression stays in the title

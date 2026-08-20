@@ -312,3 +312,32 @@ describe('noMatchDescription', () => {
     )
   })
 })
+
+describe('visibleFacets minOptions', () => {
+  /**
+   * The identity facets keep the two-option floor: one repository is one every
+   * row is already in, so the chip offers a choice that changes nothing.
+   */
+  it('defaults to needing two options', () => {
+    const one = { id: 'repo', label: 'Repo', options: [{ value: 'a', label: 'a' }] }
+    expect(visibleFacets([one])).toEqual([])
+  })
+
+  it('lets a facet opt into being useful at one', () => {
+    // "Unread" splits the list in two on its own — the distinction the blanket
+    // rule got wrong.
+    const one = {
+      id: 'state',
+      label: 'Status',
+      minOptions: 1,
+      options: [{ value: 'unread', label: 'Unread' }]
+    }
+    expect(visibleFacets([one])).toHaveLength(1)
+  })
+
+  it('still hides a facet with no options, whatever its floor', () => {
+    expect(visibleFacets([{ id: 'state', label: 'Status', minOptions: 1, options: [] }])).toEqual(
+      []
+    )
+  })
+})

@@ -66,7 +66,13 @@ export function ConversationListItem({
     >
       <span className="block">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-row font-medium">{name}</span>
+          {/* The name carries the repo since §A1 ("Code Reviewer · billing-api"),
+              which is longer than a persona name and truncates in a 240px rail
+              — on the distinguishing half. The full string on hover is the
+              cheap half of the answer; the repo also stays on the line below. */}
+          <span className="truncate text-row font-medium" title={name}>
+            {name}
+          </span>
           {/* A run outlives this view — switching conversations unmounts the
               thread but not the turn — so the row is where you keep track of
               it. It replaces the timestamp rather than crowding in beside it:

@@ -233,3 +233,35 @@ describe('shortSchedule', () => {
     expect(shortSchedule('not a cron')).toBe('not a cron')
   })
 })
+
+describe('shortSchedule, step-hour expressions', () => {
+  /**
+   * The literal string in the complaint that opened Phase 26: the seeded demo's
+   * own routine, rendered as cron in the rail while the editor said it in
+   * English. `parseCron` cannot represent step syntax and must not learn to —
+   * null returning *is* Custom mode — so this lives in the display path only.
+   */
+  it('reads every-N-hours in English', () => {
+    expect(shortSchedule('0 */4 * * *')).toBe('Every 4h')
+    expect(shortSchedule('0 */2 * * *')).toBe('Every 2h')
+  })
+
+  it('keeps the minute when it is not on the hour', () => {
+    expect(shortSchedule('30 */6 * * *')).toBe('Every 6h :30')
+  })
+
+  it('leaves parseCron alone — this is display only', () => {
+    // If this ever returns non-null the picker gains a frequency it has no
+    // control for, and Custom mode stops meaning what SchedulePicker needs.
+    expect(parseCron('0 */4 * * *')).toBeNull()
+  })
+
+  it('still hands back anything else verbatim', () => {
+    // Guessing at a general cron translator is how a display starts asserting
+    // a schedule the app does not actually run.
+    expect(shortSchedule('15 2,14 * * 1-5')).toBe('15 2,14 * * 1-5')
+    expect(shortSchedule('0 */1 * * *')).toBe('0 */1 * * *')
+    expect(shortSchedule('0 */99 * * *')).toBe('0 */99 * * *')
+    expect(shortSchedule('99 */4 * * *')).toBe('99 */4 * * *')
+  })
+})
