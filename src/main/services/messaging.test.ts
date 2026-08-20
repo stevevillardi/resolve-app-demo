@@ -9,6 +9,7 @@ import {
   contacts,
   groupMessages,
   groups,
+  messages as messagesTable,
   personaTemplates,
   toolCalls,
   usageEvents
@@ -826,6 +827,17 @@ describe('retryTurn', () => {
   })
 })
 
+/** A message written straight to the table, so timestamps can be made to tie. */
+function messagePreviewRow(
+  id: string,
+  contactId: string,
+  role: 'user' | 'assistant',
+  content: string,
+  timestamp: Date
+): void {
+  db.insert(messagesTable).values({ id, contactId, role, content, timestamp }).run()
+}
+
 describe('messagePreviews', () => {
   it('returns the latest message per contact', async () => {
     seedPersona(db, 'persona-read-2', 'read_only')
@@ -847,6 +859,45 @@ describe('messagePreviews', () => {
 
   it('is empty before anything is sent', () => {
     expect(messagePreviews()).toEqual([])
+  })
+
+  /**
+   * The tiebreak, pinned (Phase 26 §B2).
+   *
+   * A fast turn writes the question and the reply in the same millisecond —
+   * which the two rows below are — and picking arbitrarily between them shows
+   * the user their own question back as the conversation's preview.
+   *
+   * Verified to have teeth against the two rewrites anyone would actually
+   * reach for, both of which fail here and pass everything else in this block:
+   * reversing the sort, and `GROUP BY contact_id HAVING timestamp =
+   * MAX(timestamp)`. Note what it does *not* catch — deleting `m.rowid DESC`
+   * on its own, which today is a no-op for the reason recorded above
+   * `messagePreviews`.
+   *
+   * Written straight into the table rather than through `sendMessage`, because
+   * a real turn cannot be made to tie on demand.
+   */
+  it('breaks a timestamp tie by insertion order, not arbitrarily', () => {
+    const sameMoment = new Date(1_700_000_000_000)
+    messagePreviewRow('m-question', 'contact-a', 'user', 'the question', sameMoment)
+    messagePreviewRow('m-reply', 'contact-a', 'assistant', 'the reply', sameMoment)
+
+    const previews = messagePreviews()
+
+    expect(previews).toHaveLength(1)
+    expect(previews[0]!.content).toBe('the reply')
+  })
+
+  it('leaves out a contact that has never been messaged', () => {
+    seedPersona(db, 'persona-quiet', 'read_only')
+    seedContact(db, 'contact-quiet', 'persona-quiet', '/repo/quiet')
+    messagePreviewRow('m-1', 'contact-a', 'user', 'hello', new Date(1_700_000_000_000))
+
+    // Absent, not a null-content placeholder: the rail renders a missing
+    // preview as "No messages yet" from its own side, and a row here would
+    // have to carry a fake message to say the same thing.
+    expect(messagePreviews().map((message) => message.contactId)).toEqual(['contact-a'])
   })
 })
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { initDb } from '../db'
 import { toMessage } from '../db/mappers'
-import { messages, toolCalls } from '../db/schema'
+import { contacts, messages, toolCalls } from '../db/schema'
 import { GITHUB_MCP_SERVER_ID } from '../adapters/github-mcp-tools'
 import { adapterForBackend } from './adapter-host'
 import { notifyTurnFinished } from '../notifications'
@@ -142,25 +142,60 @@ export function listMessages(contactId: string): PersistedMessage[] {
  *
  * One query rather than one per contact: the list renders every contact at
  * once, so the N+1 version would be N round trips through the IPC boundary on
- * every render of the app's primary screen.
+ * every render of the app's primary screen. That reasoning still stands and is
+ * why this is a single call.
+ *
+ * **What changed in Phase 26 is which N.** This used to read *every message row
+ * in the database*, order the lot, and keep the first per contact in a JS map —
+ * so the sidebar's preview line cost grew with the entire history of every
+ * conversation, and the answer it wanted was one row per contact. The subquery
+ * below is driven by `contacts` instead, so it is one index seek per contact
+ * against `messages_contact_timestamp_idx` — still one round trip, but now
+ * proportional to the number of conversations rather than to how much has ever
+ * been said in them.
+ *
+ * The tiebreak is unchanged and is the reason this is not a `GROUP BY` with a
+ * bare column. Timestamps tie more often than they look like they would: a fast
+ * turn writes the question and the reply in the same millisecond, and picking
+ * arbitrarily between them shows the user their own question back as the
+ * conversation's preview. `rowid` orders by insertion, which is the thing
+ * actually being asked for. (Ids are UUIDs, so they cannot order.)
+ *
+ * One honest note about that clause, found by mutation-checking rather than by
+ * reading: **deleting `m.rowid DESC` alone changes nothing today**, because the
+ * subquery rides `messages_contact_timestamp_idx` and a descending walk of
+ * `(contact_id, timestamp)` already yields descending rowid inside a tie. It is
+ * kept because that is a property of the chosen access path and not of the
+ * query — an added column, a different index, or a planner that decides to
+ * scan would silently reintroduce the arbitrary pick. What the tests *do* pin
+ * is the pair of rewrites anyone would actually reach for: reversing the sort,
+ * and `GROUP BY contact_id HAVING timestamp = MAX(timestamp)`. Both fail.
+ *
+ * A contact with no messages contributes no row — its subquery yields NULL,
+ * which matches nothing — which is what the map produced too.
  */
 export function messagePreviews(): PersistedMessage[] {
-  const latest = new Map<string, PersistedMessage>()
-  const rows = initDb()
+  return initDb()
     .select()
     .from(messages)
-    // Timestamps tie more often than they look like they would: a fast turn
-    // writes the question and the reply in the same millisecond, and ordering
-    // by timestamp alone would then show the user their own question as the
-    // preview. `rowid` breaks the tie by insertion order, which is the thing
-    // actually being asked for. (Ids are UUIDs, so they cannot order.)
+    .where(
+      sql`${messages.id} IN (
+        SELECT (
+          SELECT m.id FROM ${messages} m
+          WHERE m.contact_id = c.id
+          ORDER BY m.timestamp DESC, m.rowid DESC
+          LIMIT 1
+        )
+        FROM ${contacts} c
+      )`
+    )
+    // Newest first, as the map's insertion order happened to give. Stated
+    // rather than inherited: the renderer sorts these itself, but a preview
+    // list whose order changed between refetches for no reason is the kind of
+    // thing that only shows up as a flickering sidebar.
     .orderBy(desc(messages.timestamp), desc(sql`rowid`))
     .all()
-
-  for (const row of rows) {
-    if (!latest.has(row.contactId)) latest.set(row.contactId, toMessage(row))
-  }
-  return [...latest.values()]
+    .map(toMessage)
 }
 
 export function listActiveRuns(): ActiveRun[] {
