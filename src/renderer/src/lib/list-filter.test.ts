@@ -156,7 +156,7 @@ describe('filterList', () => {
 
   /**
    * The property `ConversationList` depends on. It walks the rendered order
-   * with ⌥↑/⌥↓, having already sorted by recency (Phase 20), and re-sorting by
+   * with ⌥↑/⌥↓, having already sorted by recency, and re-sorting by
    * relevance here would both make rows jump as someone types and give that
    * binding a second definition of order to disagree with.
    */

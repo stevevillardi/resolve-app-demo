@@ -1,7 +1,7 @@
 import { scoreCommand } from './command-palette'
 
 /**
- * Filtering a rail by more than a substring (Phase 26 §A2).
+ * Filtering a rail by more than a substring.
  *
  * Every list in the app offered exactly one control: an unranked
  * `includes()` over whichever two fields that list happened to pick. That is
@@ -183,7 +183,7 @@ export interface Searchable {
  * exactly the shape of every name this app derives.
  *
  * The **score is deliberately discarded**. Callers keep their own order —
- * recency in Chats (the Phase 20 decision), alphabetical elsewhere — and
+ * recency in Chats, alphabetical elsewhere — and
  * re-sorting by relevance as someone types would make rows jump under the
  * cursor, and in Chats would silently give ⌥↑/⌥↓ a second definition of order
  * to disagree with.

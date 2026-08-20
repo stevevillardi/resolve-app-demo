@@ -3,7 +3,7 @@ import type { FacetSpec } from './list-filter'
 import type { Contact, PersonaTemplate } from '@/types'
 
 /**
- * Which chips each rail offers, and what is in them (Phase 26 §A2).
+ * Which chips each rail offers, and what is in them.
  *
  * Pure and in `lib/` so it can be tested — the renderer Vitest project matches
  * `*.test.ts` only — and because the interesting part is not the rendering but

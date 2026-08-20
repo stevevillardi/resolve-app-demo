@@ -43,7 +43,7 @@ const PANEL: Record<Section, { title: string; searchPlaceholder?: string; newLab
   personas: { title: 'Personas', searchPlaceholder: 'Search personas', newLabel: 'New persona' },
   skills: { title: 'Skills', searchPlaceholder: 'Search skills', newLabel: 'New skill' },
   routines: { title: 'Routines', searchPlaceholder: 'Search routines', newLabel: 'New routine' },
-  // §A4: the one rail whose length grows on *both* axes at once — every
+  // the one rail whose length grows on *both* axes at once — every
   // persona and every repo — and the only one that had no way to narrow at all.
   // No facets: the dashboard beside it already owns range, measure and source.
   usage: { title: 'Usage', searchPlaceholder: 'Search personas and repos' },
@@ -95,7 +95,7 @@ export function ListPanel(): React.JSX.Element {
   const setSelectedSkillId = useUiStore((state) => state.setSelectedSkillId)
   const setSelectedRoutineId = useUiStore((state) => state.setSelectedRoutineId)
   /**
-   * The filter now lives in the store, keyed by section (§C).
+   * The filter now lives in the store, keyed by section.
    *
    * It was `useState` here, cleared on every section change — the right fix
    * while one string was shared by all sections, and unnecessary once each has

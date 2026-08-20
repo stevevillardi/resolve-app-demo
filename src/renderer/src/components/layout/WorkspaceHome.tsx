@@ -66,7 +66,7 @@ type Variant = 'home' | 'chats'
  * is a place to rest, not a dashboard.
  */
 /**
- * One noun in the fleet summary, made followable (§C).
+ * One noun in the fleet summary, made followable.
  *
  * Underlined on hover only: at rest this is a sentence, and three permanently
  * underlined spans inside one line of muted 12px text reads as damage rather
@@ -252,7 +252,7 @@ export function WorkspaceHome({ variant = 'home' }: { variant?: Variant } = {}):
             {/* Not a tile, because it is not a figure for this window — it is
                 what the fleet is, right now. Three numbers about seven days and
                 a fourth about today would read as four of the same thing. */}
-            {/* §C: the three nouns here name the three sections that hold
+            {/*  the three nouns here name the three sections that hold
                 them, and each was a dead end — a count you could read and not
                 follow. Buttons rather than links, because each one navigates
                 rather than opening anything external. */}

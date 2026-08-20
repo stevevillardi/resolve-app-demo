@@ -144,7 +144,7 @@ describe('listPersonaBranches', () => {
   })
 
   /**
-   * The repositories are read concurrently (Phase 25 §B3), so nothing about the
+   * The repositories are read concurrently, so nothing about the
    * answer may depend on which repo git finished first.
    *
    * Two repos, and the *second* one holds the newer commit — so a version that

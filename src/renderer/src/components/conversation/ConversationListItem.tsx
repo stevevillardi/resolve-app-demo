@@ -66,7 +66,7 @@ export function ConversationListItem({
     >
       <span className="block">
         <span className="flex items-baseline justify-between gap-2">
-          {/* The name carries the repo since §A1 ("Code Reviewer · billing-api"),
+          {/* The name carries the repo ("Code Reviewer · billing-api"),
               which is longer than a persona name and truncates in a 240px rail
               — on the distinguishing half. The full string on hover is the
               cheap half of the answer; the repo also stays on the line below. */}

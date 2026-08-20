@@ -17,7 +17,7 @@ import type { RepoTrust, TurnWork } from '../../shared/domain'
  *
  * Non-secret metadata ONLY. Tokens and API keys live in the OS keychain via
  * src/main/services/secrets.ts and must never be written here, so that
- * inspecting the .db file is a sufficient check that nothing leaked.
+ * inspecting the.db file is a sufficient check that nothing leaked.
  *
  * Known keys are enumerated in services/app-state.ts.
  */
@@ -177,7 +177,7 @@ export const contacts = sqliteTable(
   (table) => [
     index('contacts_repo_path_idx').on(table.repoPath),
     /**
-     * "Which contacts use this persona" (Phase 25 §B4).
+     * "Which contacts use this persona".
      *
      * Read by the persona detail panel's bound-contacts list, by the usage
      * rail's per-persona rollup, and — the one that matters — by the RESTRICT
@@ -506,7 +506,7 @@ export const usageEvents = sqliteTable(
   (table) => [
     index('usage_events_contact_timestamp_idx').on(table.contactId, table.timestamp),
     /**
-     * The two columns migration 0008 denormalised, finally indexed (Phase 25 §B4).
+     * The two columns migration 0008 denormalised, finally indexed.
      *
      * `repo_path` and `persona_template_id` were copied onto this table for one
      * stated purpose — so spend could still be grouped by them after the Contact

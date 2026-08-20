@@ -3,7 +3,7 @@ import { useUiStore } from './useUiStore'
 import { EMPTY_LIST_FILTER } from '@/lib/list-filter'
 
 /**
- * The filter state that crosses sections (Phase 26 §A2/§C).
+ * The filter state that crosses sections.
  *
  * Only the parts with a rule. Most of this store is a setter per field and
  * testing those would test zustand; `listFilters` and `showIn` carry the two

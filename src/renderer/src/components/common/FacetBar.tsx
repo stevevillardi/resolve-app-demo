@@ -18,7 +18,7 @@ import {
 } from '@/lib/list-filter'
 
 /**
- * The chips under a rail's search box (Phase 26 §A2).
+ * The chips under a rail's search box.
  *
  * A search box answers "find the one I can already name". These answer the
  * question a fleet actually raises — "show me everything on this repository",

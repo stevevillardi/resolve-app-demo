@@ -53,7 +53,7 @@ interface UiState {
   setSection: (section: Section) => void
 
   /**
-   * Each rail's search text and facets, keyed by section (Phase 26 §A2/§C).
+   * Each rail's search text and facets, keyed by section.
    *
    * This lived in `ListPanel` as one `useState` and was cleared on every
    * section change, because one string was shared by all of them — a search

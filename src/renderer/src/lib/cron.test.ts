@@ -12,11 +12,11 @@ import {
  * Two claims, and the second one is the one that keeps the picker honest.
  *
  * 1. Anything the picker can produce, it can read back. A round trip that loses
- *    information would mean reopening a saved routine showed a different
- *    schedule from the one that fires.
+ * information would mean reopening a saved routine showed a different
+ * schedule from the one that fires.
  * 2. Anything it *cannot* express returns null rather than an approximation.
- *    Silently rewriting `0 9 * * 1#2` into something the picker can draw would
- *    change when someone's routine runs, without saying so.
+ * Silently rewriting `0 9 * * 1#2` into something the picker can draw would
+ * change when someone's routine runs, without saying so.
  *
  * node-cron is deliberately not imported here — it lives in main, and this file
  * exists precisely so the renderer never needs it. That means these tests check
@@ -160,7 +160,7 @@ describe('describeSchedule', () => {
 
 describe('shortSchedule', () => {
   it('says every four hours in words, not in cron', () => {
-    // The §A3 complaint: the rail rendered the expression verbatim while the
+    // The rail used to render the expression verbatim while the
     // editor beside it had been rendering English since Phase 16.
     expect(shortSchedule(buildCron({ ...schedule(), frequency: 'hourly', minute: 0 }))).toBe(
       'Hourly'
@@ -236,7 +236,7 @@ describe('shortSchedule', () => {
 
 describe('shortSchedule, step-hour expressions', () => {
   /**
-   * The literal string in the complaint that opened Phase 26: the seeded demo's
+   * The literal string this was written for: the seeded demo's
    * own routine, rendered as cron in the rail while the editor said it in
    * English. `parseCron` cannot represent step syntax and must not learn to —
    * null returning *is* Custom mode — so this lives in the display path only.

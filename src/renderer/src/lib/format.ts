@@ -77,7 +77,7 @@ export function groupName(group: { name: string | null; repoPath: string }): str
 }
 
 /**
- * What to call a Contact on screen (Phase 26 §A1).
+ * What to call a Contact on screen.
  *
  * Every list rendered `persona?.name ?? contact.displayName`, so the *persona*
  * name won and the Contact's own name appeared nowhere outside dialogs. On a
@@ -88,7 +88,7 @@ export function groupName(group: { name: string | null; repoPath: string }): str
  *
  * `displayName` is the right answer and always has been. It is NOT NULL, it
  * defaults to `derivedName()` — "Code Reviewer · checkout-service", already
- * distinguishing — a person can type their own at creation (§G4), and
+ * distinguishing — a person can type their own at creation, and
  * `contacts.rename` can change it. The delete dialog and the Markdown export
  * were already reading it; the lists disagreeing with them was the bug.
  *

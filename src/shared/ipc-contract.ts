@@ -553,7 +553,7 @@ export const ipcContract = {
   },
 
   // --- Data layer ---------------------------------------------------------
-  // Entity shapes come from ./domain.ts so main's tables, these procedures,
+  // Entity shapes come from./domain.ts so main's tables, these procedures,
   // and the renderer's types can't drift apart. Ids are minted in main, hence
   // the `Draft` (id-less) inputs on every create.
   'skills.list': {
@@ -641,7 +641,7 @@ export const ipcContract = {
    *
    * The renderer could not do this without shipping a scheduler runtime into
    * its own bundle, and a second hand-rolled validator is the drift this repo
-   * has been bitten by twice. `nextRuns` feeds the editor's "Next: ..." hint,
+   * has been bitten by twice. `nextRuns` feeds the editor's "Next:..." hint,
    * which is more use than restating the expression back at the user.
    */
   'routines.validateSchedule': {

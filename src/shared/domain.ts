@@ -528,7 +528,7 @@ export const routineUpdateSchema = routineSchema.omit({
  * Derived, never stored — blueprint §4 logs events per turn precisely so that
  * totals stay computed rather than maintained, and nothing here changes that.
  *
- * It lives in `shared` rather than in the renderer because since Phase 25 the
+ * It lives in `shared` rather than in the renderer because the
  * rollup is also computed in SQL (`usage.summaries`) and crosses the IPC
  * boundary, so main and the renderer have to agree on the shape. The renderer
  * still builds these itself from raw events wherever it already has them — the
@@ -569,7 +569,7 @@ export const usageSummarySchema = z.object({
 })
 
 /**
- * One contact's rollup, as `usage.summaries` returns it (Phase 25 §B1).
+ * One contact's rollup, as `usage.summaries` returns it.
  *
  * Keyed by Contact and nothing else, because that is the only grouping the two
  * callers need and the only one that stays correct when they add their own: a

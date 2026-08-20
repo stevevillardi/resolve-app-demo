@@ -1,7 +1,7 @@
 import type { ContactUsageSummary, UsageEvent, UsageSummary } from './domain'
 
 /**
- * The rules for rolling turns up into a total, in one place (Phase 25 §B1).
+ * The rules for rolling turns up into a total, in one place.
  *
  * Shared rather than renderer-local because there are now two implementations of
  * this arithmetic — these functions, and the `GROUP BY` in
@@ -13,8 +13,8 @@ import type { ContactUsageSummary, UsageEvent, UsageSummary } from './domain'
  * Every function below turns on the same two distinctions, and both are about
  * refusing to invent a fact:
  *
- *   - an unpriced turn is **unknown**, never free
- *   - an unreported cached figure is **absent**, never zero
+ * - an unpriced turn is **unknown**, never free
+ * - an unreported cached figure is **absent**, never zero
  */
 
 /**
@@ -66,7 +66,7 @@ export function aggregateUsage(events: UsageEvent[]): UsageSummary {
 }
 
 /**
- * Adds already-rolled-up summaries together (Phase 25 §B1).
+ * Adds already-rolled-up summaries together.
  *
  * The one composition step `usage.summaries` needs: it returns a figure per
  * Contact, and every other scope the app shows — a repo group, a persona, "all
@@ -76,14 +76,14 @@ export function aggregateUsage(events: UsageEvent[]): UsageSummary {
  * two of them only bite here:
  *
  * - **null is absorbing in one direction only.** A scope where nothing was
- *   priced stays null ("unknown"); a scope where *some* turn was priced reports
- *   that partial sum plus the unpriced count, which `formatCostSummary` renders
- *   with the trailing `+`. Treating null as 0 while summing would turn "we do
- *   not know what half of this cost" into a confident understatement.
+ * priced stays null ("unknown"); a scope where *some* turn was priced reports
+ * that partial sum plus the unpriced count, which `formatCostSummary` renders
+ * with the trailing `+`. Treating null as 0 while summing would turn "we do
+ * not know what half of this cost" into a confident understatement.
  * - **an absent cached figure is not a zero one.** The field appears on the
- *   result only if at least one input carried it, so a group containing one
- *   caching backend and one silent one still reports what it knows, and a group
- *   where nobody reported caching reports nothing.
+ * result only if at least one input carried it, so a group containing one
+ * caching backend and one silent one still reports what it knows, and a group
+ * where nobody reported caching reports nothing.
  *
  * An empty list rolls up to the zero summary rather than to null, and callers
  * are expected to check emptiness themselves — the rail shows no badge at all

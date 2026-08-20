@@ -23,7 +23,7 @@ import { MessagesSquare } from 'lucide-react'
  * to the range, source and metric controls.
  */
 /**
- * §A4: the rail that had the longest list and no way to narrow it.
+ * the rail that had the longest list and no way to narrow it.
  *
  * `ListPanel` gave every other section a search box and gave this one nothing,
  * which is backwards — it is the only rail whose length grows on *both* axes at
@@ -35,7 +35,7 @@ export function UsageScopeList({ query }: { query: string }): React.JSX.Element 
   const showIn = useUiStore((state) => state.showIn)
 
   /**
-   * "Show me the conversations behind this number" (§C).
+   * "Show me the conversations behind this number".
    *
    * The usage rail names a persona or a repository and says what it cost; until
    * now that was where the trail ended. A right-click rather than a click,
@@ -71,7 +71,7 @@ export function UsageScopeList({ query }: { query: string }): React.JSX.Element 
   )
 
   /**
-   * Spend per scope, from the SQL rollup (Phase 25 §B1).
+   * Spend per scope, from the SQL rollup.
    *
    * `costFor` is called once per row and used to scan the entire `usage_events`
    * table each time, unmemoized — so a profile with twenty personas and twenty

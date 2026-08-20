@@ -222,7 +222,7 @@ describe('contactName', () => {
   const persona = { name: 'Code Reviewer' }
 
   it("uses the Contact's own name, not the persona's", () => {
-    // The whole point (Phase 26 §A1). Every list used to render the persona, so
+    // The whole point. Every list used to render the persona, so
     // three contacts on three repositories were three identical rows.
     expect(contactName({ displayName: 'Code Reviewer · billing-api' }, persona)).toBe(
       'Code Reviewer · billing-api'
@@ -247,7 +247,8 @@ describe('contactName', () => {
 
   /**
    * `contacts.update` refuses an empty name and `contacts.create` has since
-   * §G4, so this can only reach the screen on a row written before both — and a
+   * both refuse an empty name, so this can only reach the screen on a row
+   * written before either did — and a
    * blank sidebar row is a worse failure than an unhelpful one, because there
    * is nothing left to click. Same reasoning as `groupName`.
    */

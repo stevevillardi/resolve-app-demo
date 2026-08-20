@@ -173,7 +173,7 @@ export function describeSchedule(schedule: Schedule): string {
 }
 
 /**
- * The schedule as a chip, for a list row (Phase 26 §A3).
+ * The schedule as a chip, for a list row.
  *
  * The Routines rail put the raw cron expression in its trailing slot, so the
  * list read "0 star-slash-4 star star star" (every four hours) while the editor

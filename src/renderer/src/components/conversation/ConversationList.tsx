@@ -202,7 +202,7 @@ export function ConversationList({ filter }: { filter: ListFilter }): React.JSX.
 
   /**
    * Spend per conversation, from the SQL rollup rather than from raw events
-   * (Phase 25 §B1).
+   *.
    *
    * This used to call `usage.list` with no argument — every usage row ever
    * written — and then scan that array once per contact and once per group. The
@@ -243,7 +243,7 @@ export function ConversationList({ filter }: { filter: ListFilter }): React.JSX.
               (unread.get(`contact:${contact.id}`) ?? 0) > 0 ? [STATE_UNREAD] : []
           },
           (contact) => ({
-            // What the row shows since §A1, so the searchable text and the
+            // What the row shows, so the searchable text and the
             // visible text finally agree.
             label: contactName(contact, personaFor(contact.personaTemplateId)),
             detail: contact.repoPath
@@ -272,7 +272,7 @@ export function ConversationList({ filter }: { filter: ListFilter }): React.JSX.
            * revealed. Hiding governs the *resting* state of the list; if
            * someone types the name of a group they hid, answering "nothing
            * matches" is both wrong and the thing that would make hiding feel
-           * like deletion (review §G5).
+           * like deletion.
            *
            * A **facet** does not, and the distinction is deliberate. Typing a
            * name is asking for one thing you already have in mind; ticking
@@ -400,7 +400,7 @@ export function ConversationList({ filter }: { filter: ListFilter }): React.JSX.
             key={contact.id}
             contact={contact}
             backend={persona?.backend ?? 'claude'}
-            // The Contact's own name, not the persona's (Phase 26 §A1) — three
+            // The Contact's own name, not the persona's — three
             // contacts on three repos were three rows all called "Code
             // Reviewer". The avatar below still carries the persona.
             name={contactName(contact, persona)}

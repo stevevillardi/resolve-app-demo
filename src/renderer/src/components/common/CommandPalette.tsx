@@ -76,7 +76,7 @@ export function CommandPalette(): React.JSX.Element {
       items.push({
         id,
         group: 'Conversations',
-        // The Contact's own name (Phase 26 §A1). The palette is the surface
+        // The Contact's own name. The palette is the surface
         // where identical labels hurt most: three rows reading "Code
         // Reviewer" are three rows you have to open to tell apart.
         label: contactName(contact, persona),

@@ -862,7 +862,7 @@ describe('messagePreviews', () => {
   })
 
   /**
-   * The tiebreak, pinned (Phase 26 §B2).
+   * The tiebreak, pinned.
    *
    * A fast turn writes the question and the reply in the same millisecond —
    * which the two rows below are — and picking arbitrarily between them shows

@@ -145,7 +145,7 @@ export function listMessages(contactId: string): PersistedMessage[] {
  * every render of the app's primary screen. That reasoning still stands and is
  * why this is a single call.
  *
- * **What changed in Phase 26 is which N.** This used to read *every message row
+ * **What matters is which N.** This used to read *every message row
  * in the database*, order the lot, and keep the first per contact in a JS map —
  * so the sidebar's preview line cost grew with the entire history of every
  * conversation, and the answer it wanted was one row per contact. The subquery
@@ -175,11 +175,12 @@ export function listMessages(contactId: string): PersistedMessage[] {
  * which matches nothing — which is what the map produced too.
  */
 export function messagePreviews(): PersistedMessage[] {
-  return initDb()
-    .select()
-    .from(messages)
-    .where(
-      sql`${messages.id} IN (
+  return (
+    initDb()
+      .select()
+      .from(messages)
+      .where(
+        sql`${messages.id} IN (
         SELECT (
           SELECT m.id FROM ${messages} m
           WHERE m.contact_id = c.id
@@ -188,14 +189,15 @@ export function messagePreviews(): PersistedMessage[] {
         )
         FROM ${contacts} c
       )`
-    )
-    // Newest first, as the map's insertion order happened to give. Stated
-    // rather than inherited: the renderer sorts these itself, but a preview
-    // list whose order changed between refetches for no reason is the kind of
-    // thing that only shows up as a flickering sidebar.
-    .orderBy(desc(messages.timestamp), desc(sql`rowid`))
-    .all()
-    .map(toMessage)
+      )
+      // Newest first, as the map's insertion order happened to give. Stated
+      // rather than inherited: the renderer sorts these itself, but a preview
+      // list whose order changed between refetches for no reason is the kind of
+      // thing that only shows up as a flickering sidebar.
+      .orderBy(desc(messages.timestamp), desc(sql`rowid`))
+      .all()
+      .map(toMessage)
+  )
 }
 
 export function listActiveRuns(): ActiveRun[] {

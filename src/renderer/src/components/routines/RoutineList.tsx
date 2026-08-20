@@ -67,7 +67,7 @@ function RoutineRowMenu({ routine }: { routine: Routine }): React.JSX.Element {
     <>
       <ContextMenuContent>
         {/*
-          §C: a routine *is* a contact waking up, and its output lands in that
+           a routine *is* a contact waking up, and its output lands in that
           contact's conversation — which was reachable only by reading the
           persona name off the row and finding it again in Chats by eye.
         */}
@@ -238,7 +238,7 @@ export function RoutineList({ filter }: { filter: ListFilter }): React.JSX.Eleme
           >
             <span className={cn('block', !routine.enabled && 'opacity-60')}>
               <span className="flex items-baseline justify-between gap-2">
-                {/* The contact, not the persona (§A1). Two routines on one
+                {/* The contact, not the persona. Two routines on one
                     persona were two rows with the same title and no other way
                     to tell them apart than reading the prompt. */}
                 <span
@@ -247,7 +247,7 @@ export function RoutineList({ filter }: { filter: ListFilter }): React.JSX.Eleme
                 >
                   {contact ? contactName(contact, persona) : (persona?.name ?? 'Unknown persona')}
                 </span>
-                {/* English, not cron (§A3). The expression stays in the title
+                {/* English, not cron. The expression stays in the title
                     so the exact answer is one hover away, and stays monospaced
                     only when it *is* the expression — a schedule this app's
                     picker cannot build comes back verbatim. */}

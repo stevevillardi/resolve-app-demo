@@ -76,7 +76,7 @@ export function GroupActionItems({
         </Item>
       )}
       {/*
-        §C: a group is the shared thread for a repository, and "what work is
+        A group is the shared thread for a repository, and "what work is
         outstanding on this repository" is the next question anyone reading one
         asks. It was answerable only by opening Branches and finding the repo's
         section by eye.

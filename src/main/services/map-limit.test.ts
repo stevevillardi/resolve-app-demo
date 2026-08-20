@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AppDatabase } from '../db/create'
 
 /**
- * `mapLimit` on its own, away from git (Phase 25 §B3).
+ * `mapLimit` on its own, away from git.
  *
  * `listPersonaBranches` fans out over repositories through this, and the whole
  * reason it is bounded rather than a bare `Promise.all` is a property no

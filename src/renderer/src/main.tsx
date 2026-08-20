@@ -21,12 +21,12 @@ applyThemeClass(useUiStore.getState().themePreference)
  * The default of three retries with exponential backoff is tuned for a flaky
  * network. Here there is no network: a procedure either answers or is broken,
  * and the backoff only delays the moment the list is allowed to say so — which
- * is the wording §A5 added. One retry still covers the one genuinely transient
+ * is what the lists' error state is worded for. One retry still covers the one
  * case, a read issued while main is still starting up.
  *
  * `refetchOnWindowFocus` is deliberately left **on**. It looks like pure cost
- * against a SQLite file, and it is the safety net under the gap Phase 20
- * documented: `contacts` and `groups` have no push channel and rely on mutation
+ * against a SQLite file, and it is the safety net under a known gap:
+ * `contacts` and `groups` have no push channel and rely on mutation
  * callbacks, so anything that writes them outside this renderer is only ever
  * noticed on focus. Turning it off would be a governance change to how this app
  * stays fresh, not a performance tweak.

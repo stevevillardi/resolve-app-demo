@@ -6,7 +6,7 @@ import type { AppDatabase } from '../db/create'
 import type { UsageEvent } from '../../shared/domain'
 
 /**
- * `usage.summaries` against a real :memory: database (Phase 25 §B1).
+ * `usage.summaries` against a real :memory: database.
  *
  * This is a **second implementation of a spend calculation**. The renderer's
  * `aggregateUsage` still runs wherever it already holds raw events, so the two

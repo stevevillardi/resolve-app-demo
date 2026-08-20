@@ -34,7 +34,7 @@ export function useUsageEvents(contactId?: string): UseQueryResult<UsageEvent[]>
 }
 
 /**
- * What each Contact has spent, rolled up by SQL (Phase 25 §B1).
+ * What each Contact has spent, rolled up by SQL.
  *
  * What the two rails read instead of `useUsageEvents()`. They needed one figure
  * per conversation and were fetching the entire `usage_events` table to derive

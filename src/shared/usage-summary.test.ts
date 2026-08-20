@@ -3,7 +3,7 @@ import { byContactId, combineUsage, summariesFor } from './usage-summary'
 import type { ContactUsageSummary, UsageSummary } from './domain'
 
 /**
- * Composing rollups (Phase 25 §B1).
+ * Composing rollups.
  *
  * `usage.summaries` returns one figure per Contact, and every other scope the
  * app shows is some set of Contacts added up — a repo group, a persona, "all

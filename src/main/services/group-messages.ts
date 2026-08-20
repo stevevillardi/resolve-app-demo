@@ -100,7 +100,8 @@ export function appendToGroupMessage(id: string, line: string): void {
  * One query rather than one per group, for the same reason messagePreviews()
  * is: the list renders every group at once, and the N+1 version would be N
  * round trips through the IPC boundary on every render of the primary screen.
- * Phase 26 changed which N it is proportional to — see messagePreviews().
+ * It is proportional to the number of groups, not to how much has been said
+ * in them — see messagePreviews().
  *
  * The `rowid` tiebreak matters here too — compaction writes a summary in the
  * same millisecond a fast turn finishes, and ordering by timestamp alone would
@@ -111,8 +112,8 @@ export function groupMessagePreviews(): GroupMessage[] {
     .select()
     .from(groupMessages)
     .where(
-      // Driven by `groups` rather than by every row in the table (Phase 26
-      // §B2) — one index seek per group against
+      // Driven by `groups` rather than by every row in the table — one index
+      // seek per group against
       // `group_messages_group_timestamp_idx`, instead of reading the whole
       // history of every repo group to keep the newest line from each.
       sql`${groupMessages.id} IN (

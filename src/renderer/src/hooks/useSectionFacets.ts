@@ -25,7 +25,7 @@ import type { FacetSpec } from '@/lib/list-filter'
 import type { Section } from '@/store/useUiStore'
 
 /**
- * The chips the open rail should offer (Phase 26 §A2).
+ * The chips the open rail should offer.
  *
  * One hook rather than a `facets` prop on each list, because the bar is drawn
  * by `ListPanel` — which owns the header — while the rows are drawn by the
