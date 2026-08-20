@@ -30,6 +30,9 @@ export type {
   AuditAction,
   AuditActorKind,
   AuditEvent,
+  /** Derived, never stored. Shared because `usage.summaries` returns it. */
+  UsageSummary,
+  ContactUsageSummary,
   SkillDraft,
   PersonaTemplateDraft,
   ContactDraft,
@@ -41,4 +44,3 @@ export type {
 // Renderer-only: adds the in-flight turn state that isn't persisted.
 export * from './message'
 
-export * from './usage-summary'

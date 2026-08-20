@@ -1,53 +1,25 @@
 import { contextWindowFor } from '../../../shared/context-windows'
+import {
+  aggregateUsage,
+  byContactId,
+  combineUsage,
+  summariesFor
+} from '../../../shared/usage-summary'
 import type { PersonaBackend, UsageEvent, UsageSummary } from '@/types'
 
 /**
- * Rolls a set of turns up into one displayable total.
+ * The rollup rules live in `src/shared/usage-summary.ts`.
  *
- * The load-bearing detail is what happens to a turn with no price. It is
- * *counted*, not skipped: `costUsd: null` means the model that served the turn
- * has no row in CODEX_PRICES (src/main/adapters/pricing.ts), so its spend is
- * unknown rather than zero. Summing only the priced turns and returning a bare
- * number produces a confident `$12.34` that is quietly short by however much
- * the unpriced turns actually cost.
+ * They moved there when `usage.summaries` gave them a second implementation in
+ * SQL. The two have to agree, so the test that proves it runs in the main
+ * project against a real database — and a main-process test may not import a
+ * renderer module. It is the same reason the domain model is shared rather than
+ * renderer-local: one definition, read from both sides.
  *
- * formatCost was already careful to print `—` for a single unknown. Carrying
- * `unpricedEvents` through is what keeps that care intact once there is more
- * than one event; render it with formatCostSummary.
+ * Re-exported so `@/lib/usage` stays the one place the renderer reads about
+ * spend, and no call site had to learn where the arithmetic lives.
  */
-export function aggregateUsage(events: UsageEvent[]): UsageSummary {
-  let totalCostUsd: number | null = null
-  let totalInputTokens = 0
-  let totalOutputTokens = 0
-  let totalCachedInputTokens = 0
-  let hasCachedTokens = false
-  let unpricedEvents = 0
-  let pricedEvents = 0
-
-  for (const event of events) {
-    if (event.costUsd !== null) {
-      totalCostUsd = (totalCostUsd ?? 0) + event.costUsd
-      pricedEvents += 1
-    } else {
-      unpricedEvents += 1
-    }
-    totalInputTokens += event.inputTokens
-    totalOutputTokens += event.outputTokens
-    if (event.cachedInputTokens !== undefined) {
-      hasCachedTokens = true
-      totalCachedInputTokens += event.cachedInputTokens
-    }
-  }
-
-  return {
-    totalCostUsd,
-    totalInputTokens,
-    totalOutputTokens,
-    ...(hasCachedTokens ? { totalCachedInputTokens } : {}),
-    unpricedEvents,
-    pricedEvents
-  }
-}
+export { aggregateUsage, byContactId, combineUsage, summariesFor }
 
 export function usageForContact(events: UsageEvent[], contactId: string): UsageSummary {
   return aggregateUsage(events.filter((event) => event.contactId === contactId))

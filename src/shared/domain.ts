@@ -522,6 +522,70 @@ export const routineUpdateSchema = routineSchema.omit({
   lastMissedAt: true
 })
 
+/**
+ * A rollup of UsageEvents for display.
+ *
+ * Derived, never stored — blueprint §4 logs events per turn precisely so that
+ * totals stay computed rather than maintained, and nothing here changes that.
+ *
+ * It lives in `shared` rather than in the renderer because since Phase 25 the
+ * rollup is also computed in SQL (`usage.summaries`) and crosses the IPC
+ * boundary, so main and the renderer have to agree on the shape. The renderer
+ * still builds these itself from raw events wherever it already has them — the
+ * two paths are pinned to each other by test.
+ */
+export const usageSummarySchema = z.object({
+  /**
+   * The sum of every *priced* turn, or null when none of them were priced.
+   *
+   * Read it with `unpricedEvents` or not at all. On its own it is the answer to
+   * a narrower question than it looks like — "what did the turns we can price
+   * cost", not "what did this cost" — and the two diverge silently the moment a
+   * persona runs on a model missing from CODEX_PRICES.
+   *
+   * Nullable rather than defaulted to 0, in SQL as well: `SUM(cost_usd)` over
+   * rows that are all NULL returns NULL, which is the same answer for the same
+   * reason, and is why the aggregate did not need a `COALESCE` bolted on.
+   */
+  totalCostUsd: z.number().nullable(),
+  totalInputTokens: z.number(),
+  totalOutputTokens: z.number(),
+  /**
+   * Absent, not zero, when no turn recorded any cached input.
+   *
+   * The distinction survives into SQL as `COUNT(cached_input_tokens) > 0`:
+   * "this backend never told us" and "it told us nothing was cached" render
+   * differently, and collapsing them would invent a fact about the backend.
+   */
+  totalCachedInputTokens: z.number().optional(),
+  /**
+   * How many turns carried `costUsd: null` and are therefore missing from
+   * `totalCostUsd`. Non-zero means the total is a floor, not a figure — see
+   * formatCostSummary, which is what should render it.
+   */
+  unpricedEvents: z.number(),
+  /** How many turns *did* contribute. `0` with events present means all unpriced. */
+  pricedEvents: z.number()
+})
+
+/**
+ * One contact's rollup, as `usage.summaries` returns it (Phase 25 §B1).
+ *
+ * Keyed by Contact and nothing else, because that is the only grouping the two
+ * callers need and the only one that stays correct when they add their own: a
+ * group's figure is its members' summed, and a persona's is its contacts'.
+ * Returning per-persona and per-repo rows as well would mean three groupings to
+ * keep in step where one composes.
+ *
+ * Spend whose Contact has been deleted has no id to group under and is absent,
+ * which is what `usageForContacts` did with it too — the dashboard's unscoped
+ * totals are where orphaned spend stays visible (Phase 10's rule that spend
+ * outlives what spent it).
+ */
+export const contactUsageSummarySchema = usageSummarySchema.extend({
+  contactId: z.string()
+})
+
 // --- Inferred types ---------------------------------------------------------
 
 export type PersonaBackend = z.infer<typeof personaBackendSchema>
@@ -547,6 +611,8 @@ export type TurnWork = z.infer<typeof turnWorkSchema>
 export type Routine = z.infer<typeof routineSchema>
 export type UsageEvent = z.infer<typeof usageEventSchema>
 export type AuditEvent = z.infer<typeof auditEventSchema>
+export type UsageSummary = z.infer<typeof usageSummarySchema>
+export type ContactUsageSummary = z.infer<typeof contactUsageSummarySchema>
 
 export type SkillDraft = z.infer<typeof skillDraftSchema>
 export type PersonaTemplateDraft = z.infer<typeof personaTemplateDraftSchema>

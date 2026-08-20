@@ -5,9 +5,9 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { ListRow } from '@/components/common/ListRow'
 import { useContacts } from '@/hooks/useConversations'
 import { usePersonas } from '@/hooks/usePersonas'
-import { useUsageEvents } from '@/hooks/useUsage'
+import { useUsageSummaries } from '@/hooks/useUsage'
 import { repoName } from '@/lib/format'
-import { formatCostSummary, usageForContacts } from '@/lib/usage'
+import { byContactId, formatCostSummary, summariesFor } from '@/lib/usage'
 import { useUiStore } from '@/store/useUiStore'
 
 /**
@@ -21,7 +21,7 @@ export function UsageScopeList(): React.JSX.Element {
   const scope = useUiStore((state) => state.usageScope)
   const setScope = useUiStore((state) => state.setUsageScope)
 
-  const { data: events = [] } = useUsageEvents()
+  const { data: summaries = [] } = useUsageSummaries()
   const { data: contacts = [], isPending } = useContacts()
   const { data: personas = [] } = usePersonas()
 
@@ -33,8 +33,25 @@ export function UsageScopeList(): React.JSX.Element {
     [contacts]
   )
 
-  const costFor = (contactIds: string[]): string =>
-    formatCostSummary(usageForContacts(events, contactIds))
+  /**
+   * Spend per scope, from the SQL rollup (Phase 25 §B1).
+   *
+   * `costFor` is called once per row and used to scan the entire `usage_events`
+   * table each time, unmemoized — so a profile with twenty personas and twenty
+   * repos rescanned every turn ever recorded forty times per render. Indexing
+   * the rollup once and composing from it makes the row cost proportional to the
+   * contacts in that scope instead.
+   *
+   * A scope nobody has spent in yields undefined, and `formatCostSummary` is
+   * never asked about it — the row shows the em dash the empty summary would
+   * have produced anyway, but by saying "no turns" rather than "zero dollars".
+   */
+  const summaryIndex = useMemo(() => byContactId(summaries), [summaries])
+
+  const costFor = (contactIds: string[]): string => {
+    const summary = summariesFor(summaryIndex, contactIds)
+    return summary ? formatCostSummary(summary) : '—'
+  }
 
   const cost = (contactIds: string[]): React.JSX.Element => (
     <span className="text-muted-foreground shrink-0 font-mono text-meta tabular-nums">

@@ -13,12 +13,12 @@ import { usePersonas } from '@/hooks/usePersonas'
 import { useActiveRuns, useMessagePreviews } from '@/hooks/useMessages'
 import { useGroupMessagePreviews } from '@/hooks/useGroupMessages'
 import { useUnread } from '@/hooks/useUnread'
-import { useUsageEvents } from '@/hooks/useUsage'
+import { useUsageSummaries } from '@/hooks/useUsage'
 import { useUiStore } from '@/store/useUiStore'
 import { stepConversation, type ConversationRef } from '@/lib/conversation-nav'
 import { byRecency } from '@/lib/conversation-sort'
 import { groupName, previewLine } from '@/lib/format'
-import { usageForContact, usageForContacts } from '@/lib/usage'
+import { byContactId, summariesFor } from '@/lib/usage'
 import { cn } from '@/lib/utils'
 import type { Contact, Group, PersonaBackend, PersonaTemplate } from '@/types'
 
@@ -179,7 +179,7 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
   const { data: personaTemplates = [] } = usePersonas()
   const { data: previews = [] } = useMessagePreviews()
   const { data: groupPreviews = [] } = useGroupMessagePreviews()
-  const { data: usageEvents = [] } = useUsageEvents()
+  const { data: usageSummaries = [] } = useUsageSummaries()
   const { data: runs = [] } = useActiveRuns()
   const unread = useUnread()
   const needle = query.trim().toLowerCase()
@@ -192,14 +192,24 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
     [previews]
   )
 
-  // Undefined rather than a zeroed summary when a contact has never run: the
-  // badge should be absent, not read "$0.00", which claims a turn was free.
+  /**
+   * Spend per conversation, from the SQL rollup rather than from raw events
+   * (Phase 25 §B1).
+   *
+   * This used to call `usage.list` with no argument — every usage row ever
+   * written — and then scan that array once per contact and once per group. The
+   * rail's cost of drawing therefore grew with the number of turns the whole
+   * fleet had ever taken, which is invisible at three contacts and is the first
+   * thing to go at thirty.
+   *
+   * The undefined-not-zero rule is unchanged and now lives in `summariesFor`: a
+   * contact with no rollup entry has never run a turn, and its badge should be
+   * absent rather than read "$0.00", which claims a turn was free.
+   */
+  const summaryIndex = useMemo(() => byContactId(usageSummaries), [usageSummaries])
   const usageFor = useMemo(
-    () => (contactId: string) => {
-      if (!usageEvents.some((event) => event.contactId === contactId)) return undefined
-      return usageForContact(usageEvents, contactId)
-    },
-    [usageEvents]
+    () => (contactId: string) => summariesFor(summaryIndex, [contactId]),
+    [summaryIndex]
   )
 
   const personaFor = useMemo(
@@ -368,11 +378,9 @@ export function ConversationList({ query }: { query: string }): React.JSX.Elemen
         const memberIds = contacts
           .filter((contact) => contact.repoPath === group.repoPath)
           .map((contact) => contact.id)
-        const memberUsage = usageEvents.some(
-          (event) => event.contactId !== null && memberIds.includes(event.contactId)
-        )
-          ? usageForContacts(usageEvents, memberIds)
-          : undefined
+        // A group's figure is its members' summed — the same composition the
+        // usage rail does for a persona, through the same helper.
+        const memberUsage = summariesFor(summaryIndex, memberIds)
         // The group's own log, not its members' 1:1 threads — a group row
         // should preview what happened *in the group*, which means session
         // summaries, mentions, and routed replies.
